@@ -18,44 +18,36 @@ export const SUPPORTED_SITES: NovelSite[] = [
     removeSelectors: ['.ads', '.advertisement', 'script', 'style']
   },
   {
-    name: 'Royalroad',
-    domain: 'royalroad.com',
-    tocSelector: '.table-of-contents a',
-    contentSelector: '.chapter-content',
-    titleSelector: 'h1',
-    removeSelectors: ['.portlet-body', 'script', 'style']
+    name: 'NovelBin',
+    domain: 'novelbin.com',
+    tocSelector: '.chapter-list a, .list-chapter a, .chapter-item a',
+    contentSelector: '.chapter-content, .reading-content, .content-area',
+    titleSelector: '.chapter-title, h1, .chapter-name',
+    removeSelectors: ['.ads', '.advertisement', '.sidebar', 'script', 'style', '.nav-buttons']
   },
   {
-    name: 'Webnovel',
-    domain: 'webnovel.com',
-    tocSelector: '.content-list a',
-    contentSelector: '.cha-content',
-    titleSelector: '.cha-tit',
-    removeSelectors: ['.AD', '.advertisement', 'script', 'style']
+    name: 'NovelBin ME',
+    domain: 'novelbin.me',
+    tocSelector: '.chapter-list a, .list-chapter a, .chapter-item a',
+    contentSelector: '.chapter-content, .reading-content, .content-area',
+    titleSelector: '.chapter-title, h1, .chapter-name',
+    removeSelectors: ['.ads', '.advertisement', '.sidebar', 'script', 'style', '.nav-buttons']
   },
   {
-    name: 'Novel Updates',
-    domain: 'novelupdates.com',
-    tocSelector: '.chp-release a',
-    contentSelector: '#chapter-content',
-    titleSelector: '.chapter-title',
-    removeSelectors: ['.ads', 'script', 'style']
+    name: 'NovGo',
+    domain: 'novgo.me',
+    tocSelector: '.chapter-list a, .episode-list a, .toc a',
+    contentSelector: '.chapter-content, .content, .reading-area',
+    titleSelector: '.chapter-title, h1, .title',
+    removeSelectors: ['.ads', '.advertisement', '.comments', 'script', 'style']
   },
   {
-    name: 'Scribble Hub',
-    domain: 'scribblehub.com',
-    tocSelector: '.toc_w a',
-    contentSelector: '#chp_raw',
-    titleSelector: '.chapter_title',
-    removeSelectors: ['.ads', 'script', 'style']
-  },
-  {
-    name: 'Wuxiaworld',
-    domain: 'wuxiaworld.com',
-    tocSelector: '.panel-body a',
-    contentSelector: '.fr-view',
-    titleSelector: 'h4',
-    removeSelectors: ['.pirate-please', 'script', 'style']
+    name: 'WTR-LAB',
+    domain: 'wtr-lab.com',
+    tocSelector: '.chapter-list a, .chapters a, .serie-chapters a',
+    contentSelector: '.chapter-content, .content-area, .reading-content',
+    titleSelector: '.chapter-title, h1, .chapter-name',
+    removeSelectors: ['.ads', '.advertisement', '.navigation', 'script', 'style', '.comments']
   }
 ];
 
