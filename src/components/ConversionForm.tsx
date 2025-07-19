@@ -5,10 +5,13 @@ import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
 import { SUPPORTED_SITES, getSiteConfig, extractDomain } from '@/utils/siteConfigs';
 import { NovelSite, EpubMetadata } from '@/types';
 import { BookOpen, Globe, Settings } from 'lucide-react';
+import { AdminPanel } from './AdminPanel';
+import { TextCleaner } from './TextCleaner';
+import { SupportedSites } from './SupportedSites';
 
 interface ConversionFormProps {
   onSubmit: (data: ConversionFormData) => void;
@@ -20,6 +23,13 @@ export interface ConversionFormData {
   tocSelector: string;
   contentSelector: string;
   metadata: EpubMetadata;
+  textCleaners: Array<{
+    id: string;
+    name: string;
+    pattern: string;
+    replacement: string;
+    isGlobal: boolean;
+  }>;
 }
 
 export default function ConversionForm({ onSubmit, isConverting }: ConversionFormProps) {
@@ -28,6 +38,13 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
   const [tocSelector, setTocSelector] = useState('');
   const [contentSelector, setContentSelector] = useState('');
   const [selectedSite, setSelectedSite] = useState<string>('');
+  const [textCleaners, setTextCleaners] = useState<Array<{
+    id: string;
+    name: string;
+    pattern: string;
+    replacement: string;
+    isGlobal: boolean;
+  }>>([]);
   const [metadata, setMetadata] = useState<EpubMetadata>({
     title: '',
     author: 'Unknown Author',
@@ -100,13 +117,22 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
       tocUrl,
       tocSelector,
       contentSelector,
-      metadata
+      metadata,
+      textCleaners
     });
   };
 
   return (
-    <Card className="w-full max-w-2xl mx-auto p-6 bg-gradient-card shadow-card border-0">
-      <form onSubmit={handleSubmit} className="space-y-6">
+    <div className="w-full max-w-2xl mx-auto space-y-4">
+      {/* Control Buttons */}
+      <div className="flex flex-wrap gap-2 justify-center">
+        <SupportedSites />
+        <TextCleaner onCleanersChange={setTextCleaners} />
+        <AdminPanel />
+      </div>
+      
+      <Card className="p-6 bg-gradient-card shadow-card border-0">
+        <form onSubmit={handleSubmit} className="space-y-6">
         {/* Header */}
         <div className="text-center space-y-2">
           <div className="flex items-center justify-center gap-2 text-primary">
@@ -234,8 +260,9 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
             'Convert to EPUB'
           )}
         </Button>
-      </form>
-    </Card>
+        </form>
+      </Card>
+    </div>
   );
 }
 

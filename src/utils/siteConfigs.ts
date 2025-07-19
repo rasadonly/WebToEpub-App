@@ -53,7 +53,12 @@ export const SUPPORTED_SITES: NovelSite[] = [
 
 export function getSiteConfig(url: string): NovelSite | null {
   const domain = extractDomain(url);
-  return SUPPORTED_SITES.find(site => domain.includes(site.domain)) || null;
+  
+  // Check for custom sites first
+  const customSites = (window as any).customSiteConfigs || JSON.parse(localStorage.getItem('customSites') || '[]');
+  const allSites = [...customSites, ...SUPPORTED_SITES];
+  
+  return allSites.find(site => domain.includes(site.domain)) || null;
 }
 
 export function extractDomain(url: string): string {

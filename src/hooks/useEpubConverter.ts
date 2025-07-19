@@ -5,7 +5,7 @@ import { fetchChapterLinks, fetchChapterContent } from '@/utils/workerApi';
 import { cleanHtmlContent } from '@/utils/readability';
 import { generateEpub } from '@/utils/epubGenerator';
 import { resolveUrl, getSiteConfig } from '@/utils/siteConfigs';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
 
 export function useEpubConverter() {
   const { toast } = useToast();
@@ -87,7 +87,7 @@ export function useEpubConverter() {
             continue;
           }
 
-          const cleanContent = cleanHtmlContent(rawContent, removeSelectors);
+          const cleanContent = cleanHtmlContent(rawContent, removeSelectors, data.textCleaners);
           const title = extractChapterTitle(rawContent, chapterUrl, i + 1);
 
           chapters.push({
