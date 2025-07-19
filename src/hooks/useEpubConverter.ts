@@ -123,8 +123,22 @@ export function useEpubConverter() {
       });
       addLog('Generating EPUB file...');
 
+      // Filter chapters based on range
+      let finalChapters = chapters;
+      if (!data.chapterRange.useAll) {
+        const startIndex = Math.max(0, data.chapterRange.start - 1);
+        const endIndex = Math.min(chapters.length, data.chapterRange.end);
+        finalChapters = chapters.slice(startIndex, endIndex);
+        
+        addLog(`Filtered chapters ${data.chapterRange.start}-${Math.min(data.chapterRange.end, chapters.length)} (${finalChapters.length} chapters)`);
+      }
+
       // Generate EPUB
-      await generateEpub(chapters, data.metadata);
+      await generateEpub(finalChapters, data.metadata, {
+        fontFamily: data.fontFamily,
+        includeIndex: data.includeIndex,
+        chapterRange: data.chapterRange
+      });
 
       updateProgress({
         status: 'complete',

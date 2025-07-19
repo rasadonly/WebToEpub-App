@@ -2,70 +2,34 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ExternalLink, Globe } from 'lucide-react';
+import { SUPPORTED_SITES } from '@/utils/siteConfigs';
 
-const siteExamples = [
-  {
-    name: 'Novelhall',
-    domain: 'novelhall.com',
-    examples: [
-      'https://www.novelhall.com/Against-the-Gods-0',
-      'https://www.novelhall.com/Martial-God-Asura-0'
+// Auto-update from admin configurations
+const getSiteExamples = () => {
+  return SUPPORTED_SITES.map(site => ({
+    name: site.name,
+    domain: site.domain,
+    examples: site.exampleUrls || [
+      `https://${site.domain}/example-novel-1`,
+      `https://${site.domain}/example-novel-2`
     ]
-  },
-  {
-    name: 'Novelfull',
-    domain: 'novelfull.com',
-    examples: [
-      'https://novelfull.com/against-the-gods.html',
-      'https://novelfull.com/martial-god-asura.html'
-    ]
-  },
-  {
-    name: 'NovelBin',
-    domain: 'novelbin.com',
-    examples: [
-      'https://novelbin.com/b/against-the-gods-novel',
-      'https://novelbin.com/b/martial-god-asura'
-    ]
-  },
-  {
-    name: 'NovelBin ME',
-    domain: 'novelbin.me',
-    examples: [
-      'https://novelbin.me/b/against-the-gods-novel',
-      'https://novelbin.me/b/martial-god-asura'
-    ]
-  },
-  {
-    name: 'NovGo',
-    domain: 'novgo.me',
-    examples: [
-      'https://novgo.me/novel/against-the-gods',
-      'https://novgo.me/novel/martial-god-asura'
-    ]
-  },
-  {
-    name: 'WTR-LAB',
-    domain: 'wtr-lab.com',
-    examples: [
-      'https://wtr-lab.com/en/series/against-the-gods',
-      'https://wtr-lab.com/en/series/martial-god-asura'
-    ]
-  }
-];
+  }));
+};
 
 export function SupportedSites() {
+  const siteExamples = getSiteExamples();
+  
   return (
     <Dialog>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
           <Globe className="mr-2 h-4 w-4" />
-          Supported Sites
+          Supported Sites ({siteExamples.length})
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Supported Novel Websites</DialogTitle>
+          <DialogTitle>Supported Novel Websites ({siteExamples.length} sites)</DialogTitle>
         </DialogHeader>
 
         <div className="grid gap-4 md:grid-cols-2">

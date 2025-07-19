@@ -7,7 +7,11 @@ export const SUPPORTED_SITES: NovelSite[] = [
     tocSelector: '#morelist a',
     contentSelector: '#htmlContent',
     titleSelector: 'h1',
-    removeSelectors: ['.ad', '.advertisement', 'script', 'style']
+    removeSelectors: ['.ad', '.advertisement', 'script', 'style'],
+    exampleUrls: [
+      'https://www.novelhall.com/Against-the-Gods-0',
+      'https://www.novelhall.com/Martial-God-Asura-0'
+    ]
   },
   {
     name: 'Novelfull',
@@ -15,7 +19,11 @@ export const SUPPORTED_SITES: NovelSite[] = [
     tocSelector: '.list-chapter a',
     contentSelector: '#chapter-content',
     titleSelector: '.chapter-title',
-    removeSelectors: ['.ads', '.advertisement', 'script', 'style']
+    removeSelectors: ['.ads', '.advertisement', 'script', 'style'],
+    exampleUrls: [
+      'https://novelfull.com/against-the-gods.html',
+      'https://novelfull.com/martial-god-asura.html'
+    ]
   },
   {
     name: 'NovelBin',
@@ -23,7 +31,11 @@ export const SUPPORTED_SITES: NovelSite[] = [
     tocSelector: '.chapter-list a, .list-chapter a, .chapter-item a',
     contentSelector: '.chapter-content, .reading-content, .content-area',
     titleSelector: '.chapter-title, h1, .chapter-name',
-    removeSelectors: ['.ads', '.advertisement', '.sidebar', 'script', 'style', '.nav-buttons']
+    removeSelectors: ['.ads', '.advertisement', '.sidebar', 'script', 'style', '.nav-buttons'],
+    exampleUrls: [
+      'https://novelbin.com/b/against-the-gods-novel',
+      'https://novelbin.com/b/martial-god-asura'
+    ]
   },
   {
     name: 'NovelBin ME',
@@ -31,7 +43,11 @@ export const SUPPORTED_SITES: NovelSite[] = [
     tocSelector: '.chapter-list a, .list-chapter a, .chapter-item a',
     contentSelector: '.chapter-content, .reading-content, .content-area',
     titleSelector: '.chapter-title, h1, .chapter-name',
-    removeSelectors: ['.ads', '.advertisement', '.sidebar', 'script', 'style', '.nav-buttons']
+    removeSelectors: ['.ads', '.advertisement', '.sidebar', 'script', 'style', '.nav-buttons'],
+    exampleUrls: [
+      'https://novelbin.me/b/against-the-gods-novel',
+      'https://novelbin.me/b/martial-god-asura'
+    ]
   },
   {
     name: 'NovGo',
@@ -39,7 +55,11 @@ export const SUPPORTED_SITES: NovelSite[] = [
     tocSelector: '.chapter-list a, .episode-list a, .toc a',
     contentSelector: '.chapter-content, .content, .reading-area',
     titleSelector: '.chapter-title, h1, .title',
-    removeSelectors: ['.ads', '.advertisement', '.comments', 'script', 'style']
+    removeSelectors: ['.ads', '.advertisement', '.comments', 'script', 'style'],
+    exampleUrls: [
+      'https://novgo.me/novel/against-the-gods',
+      'https://novgo.me/novel/martial-god-asura'
+    ]
   },
   {
     name: 'WTR-LAB',
@@ -47,7 +67,11 @@ export const SUPPORTED_SITES: NovelSite[] = [
     tocSelector: '.chapter-list a, .chapters a, .serie-chapters a',
     contentSelector: '.chapter-content, .content-area, .reading-content',
     titleSelector: '.chapter-title, h1, .chapter-name',
-    removeSelectors: ['.ads', '.advertisement', '.navigation', 'script', 'style', '.comments']
+    removeSelectors: ['.ads', '.advertisement', '.navigation', 'script', 'style', '.comments'],
+    exampleUrls: [
+      'https://wtr-lab.com/en/series/against-the-gods',
+      'https://wtr-lab.com/en/series/martial-god-asura'
+    ]
   }
 ];
 

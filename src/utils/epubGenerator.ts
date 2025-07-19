@@ -4,7 +4,12 @@ import { ChapterData, EpubMetadata } from '@/types';
 
 export async function generateEpub(
   chapters: ChapterData[],
-  metadata: EpubMetadata
+  metadata: EpubMetadata,
+  options?: {
+    fontFamily?: string;
+    includeIndex?: boolean;
+    chapterRange?: { start: number; end: number; useAll: boolean };
+  }
 ): Promise<void> {
   const zip = new JSZip();
 
@@ -25,12 +30,12 @@ export async function generateEpub(
   oebps.file('toc.ncx', generateTocNcx(chapters, metadata));
 
   // Add CSS
-  oebps.file('style.css', generateCss());
+  oebps.file('style.css', generateCss(options?.fontFamily));
 
   // Add chapters
   chapters.forEach((chapter, index) => {
     const filename = `chapter_${String(index + 1).padStart(3, '0')}.xhtml`;
-    oebps.file(filename, generateChapterXhtml(chapter));
+    oebps.file(filename, generateChapterXhtml(chapter, options?.fontFamily));
   });
 
   // Generate and download
@@ -112,50 +117,174 @@ ${navPoints}
 </ncx>`;
 }
 
-function generateCss(): string {
-  return `body {
-  font-family: Georgia, serif;
-  line-height: 1.6;
-  margin: 2em;
-  color: #333;
+function generateCss(fontFamily: string = 'Georgia'): string {
+  const fontStack = getFontStack(fontFamily);
+  
+  return `@charset "UTF-8";
+
+/* Beautiful EPUB styles for all devices */
+body {
+  font-family: ${fontStack};
+  line-height: 1.7;
+  margin: 0;
+  padding: 2em;
+  color: #2c3e50;
+  background-color: #fdfdfd;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Responsive margins */
+@media screen and (max-width: 600px) {
+  body {
+    padding: 1em;
+    line-height: 1.6;
+  }
 }
 
 h1 {
-  font-size: 1.8em;
-  margin-bottom: 1em;
+  font-size: 2em;
+  font-weight: 700;
+  margin: 1.5em 0 1em 0;
   text-align: center;
-  border-bottom: 2px solid #333;
+  color: #34495e;
+  border-bottom: 3px solid #3498db;
   padding-bottom: 0.5em;
+  line-height: 1.3;
 }
 
 h2 {
-  font-size: 1.4em;
-  margin: 1.5em 0 1em 0;
+  font-size: 1.5em;
+  font-weight: 600;
+  margin: 2em 0 1em 0;
+  color: #34495e;
+  line-height: 1.4;
+}
+
+h3 {
+  font-size: 1.2em;
+  font-weight: 600;
+  margin: 1.5em 0 0.5em 0;
+  color: #34495e;
 }
 
 p {
-  margin: 1em 0;
+  margin: 0 0 1.2em 0;
   text-align: justify;
   text-indent: 1.5em;
+  orphans: 2;
+  widows: 2;
+}
+
+/* First paragraph after headers shouldn't be indented */
+h1 + p, h2 + p, h3 + p {
+  text-indent: 0;
+  margin-top: 0.5em;
 }
 
 .chapter-content {
-  max-width: 40em;
+  max-width: 45em;
   margin: 0 auto;
+  overflow-wrap: break-word;
+}
+
+/* Better typography */
+em, i {
+  font-style: italic;
+}
+
+strong, b {
+  font-weight: 700;
+}
+
+/* Quote styling */
+blockquote {
+  margin: 1.5em 2em;
+  padding: 1em;
+  border-left: 4px solid #3498db;
+  background-color: #f8f9fa;
+  font-style: italic;
+}
+
+/* Lists */
+ul, ol {
+  margin: 1em 0;
+  padding-left: 2em;
+}
+
+li {
+  margin: 0.5em 0;
+}
+
+/* Links */
+a {
+  color: #3498db;
+  text-decoration: underline;
+}
+
+/* Horizontal rules */
+hr {
+  border: none;
+  border-top: 1px solid #bdc3c7;
+  margin: 2em 0;
+}
+
+/* Page breaks for print/export */
+.page-break {
+  page-break-before: always;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  body {
+    background-color: #1a1a1a;
+    color: #e8e8e8;
+  }
+  
+  h1, h2, h3 {
+    color: #f0f0f0;
+  }
+  
+  h1 {
+    border-bottom-color: #4a90e2;
+  }
+  
+  blockquote {
+    background-color: #2a2a2a;
+    border-left-color: #4a90e2;
+  }
+  
+  hr {
+    border-top-color: #404040;
+  }
 }`;
 }
 
-function generateChapterXhtml(chapter: ChapterData): string {
+function getFontStack(fontFamily: string): string {
+  const fontStacks = {
+    'Georgia': '"Georgia", "Times New Roman", serif',
+    'Merriweather': '"Merriweather", "Georgia", serif',
+    'Crimson Text': '"Crimson Text", "Times New Roman", serif',
+    'Libre Baskerville': '"Libre Baskerville", "Georgia", serif',
+    'Source Serif Pro': '"Source Serif Pro", "Georgia", serif'
+  };
+  
+  return fontStacks[fontFamily as keyof typeof fontStacks] || fontStacks.Georgia;
+}
+
+function generateChapterXhtml(chapter: ChapterData, fontFamily?: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
 <head>
+  <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8"/>
   <title>${escapeXml(chapter.title)}</title>
   <link rel="stylesheet" type="text/css" href="style.css"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 </head>
 <body>
-  <h1>${escapeXml(chapter.title)}</h1>
   <div class="chapter-content">
+    <h1>${escapeXml(chapter.title)}</h1>
     ${chapter.content}
   </div>
 </body>

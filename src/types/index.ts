@@ -6,6 +6,7 @@ export interface NovelSite {
   titleSelector?: string;
   nextPageSelector?: string;
   removeSelectors?: string[];
+  exampleUrls?: string[];
 }
 
 export interface ConversionProgress {

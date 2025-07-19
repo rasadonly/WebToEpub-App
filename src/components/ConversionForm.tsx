@@ -4,11 +4,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { SUPPORTED_SITES, getSiteConfig, extractDomain } from '@/utils/siteConfigs';
 import { NovelSite, EpubMetadata } from '@/types';
-import { BookOpen, Globe, Settings } from 'lucide-react';
+import { BookOpen, Globe, Settings, Hash, Type, List } from 'lucide-react';
 import { AdminPanel } from './AdminPanel';
 import { SupportedSites } from './SupportedSites';
 
@@ -22,6 +23,14 @@ export interface ConversionFormData {
   tocSelector: string;
   contentSelector: string;
   metadata: EpubMetadata;
+  chapterRange: {
+    start: number;
+    end: number;
+    useAll: boolean;
+  };
+  fontFamily: string;
+  includeIndex: boolean;
+  editableUrls: boolean;
 }
 
 export default function ConversionForm({ onSubmit, isConverting }: ConversionFormProps) {
@@ -36,6 +45,14 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
     language: 'en',
     description: ''
   });
+  const [chapterRange, setChapterRange] = useState({
+    start: 1,
+    end: 999,
+    useAll: true
+  });
+  const [fontFamily, setFontFamily] = useState('Georgia');
+  const [includeIndex, setIncludeIndex] = useState(false);
+  const [editableUrls, setEditableUrls] = useState(false);
 
   // Load saved settings from localStorage
   useEffect(() => {
@@ -102,7 +119,11 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
       tocUrl,
       tocSelector,
       contentSelector,
-      metadata
+      metadata,
+      chapterRange,
+      fontFamily,
+      includeIndex,
+      editableUrls
     });
   };
 
@@ -190,9 +211,98 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
           </div>
         </div>
 
+        {/* Chapter Range Selection */}
+        <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
+          <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-2">
+            <Hash className="w-4 h-4" />
+            Chapter Selection
+          </h3>
+          <div className="space-y-4">
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="use-all-chapters"
+                checked={chapterRange.useAll}
+                onCheckedChange={(checked) => setChapterRange(prev => ({ ...prev, useAll: checked }))}
+              />
+              <Label htmlFor="use-all-chapters">Convert all chapters</Label>
+            </div>
+            {!chapterRange.useAll && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="start-chapter">Start Chapter</Label>
+                  <Input
+                    id="start-chapter"
+                    type="number"
+                    min="1"
+                    value={chapterRange.start}
+                    onChange={(e) => setChapterRange(prev => ({ ...prev, start: parseInt(e.target.value) || 1 }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="end-chapter">End Chapter</Label>
+                  <Input
+                    id="end-chapter"
+                    type="number"
+                    min="1"
+                    value={chapterRange.end}
+                    onChange={(e) => setChapterRange(prev => ({ ...prev, end: parseInt(e.target.value) || 999 }))}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Font and Display Options */}
+        <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
+          <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-2">
+            <Type className="w-4 h-4" />
+            Display Options
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="font-family">Font Family</Label>
+              <Select value={fontFamily} onValueChange={setFontFamily}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Georgia">Georgia (Default)</SelectItem>
+                  <SelectItem value="Merriweather">Merriweather</SelectItem>
+                  <SelectItem value="Crimson Text">Crimson Text</SelectItem>
+                  <SelectItem value="Libre Baskerville">Libre Baskerville</SelectItem>
+                  <SelectItem value="Source Serif Pro">Source Serif Pro</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="include-index"
+                  checked={includeIndex}
+                  onCheckedChange={setIncludeIndex}
+                  disabled={true}
+                />
+                <Label htmlFor="include-index" className="text-muted-foreground">
+                  Include Table of Contents (Coming Soon)
+                </Label>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Switch
+              id="editable-urls"
+              checked={editableUrls}
+              onCheckedChange={setEditableUrls}
+            />
+            <Label htmlFor="editable-urls">Allow manual URL editing during conversion</Label>
+          </div>
+        </div>
+
         {/* Metadata */}
         <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
-          <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">
+          <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-2">
+            <List className="w-4 h-4" />
             Book Metadata
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
