@@ -87,7 +87,7 @@ export function useEpubConverter() {
             continue;
           }
 
-          const cleanContent = cleanHtmlContent(rawContent, removeSelectors, data.textCleaners);
+          const cleanContent = cleanHtmlContent(rawContent, removeSelectors);
           const title = extractChapterTitle(rawContent, chapterUrl, i + 1);
 
           chapters.push({

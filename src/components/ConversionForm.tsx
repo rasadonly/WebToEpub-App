@@ -10,7 +10,6 @@ import { SUPPORTED_SITES, getSiteConfig, extractDomain } from '@/utils/siteConfi
 import { NovelSite, EpubMetadata } from '@/types';
 import { BookOpen, Globe, Settings } from 'lucide-react';
 import { AdminPanel } from './AdminPanel';
-import { TextCleaner } from './TextCleaner';
 import { SupportedSites } from './SupportedSites';
 
 interface ConversionFormProps {
@@ -23,13 +22,6 @@ export interface ConversionFormData {
   tocSelector: string;
   contentSelector: string;
   metadata: EpubMetadata;
-  textCleaners: Array<{
-    id: string;
-    name: string;
-    pattern: string;
-    replacement: string;
-    isGlobal: boolean;
-  }>;
 }
 
 export default function ConversionForm({ onSubmit, isConverting }: ConversionFormProps) {
@@ -38,13 +30,6 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
   const [tocSelector, setTocSelector] = useState('');
   const [contentSelector, setContentSelector] = useState('');
   const [selectedSite, setSelectedSite] = useState<string>('');
-  const [textCleaners, setTextCleaners] = useState<Array<{
-    id: string;
-    name: string;
-    pattern: string;
-    replacement: string;
-    isGlobal: boolean;
-  }>>([]);
   const [metadata, setMetadata] = useState<EpubMetadata>({
     title: '',
     author: 'Unknown Author',
@@ -117,8 +102,7 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
       tocUrl,
       tocSelector,
       contentSelector,
-      metadata,
-      textCleaners
+      metadata
     });
   };
 
@@ -127,7 +111,6 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
       {/* Control Buttons */}
       <div className="flex flex-wrap gap-2 justify-center">
         <SupportedSites />
-        <TextCleaner onCleanersChange={setTextCleaners} />
         <AdminPanel />
       </div>
       

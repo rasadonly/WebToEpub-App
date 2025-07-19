@@ -1,16 +1,7 @@
-interface TextCleaner {
-  id: string;
-  name: string;
-  pattern: string;
-  replacement: string;
-  isGlobal: boolean;
-}
-
 // Simple content cleaner (replacing full Readability.js for now)
 export function cleanHtmlContent(
   htmlContent: string, 
-  removeSelectors: string[] = [],
-  textCleaners: TextCleaner[] = []
+  removeSelectors: string[] = []
 ): string {
   // Create a temporary DOM element to parse HTML
   const parser = new DOMParser();
@@ -35,16 +26,6 @@ export function cleanHtmlContent(
   
   // Clean up the text
   let content = body.innerHTML;
-  
-  // Apply text cleaners
-  textCleaners.forEach(cleaner => {
-    try {
-      const regex = new RegExp(cleaner.pattern, 'gi');
-      content = content.replace(regex, cleaner.replacement);
-    } catch (error) {
-      console.warn(`Invalid regex pattern in cleaner "${cleaner.name}":`, cleaner.pattern);
-    }
-  });
   
   // Remove excessive whitespace
   content = content.replace(/\s+/g, ' ');
