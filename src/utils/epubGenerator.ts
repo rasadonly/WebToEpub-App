@@ -74,6 +74,8 @@ function generateContentOpf(chapters: ChapterData[], metadata: EpubMetadata): st
     <dc:date>${new Date().toISOString().split('T')[0]}</dc:date>
     ${metadata.description ? `<dc:description>${escapeXml(metadata.description)}</dc:description>` : ''}
     <meta property="dcterms:modified">${new Date().toISOString()}</meta>
+    <meta name="generator" content="Link to EPUB"/>
+    <meta property="media:duration" content="PT0H0M0S"/>
   </metadata>
   <manifest>
     <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>

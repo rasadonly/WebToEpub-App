@@ -141,7 +141,7 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
         <div className="text-center space-y-2">
           <div className="flex items-center justify-center gap-2 text-primary">
             <BookOpen className="w-8 h-8" />
-            <h1 className="text-2xl font-bold">Web2EPUB Converter</h1>
+            <h1 className="text-2xl font-bold">Link to EPUB</h1>
           </div>
           <p className="text-muted-foreground">
             Convert web novels into beautiful EPUB files
@@ -276,26 +276,7 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
               </Select>
             </div>
             <div className="space-y-2">
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="include-index"
-                  checked={includeIndex}
-                  onCheckedChange={setIncludeIndex}
-                  disabled={true}
-                />
-                <Label htmlFor="include-index" className="text-muted-foreground">
-                  Include Table of Contents (Coming Soon)
-                </Label>
-              </div>
             </div>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Switch
-              id="editable-urls"
-              checked={editableUrls}
-              onCheckedChange={setEditableUrls}
-            />
-            <Label htmlFor="editable-urls">Allow manual URL editing during conversion</Label>
           </div>
         </div>
 
