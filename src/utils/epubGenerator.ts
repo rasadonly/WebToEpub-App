@@ -13,11 +13,8 @@ export async function generateEpub(
 ): Promise<void> {
   const zip = new JSZip();
 
-  // Add mimetype (uncompressed) - Fixed for Android compatibility
-  zip.file('mimetype', 'application/epub+zip', { 
-    compression: 'STORE',
-    compressionOptions: { level: 0 }
-  });
+  // Add mimetype (uncompressed)
+  zip.file('mimetype', 'application/epub+zip', { compression: 'STORE' });
 
   // Add META-INF
   const metaInf = zip.folder('META-INF')!;
@@ -41,13 +38,8 @@ export async function generateEpub(
     oebps.file(filename, generateChapterXhtml(chapter, options?.fontFamily));
   });
 
-  // Generate and download with proper EPUB MIME type for Android
-  const blob = await zip.generateAsync({ 
-    type: 'blob',
-    mimeType: 'application/epub+zip',
-    compression: 'DEFLATE',
-    compressionOptions: { level: 6 }
-  });
+  // Generate and download
+  const blob = await zip.generateAsync({ type: 'blob' });
   const filename = `${sanitizeFilename(metadata.title)}.epub`;
   saveAs(blob, filename);
 }

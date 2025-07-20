@@ -72,54 +72,6 @@ export const SUPPORTED_SITES: NovelSite[] = [
       'https://wtr-lab.com/en/series/against-the-gods',
       'https://wtr-lab.com/en/series/martial-god-asura'
     ]
-  },
-  {
-    name: 'Royal Road',
-    domain: 'royalroad.com',
-    tocSelector: '.chapter-row td a, .fiction-chapters a',
-    contentSelector: '.chapter-content, .chapter-inner',
-    titleSelector: '.chapter-title, h1',
-    removeSelectors: ['.portlet-ads', '.ads', 'script', 'style'],
-    exampleUrls: [
-      'https://www.royalroad.com/fiction/21220/mother-of-learning',
-      'https://www.royalroad.com/fiction/26534/the-perfect-run'
-    ]
-  },
-  {
-    name: 'Webnovel',
-    domain: 'webnovel.com',
-    tocSelector: '.episode-item a, .chapter-item a',
-    contentSelector: '.cha-content, .chapter-entity',
-    titleSelector: '.chapter-title, h3',
-    removeSelectors: ['.adsbox', '.ads', 'script', 'style'],
-    exampleUrls: [
-      'https://www.webnovel.com/book/reverend-insanity_7996858406002505',
-      'https://www.webnovel.com/book/lord-of-the-mysteries_11022733006234505'
-    ]
-  },
-  {
-    name: 'Wuxiaworld',
-    domain: 'wuxiaworld.com',
-    tocSelector: '.chapter-item a, .table-chapters a',
-    contentSelector: '.chapter-content, .fr-view',
-    titleSelector: '.chapter-title, h4',
-    removeSelectors: ['.ads', 'script', 'style'],
-    exampleUrls: [
-      'https://www.wuxiaworld.com/novel/coiling-dragon',
-      'https://www.wuxiaworld.com/novel/stellar-transformations'
-    ]
-  },
-  {
-    name: 'Scribble Hub',
-    domain: 'scribblehub.com',
-    tocSelector: '.toc_w a, .wi_fic_chp a',
-    contentSelector: '#chp_contents, .chp_text',
-    titleSelector: '.chapter-title, h1',
-    removeSelectors: ['.ads', 'script', 'style'],
-    exampleUrls: [
-      'https://www.scribblehub.com/series/12345/example-novel',
-      'https://www.scribblehub.com/series/67890/another-novel'
-    ]
   }
 ];
 

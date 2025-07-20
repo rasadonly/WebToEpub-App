@@ -17,7 +17,7 @@ const Index = () => {
           </div>
           <div className="space-y-2">
             <h1 className="text-4xl md:text-5xl font-bold bg-gradient-hero bg-clip-text text-transparent">
-              Link to EPUB
+              Web2EPUB Converter
             </h1>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               Transform web novels from popular sites into beautiful EPUB files. 
