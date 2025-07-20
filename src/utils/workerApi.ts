@@ -45,11 +45,44 @@ export async function fetchChapterLinks(tocUrl: string, linkSelector: string): P
 }
 
 export async function fetchChapterContent(chapterUrl: string, contentSelector: string): Promise<string> {
-  const response = await fetchHtmlContent(chapterUrl, contentSelector, 'content');
+  const maxRetries = 3;
+  let lastError: Error | null = null;
   
-  if (response.error) {
-    throw new Error(`Failed to fetch chapter content: ${response.error}`);
-  }
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetchHtmlContent(chapterUrl, contentSelector, 'content');
+      
+      if (response.error) {
+        lastError = new Error(`Failed to fetch chapter content: ${response.error}`);
+        if (attempt < maxRetries) {
+          console.log(`Attempt ${attempt} failed, retrying in ${attempt * 2}s...`);
+          await new Promise(resolve => setTimeout(resolve, attempt * 2000));
+          continue;
+        }
+        throw lastError;
+      }
 
-  return response.results?.join(' ') || '';
+      const content = response.results?.join(' ') || '';
+      
+      // If content is empty, retry unless it's the last attempt
+      if (!content.trim() && attempt < maxRetries) {
+        console.log(`Attempt ${attempt} returned empty content, retrying in ${attempt * 2}s...`);
+        await new Promise(resolve => setTimeout(resolve, attempt * 2000));
+        continue;
+      }
+      
+      return content;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error('Unknown error');
+      if (attempt < maxRetries) {
+        console.log(`Attempt ${attempt} failed, retrying in ${attempt * 2}s...`);
+        await new Promise(resolve => setTimeout(resolve, attempt * 2000));
+        continue;
+      }
+    }
+  }
+  
+  // If all retries failed, return empty string to allow conversion to continue
+  console.warn(`Failed to fetch content after ${maxRetries} attempts, continuing with empty content`);
+  return '';
 }
