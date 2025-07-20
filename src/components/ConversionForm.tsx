@@ -30,7 +30,6 @@ export interface ConversionFormData {
   };
   fontFamily: string;
   includeIndex: boolean;
-  editableUrls: boolean;
 }
 
 export default function ConversionForm({ onSubmit, isConverting }: ConversionFormProps) {
@@ -51,8 +50,7 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
     useAll: true
   });
   const [fontFamily, setFontFamily] = useState('Georgia');
-  const [includeIndex, setIncludeIndex] = useState(false);
-  const [editableUrls, setEditableUrls] = useState(false);
+  const [includeIndex] = useState(false);
 
   // Load saved settings from localStorage
   useEffect(() => {
@@ -122,8 +120,7 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
       metadata,
       chapterRange,
       fontFamily,
-      includeIndex,
-      editableUrls
+      includeIndex
     });
   };
 
@@ -259,43 +256,20 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
             <Type className="w-4 h-4" />
             Display Options
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="font-family">Font Family</Label>
-              <Select value={fontFamily} onValueChange={setFontFamily}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Georgia">Georgia (Default)</SelectItem>
-                  <SelectItem value="Merriweather">Merriweather</SelectItem>
-                  <SelectItem value="Crimson Text">Crimson Text</SelectItem>
-                  <SelectItem value="Libre Baskerville">Libre Baskerville</SelectItem>
-                  <SelectItem value="Source Serif Pro">Source Serif Pro</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="include-index"
-                  checked={includeIndex}
-                  onCheckedChange={setIncludeIndex}
-                  disabled={true}
-                />
-                <Label htmlFor="include-index" className="text-muted-foreground">
-                  Include Table of Contents (Coming Soon)
-                </Label>
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Switch
-              id="editable-urls"
-              checked={editableUrls}
-              onCheckedChange={setEditableUrls}
-            />
-            <Label htmlFor="editable-urls">Allow manual URL editing during conversion</Label>
+          <div className="space-y-2">
+            <Label htmlFor="font-family">Font Family</Label>
+            <Select value={fontFamily} onValueChange={setFontFamily}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Georgia">Georgia (Default)</SelectItem>
+                <SelectItem value="Merriweather">Merriweather</SelectItem>
+                <SelectItem value="Crimson Text">Crimson Text</SelectItem>
+                <SelectItem value="Libre Baskerville">Libre Baskerville</SelectItem>
+                <SelectItem value="Source Serif Pro">Source Serif Pro</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
