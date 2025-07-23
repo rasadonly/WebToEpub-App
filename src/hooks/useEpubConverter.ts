@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { ConversionProgress, ChapterData } from '@/types';
 import { ConversionFormData } from '@/components/ConversionForm';
-import { fetchChapterLinks, fetchChapterContent } from '@/utils/workerApi';
+import { fetchChapterLinks, fetchChapterContent } from '@/utils/localWorker';
 import { cleanHtmlContent } from '@/utils/readability';
 import { generateEpub } from '@/utils/epubGenerator';
 import { resolveUrl, getSiteConfig } from '@/utils/siteConfigs';
@@ -106,9 +106,9 @@ export function useEpubConverter() {
           continue;
         }
 
-        // Faster, consistent delay
+        // Much faster delay for local processing
         if (i < uniqueLinks.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 800));
+          await new Promise(resolve => setTimeout(resolve, 200));
         }
       }
 
