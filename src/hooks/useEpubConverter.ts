@@ -106,11 +106,9 @@ export function useEpubConverter() {
           continue;
         }
 
-        // Variable delay to avoid rate limiting patterns
+        // Small delay to avoid overwhelming the server
         if (i < uniqueLinks.length - 1) {
-          const baseDelay = 1000;
-          const randomDelay = Math.random() * 1000;
-          await new Promise(resolve => setTimeout(resolve, baseDelay + randomDelay));
+          await new Promise(resolve => setTimeout(resolve, 500));
         }
       }
 

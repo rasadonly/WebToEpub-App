@@ -45,56 +45,11 @@ export async function fetchChapterLinks(tocUrl: string, linkSelector: string): P
 }
 
 export async function fetchChapterContent(chapterUrl: string, contentSelector: string): Promise<string> {
-  const maxRetries = 5;
-  let lastError: Error | null = null;
+  const response = await fetchHtmlContent(chapterUrl, contentSelector, 'content');
   
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      // Add random delay to avoid pattern detection
-      const baseDelay = attempt * 1000;
-      const randomDelay = Math.random() * 1000;
-      
-      if (attempt > 1) {
-        console.log(`Attempt ${attempt} for chapter, waiting ${Math.round((baseDelay + randomDelay) / 1000)}s...`);
-        await new Promise(resolve => setTimeout(resolve, baseDelay + randomDelay));
-      }
-
-      const response = await fetchHtmlContent(chapterUrl, contentSelector, 'content');
-      
-      if (response.error) {
-        lastError = new Error(`Failed to fetch chapter content: ${response.error}`);
-        console.log(`Attempt ${attempt} failed with error: ${response.error}`);
-        if (attempt < maxRetries) {
-          continue;
-        }
-        throw lastError;
-      }
-
-      const content = response.results?.join(' ') || '';
-      
-      // If content is empty or too short, retry unless it's the last attempt
-      if ((!content.trim() || content.trim().length < 50) && attempt < maxRetries) {
-        console.log(`Attempt ${attempt} returned insufficient content (${content.trim().length} chars), retrying...`);
-        continue;
-      }
-      
-      if (content.trim()) {
-        console.log(`Successfully fetched chapter content (${content.trim().length} chars) on attempt ${attempt}`);
-        return content;
-      }
-      
-      // On last attempt, return whatever we got
-      return content;
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error('Unknown error');
-      console.log(`Attempt ${attempt} failed with exception: ${lastError.message}`);
-      if (attempt < maxRetries) {
-        continue;
-      }
-    }
+  if (response.error) {
+    throw new Error(`Failed to fetch chapter content: ${response.error}`);
   }
-  
-  // If all retries failed, return empty string to allow conversion to continue
-  console.warn(`Failed to fetch content after ${maxRetries} attempts for URL: ${chapterUrl}`);
-  return '';
+
+  return response.results?.join(' ') || '';
 }
