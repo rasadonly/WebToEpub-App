@@ -6,8 +6,8 @@ export interface WorkerResponse {
 }
 
 export async function fetchHtmlContent(url: string, selector: string = 'body', mode: string = 'content', retryCount = 0): Promise<WorkerResponse> {
-  const maxRetries = 5;
-  const baseDelay = 1000;
+  const maxRetries = 3;
+  const baseDelay = 500;
   
   try {
     const params = new URLSearchParams({
@@ -24,31 +24,20 @@ export async function fetchHtmlContent(url: string, selector: string = 'body', m
     });
 
     if (!response.ok) {
-      if (response.status === 429 || response.status >= 500) {
-        // Rate limit or server error - retry
+      if ((response.status === 429 || response.status >= 500) && retryCount < maxRetries) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      return { error: `HTTP ${response.status}: ${response.statusText}` };
     }
 
     const data = await response.json();
-    
-    // Validate content quality
-    if (mode === 'content' && data.results) {
-      const contentLength = data.results.join(' ').trim().length;
-      if (contentLength < 100 && retryCount < maxRetries) {
-        // Content too short, likely failed scraping - retry
-        throw new Error('Content too short, retrying...');
-      }
-    }
-    
     return data;
   } catch (error) {
     console.error(`Worker API error (attempt ${retryCount + 1}):`, error);
     
     if (retryCount < maxRetries) {
-      // Calculate delay with exponential backoff and jitter
-      const delay = baseDelay * Math.pow(2, retryCount) + Math.random() * 1000;
+      // Much shorter delays - max 2 seconds
+      const delay = baseDelay * (retryCount + 1) + Math.random() * 500;
       console.log(`Retrying in ${Math.round(delay)}ms...`);
       
       await new Promise(resolve => setTimeout(resolve, delay));
@@ -80,9 +69,9 @@ export async function fetchChapterContent(chapterUrl: string, contentSelector: s
 
   const content = response.results?.join(' ') || '';
   
-  // Additional validation for content quality
-  if (content.trim().length < 50) {
-    throw new Error('Chapter content appears to be empty or too short');
+  // More lenient validation - just check if we have some content
+  if (content.trim().length < 10) {
+    throw new Error('Chapter content appears to be empty');
   }
 
   return content;

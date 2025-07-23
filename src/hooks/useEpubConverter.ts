@@ -106,10 +106,9 @@ export function useEpubConverter() {
           continue;
         }
 
-        // Adaptive delay based on chapter index and success rate
+        // Faster, consistent delay
         if (i < uniqueLinks.length - 1) {
-          const delay = i < 20 ? 1500 : i < 100 ? 1000 : 500; // Slower for first chapters
-          await new Promise(resolve => setTimeout(resolve, delay));
+          await new Promise(resolve => setTimeout(resolve, 800));
         }
       }
 
