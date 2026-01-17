@@ -7,17 +7,17 @@ class LoreNovelsParser extends Parser {
         super();
     }
 
-    getChapterUrls(dom) {
+    async getChapterUrls(dom) {
         const toc = dom.querySelector("ul.wp-block-latest-posts__list");
         if (!toc) {
-            return Promise.resolve([]);
+            return [];
         }
 
         const items = [...toc.querySelectorAll(
             "a.wp-block-latest-posts__post-title"
         )];
 
-        return Promise.resolve(this.buildChapterList(items));
+        return this.buildChapterList(items);
     }
 
     buildChapterList(items) {
@@ -27,21 +27,6 @@ class LoreNovelsParser extends Parser {
                 sourceUrl: a.href,
                 title: a.textContent.trim()
             }));
-    }
-
-    extractContent(dom) {
-        const content = this.findContent(dom);
-        if (!content) {
-            return null;
-        }
-
-        const title = this.findChapterTitle(dom);
-        if (title) {
-            content.prepend(title.cloneNode(true));
-        }
-
-        this.removeUnwantedElementsFromContentElement(content);
-        return content;
     }
 
     findContent(dom) {
