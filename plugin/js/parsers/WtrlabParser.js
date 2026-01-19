@@ -177,6 +177,7 @@ class WtrlabParser extends Parser {
                 for (let i = 0; i < json?.data?.data?.glossary_data?.terms?.length??0; i++) {
                     let term = json.data.data.glossary_data.terms[i][0]??"※"+i+"⛬";
                     newtext = newtext.replaceAll("※"+i+"⛬", term);
+                    newtext = newtext.replaceAll("※" + i + "〓", term);
                     for (let term of this.terms) {
                         newtext = newtext.replaceAll(term?.from, term?.to);
                     }
