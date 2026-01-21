@@ -28,8 +28,17 @@ class WtrlabParser extends Parser {
         let chapters = (await HttpClient.fetchJson("https://wtr-lab.com/api/chapters/" + id)).json;
         let serie_id = chapters.chapters[0].serie_id;
         try {
-            let terms = (await HttpClient.fetchJson("https://wtr-lab.com/api/user/config")).json;
-            this.terms = terms?.config?.terms.filter(a => (a?.filter == null) || (a?.filter.includes(serie_id)));
+            let terms = (await HttpClient.fetchJson("https://wtr-lab.com/api/v2/user/config")).json;
+            terms = terms?.config?.terms.filter(a => (a[4] == null) || (a[4].includes(serie_id)));
+            terms = terms.map(a => ({from:a[2].split("|"), to:a[1]}));
+            let index = 0;
+            this.terms = [];
+            for (let i = 0; i < terms.length; i++) {
+                for (let j = 0; j < terms[i].from.length; j++) {
+                    this.terms[index] = ({from: terms[i].from[j], to: terms[i].to});
+                    index++;
+                }
+            }
 
         } catch (error) {
             this.terms = [];
@@ -178,9 +187,9 @@ class WtrlabParser extends Parser {
                     let term = json.data.data.glossary_data.terms[i][0]??"※"+i+"⛬";
                     newtext = newtext.replaceAll("※"+i+"⛬", term);
                     newtext = newtext.replaceAll("※" + i + "〓", term);
-                    for (let term of this.terms) {
-                        newtext = newtext.replaceAll(term?.from, term?.to);
-                    }
+                }
+                for (let term of this.terms) {
+                    newtext = newtext.replaceAll(term?.from, term?.to);
                 }
                 pnode.textContent = newtext;
                 newDoc.content.appendChild(pnode);
