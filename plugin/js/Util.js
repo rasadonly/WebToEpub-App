@@ -30,6 +30,11 @@ const util = (function() {
         {
             return false;
         }
+        else if (typeof (browser) === "undefined")
+        {
+            // old version of chrome
+            return false;
+        }
         else
         {
             // this only works as long as firefox hasn't implemented this 
