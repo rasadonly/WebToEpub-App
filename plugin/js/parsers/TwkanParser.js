@@ -39,7 +39,7 @@ class TwkanParser extends Parser {
     }
 
     findContent(dom) {
-        // User provided: #txtcontent0
+        // css selector for novel body: #txtcontent0
         return dom.querySelector("#txtcontent0");
     }
 
@@ -96,7 +96,7 @@ class TwkanParser extends Parser {
     }
 
     findChapterTitle(dom) {
-        // User provided: #container > div.mybox > div.txtnav > h1
+        // css selector found from github: #container > div.mybox > div.txtnav > h1
         // Also try simpler selectors
         return dom.querySelector(".txtnav h1, #container .txtnav h1, h1");
     }
