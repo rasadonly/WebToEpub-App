@@ -12,7 +12,8 @@ class WtrlabParser extends Parser {
         document.getElementById("removeChapterNumberRow").hidden = false; 
         // raw download no longer supported as the raw text is encoded and i don't know how.
         // leaving old code in case it gets solved.
-        // document.getElementById("selectTranslationAiRow").hidden = false; 
+        // document.getElementById("selectTranslationAiRow").hidden = false;
+        document.getElementById("selectRetryLongerRow").hidden = false;  
     }
 
     async getChapterUrls(dom) {
@@ -147,7 +148,11 @@ class WtrlabParser extends Parser {
             newresp.response = {};
             newresp.response.url = this.PostToUrl(checkedresponse.response.url, JSON.parse(wrapOptions.fetchOptions.body));
             newresp.response.status = 999;
-            newresp.response.retryDelay = [80,40,25,25,25];
+            if (document.getElementById("selectRetryLongerCheckbox").checked) {
+                newresp.response.retryDelay = [80,120,120,120,120,120,120,120,120,120,120,120,120,120,120,120,120,120,120,120,120,120,120,120,120,120,120,120,120,120,120];
+            } else {
+                newresp.response.retryDelay = [80,40,25,25,25];
+            }
             newresp.errorMessage = "Fetch of URL '"+newresp.response.url+"' failed.\nThe server sends an empty Chapter try to open the URL and try again if you can see the Chapter on the normal website.\nIt could also be that you try to get an Ai translated novel that isn't Ai tranlated.";
             return newresp;
         }
