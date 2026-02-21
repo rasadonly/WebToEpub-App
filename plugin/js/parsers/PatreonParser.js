@@ -29,7 +29,7 @@ class PatreonParser extends Parser {
             let getLink = (e) => {
                 return e.querySelector("a");
             };
-            let linksContainer = [...dom.querySelectorAll("div.cm-hhCVrV.cm-WzHHbB div:not([class])")];
+            let linksContainer = [...dom.querySelectorAll("div.cm-hhCVrV.cm-WzHHbB div.cm-bkNQIo:not(:has(svg[data-tag='IconLock'])) div:not([class])")];
             return linksContainer.map(linkContainer => {
                 return {
                     sourceUrl: getLink(linkContainer).href,
@@ -105,12 +105,24 @@ class PatreonParser extends Parser {
                         let current = root;
                         node.marks.forEach(mark => {
                             let wrapper;
-                            if (mark.type === "bold") wrapper = document.createElement("strong");
-                            if (mark.type === "italic") wrapper = document.createElement("em");
-                            if (mark.type === "link") {
-                                wrapper = document.createElement("a");
-                                wrapper.href = mark.attrs.href;
-                                wrapper.target = mark.attrs.target;
+                            switch (mark.type) {
+                                case "bold":
+                                    wrapper = document.createElement("strong");
+                                    break;
+                                case "italic":
+                                    wrapper = document.createElement("em");
+                                    break;
+                                case "underline":
+                                    wrapper = document.createElement("u");
+                                    break;
+                                case "link":
+                                    wrapper = document.createElement("a");
+                                    wrapper.href = mark.attrs.href;
+                                    wrapper.target = mark.attrs.target;
+                                    break;
+                                default:
+                                    wrapper = document.createElement("span");
+                                    console.error(`Unsupported mark type: "${mark.type}"`);
                             }
                             current.appendChild(wrapper);
                             current = wrapper;
