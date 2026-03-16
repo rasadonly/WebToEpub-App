@@ -215,6 +215,9 @@ class HttpClient {
             let fetchOptions = useProxy
                 ? Object.assign({}, wrapOptions.fetchOptions, { credentials: "omit" })
                 : wrapOptions.fetchOptions;
+            if (useProxy && HttpClient.corsProxyUrl === "https://corsproxy.io/?url=") {
+                fetchOptions.headers = { ...(fetchOptions.headers || {}), 'Origin': 'http://localhost:8080' };
+            }
 
             let response = await fetch(fetchUrl, fetchOptions);
 
