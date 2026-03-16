@@ -198,19 +198,23 @@ class HttpClient {
             let skipurlerror = new Error("!Blocked! URL skipped because the user blocked the site");
             return wrapOptions.errorHandler.onFetchError(url, skipurlerror);
         }
+
         await HttpClient.setPartitionCookies(url);
+
         if (wrapOptions.fetchOptions == null) {
             wrapOptions.fetchOptions = HttpClient.makeOptions();
         }
+
         if (wrapOptions.errorHandler == null) {
             wrapOptions.errorHandler = new FetchErrorHandler();
         }
 
         let useProxy = (HttpClient.enableCorsProxy && !wrapOptions.bypassProxy);
+
         if (useProxy) {
-            // Logic to try multiple proxies automatically if one fails
+
             let proxiesToTry = [HttpClient.corsProxyUrl];
-            // Add other default proxies if they aren't already the selected one
+
             for (let p of HttpClient.CORS_PROXIES) {
                 if (p.url !== HttpClient.corsProxyUrl) {
                     proxiesToTry.push(p.url);
@@ -218,49 +222,104 @@ class HttpClient {
             }
 
             for (let proxyUrl of proxiesToTry) {
+
                 try {
-                    console.log("[WebToEpub] Trying proxy:", proxyUrl);
+
                     let fetchUrl = proxyUrl + encodeURIComponent(url.trim());
-                    let fetchOptions = Object.assign({}, wrapOptions.fetchOptions, { credentials: "omit" });
 
-                    let response = await fetch(fetchUrl, fetchOptions);
+                    let fetchOptions = Object.assign({}, wrapOptions.fetchOptions, {
+                        credentials: "omit"
+                    });
 
-                    // If proxy returns a "Usage Limited", "Forbidden", or "Server Error", try next one
-                    if (!response.ok && (response.status === 403 || response.status === 429 || response.status >= 500)) {
-                        let text = await response.text();
-                        if (text.includes("usage limited") || text.includes("corsproxy.io") || text.includes("rate limit") || text.includes("blocked") || text.includes("forbidden")) {
-                            console.warn(`[WebToEpub] Proxy ${proxyUrl} failed (${response.status}). Trying next...`);
+                    let response;
+
+                    try {
+                        response = await fetch(fetchUrl, fetchOptions);
+                    } catch (networkError) {
+                        console.warn(`[WebToEpub] Proxy ${proxyUrl} network failure`);
+                        continue;
+                    }
+
+                    if (!response.ok && (response.status === 403 || response.status === 429 || response.status === 503)) {
+
+                        let text = "";
+
+                        try {
+                            text = await response.text();
+                        } catch { }
+
+                        if (
+                            text.includes("usage limited") ||
+                            text.includes("corsproxy.io") ||
+                            text.includes("rate limit") ||
+                            text.includes("blocked")
+                        ) {
+                            console.warn(`[WebToEpub] Proxy ${proxyUrl} blocked. Trying next...`);
                             continue;
                         }
                     }
 
-                    // Success or non-blocking error (like 404 from target site)
-                    return HttpClient.checkResponseAndGetData(url, wrapOptions, response);
+                    let ret = await HttpClient.checkResponseAndGetData(url, wrapOptions, response);
+
+                    if (wrapOptions.parser?.isCustomError(ret)) {
+
+                        let CustomErrorResponse = wrapOptions.parser.setCustomErrorResponse(url, wrapOptions, ret);
+
+                        return wrapOptions.errorHandler.onResponseError(
+                            CustomErrorResponse.url,
+                            CustomErrorResponse.wrapOptions,
+                            CustomErrorResponse.response,
+                            CustomErrorResponse.errorMessage
+                        );
+                    }
+
+                    return ret;
+
                 } catch (e) {
-                    // This catches CORS errors (TypeError) or Network errors
-                    console.warn(`[WebToEpub] Proxy ${proxyUrl} failed (Network/CORS Error). Trying next...`);
+                    console.warn(`[WebToEpub] Proxy ${proxyUrl} failed. Trying next...`);
                 }
             }
 
-            // If all proxies failed, retry direct as last resort
-            console.warn("[WebToEpub] All CORS proxies failed. Retrying direct:", url);
+            console.warn("[WebToEpub] All proxies failed. Retrying direct:", url);
+
             let newOptions = Object.assign({}, wrapOptions, { bypassProxy: true });
+
             return HttpClient.wrapFetchImpl(url, newOptions);
         }
 
-        // Direct fetch
         try {
-            let response = await fetch(url.trim(), wrapOptions.fetchOptions);
-            return HttpClient.checkResponseAndGetData(url, wrapOptions, response);
-        }
-        catch (error) {
-            // Move to proxy if direct failed with CORS error
+
+            let response = await fetch(url, wrapOptions.fetchOptions);
+
+            let ret = await HttpClient.checkResponseAndGetData(url, wrapOptions, response);
+
+            if (wrapOptions.parser?.isCustomError(ret)) {
+
+                let CustomErrorResponse = wrapOptions.parser.setCustomErrorResponse(url, wrapOptions, ret);
+
+                return wrapOptions.errorHandler.onResponseError(
+                    CustomErrorResponse.url,
+                    CustomErrorResponse.wrapOptions,
+                    CustomErrorResponse.response,
+                    CustomErrorResponse.errorMessage
+                );
+            }
+
+            return ret;
+
+        } catch (error) {
+
             if (!HttpClient.enableCorsProxy && error instanceof TypeError) {
-                console.warn("[WebToEpub] Direct fetch failed (possible CORS). Retrying via CORS proxy:", url);
+
+                console.warn("[WebToEpub] Direct fetch failed (CORS). Switching to proxy:", url);
+
                 HttpClient.enableCorsProxy = true;
+
                 HttpClient.updateCorsProxyUi();
+
                 return HttpClient.wrapFetchImpl(url, wrapOptions);
             }
+
             return wrapOptions.errorHandler.onFetchError(url, error);
         }
     }
@@ -281,13 +340,7 @@ class HttpClient {
         } else {
             let handler = wrapOptions.responseHandler;
             handler.setResponse(response);
-            return handler.extractContentFromResponse(response).then(ret => {
-                if (wrapOptions.parser?.isCustomError(ret)) {
-                    let custom = wrapOptions.parser.setCustomErrorResponse(url, wrapOptions, ret);
-                    return wrapOptions.errorHandler.onResponseError(custom.url, custom.wrapOptions, custom.response, custom.errorMessage);
-                }
-                return ret;
-            });
+            return handler.extractContentFromResponse(response);
         }
     }
 
@@ -297,22 +350,22 @@ class HttpClient {
      * @returns {string} The original URL
      */
     static unproxyUrl(url) {
-        // Build a list of all potential proxy prefixes to check
-        let prefixes = HttpClient.CORS_PROXIES.map(p => p.url);
-        if (!prefixes.includes(HttpClient.corsProxyUrl)) {
-            prefixes.push(HttpClient.corsProxyUrl);
-        }
-        // Handle the ?url= and ?quest= variations too
-        prefixes.push("https://corsproxy.io/?url=");
-
-        for (let prefix of prefixes) {
-            if (url.startsWith(prefix)) {
-                let encodedUrl = url.substring(prefix.length);
+        for (let proxy of HttpClient.CORS_PROXIES) {
+            if (url.startsWith(proxy.url)) {
+                let encodedUrl = url.substring(proxy.url.length);
                 try {
                     return decodeURIComponent(encodedUrl);
                 } catch (e) {
                     return encodedUrl;
                 }
+            }
+        }
+        if (url.startsWith(HttpClient.corsProxyUrl)) {
+            let encodedUrl = url.substring(HttpClient.corsProxyUrl.length);
+            try {
+                return decodeURIComponent(encodedUrl);
+            } catch (e) {
+                return encodedUrl;
             }
         }
         return url;
@@ -386,7 +439,7 @@ class FetchResponseHandler {
 
     setResponse(response) {
         this.response = response;
-        this.contentType = response.headers.get("content-type") || "";
+        this.contentType = response.headers.get("content-type");
     }
 
     extractContentFromResponse(response) {
@@ -421,7 +474,6 @@ class FetchResponseHandler {
     }
 
     responseToJson(response) {
-        // GPT version used response.json(), but we'll stick to text + JSON.parse for consistency with our decoders
         return response.text().then(function (data) {
             this.json = JSON.parse(data);
             return this;
@@ -475,3 +527,4 @@ class FetchHtmlResponseHandler extends FetchResponseHandler {
         return super.responseToHtml(response);
     }
 }
+
