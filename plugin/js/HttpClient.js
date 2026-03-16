@@ -58,7 +58,7 @@ class FetchErrorHandler {
 
     promptUserForRetry(url, wrapOptions, response, failError) {
         let msg;
-        if (wrapOptions.retry.HTTP === 403) { 
+        if (wrapOptions.retry.HTTP === 403) {
             msg = new Error(UIText.Warning.warning403ErrorResponse(new URL(response.url).hostname) + this.makeFailCanRetryMessage(url, response.status));
         } else {
             msg = new Error(new Error(this.makeFailCanRetryMessage(url, response.status)));
@@ -87,35 +87,35 @@ class FetchErrorHandler {
         let retryDelay = [120, 60, 30, 15];
         switch (response.status) {
             case 403:
-                return {retryDelay: [1], promptUser: true, HTTP: 403};
+                return { retryDelay: [1], promptUser: true, HTTP: 403 };
             case 429:
                 FetchErrorHandler.show429Error(response);
-                return {retryDelay: retryDelay, promptUser: true};
+                return { retryDelay: retryDelay, promptUser: true };
             case 445:
-            //Random Unique exception thrown on Webnovel/Qidian. Not part of w3 spec.
-                return {retryDelay: retryDelay, promptUser: false};
+                //Random Unique exception thrown on Webnovel/Qidian. Not part of w3 spec.
+                return { retryDelay: retryDelay, promptUser: false };
             case 509:
-            // server asked for rate limiting
-                return {retryDelay: retryDelay, promptUser: true};
+                // server asked for rate limiting
+                return { retryDelay: retryDelay, promptUser: true };
             case 500:
-            // is fault at server, retry might clear
-                return {retryDelay: retryDelay, promptUser: false};
-            case 502: 
-            case 503: 
+                // is fault at server, retry might clear
+                return { retryDelay: retryDelay, promptUser: false };
+            case 502:
+            case 503:
             case 504:
             case 520:
             case 522:
-            // intermittant fault
-                return {retryDelay: retryDelay, promptUser: true};
+                // intermittant fault
+                return { retryDelay: retryDelay, promptUser: true };
             case 524:
-            // claudflare random error
-                return {retryDelay: [1], promptUser: true};
+                // claudflare random error
+                return { retryDelay: [1], promptUser: true };
             case 999:
-            // custom WebToEpub error (some api's fail and a few seconds later it is a success)
-                return {retryDelay: response.retryDelay, promptUser: false};
+                // custom WebToEpub error (some api's fail and a few seconds later it is a success)
+                return { retryDelay: response.retryDelay, promptUser: false };
             default:
-            // it's dead Jim
-                return {retryDelay: [], promptUser: false};
+                // it's dead Jim
+                return { retryDelay: [], promptUser: false };
         }
     }
 
@@ -205,9 +205,18 @@ class HttpClient {
         if (wrapOptions.errorHandler == null) {
             wrapOptions.errorHandler = new FetchErrorHandler();
         }
-        try
-        {
-            let response = await fetch(url, wrapOptions.fetchOptions);
+        try {
+            // Use CORS proxy if enabled (website mode), unless bypassed
+            let useProxy = (HttpClient.enableCorsProxy && !wrapOptions.bypassProxy);
+            let fetchUrl = useProxy
+                ? HttpClient.corsProxyUrl + encodeURIComponent(url)
+                : url;
+            // In website mode, avoid sending cookies cross-origin via credentials
+            let fetchOptions = useProxy
+                ? Object.assign({}, wrapOptions.fetchOptions, { credentials: "omit" })
+                : wrapOptions.fetchOptions;
+
+            let response = await fetch(fetchUrl, fetchOptions);
             let ret = await HttpClient.checkResponseAndGetData(url, wrapOptions, response);
             if (wrapOptions.parser?.isCustomError(ret)) {
                 let CustomErrorResponse = wrapOptions.parser.setCustomErrorResponse(url, wrapOptions, ret);
@@ -215,10 +224,33 @@ class HttpClient {
             }
             return ret;
         }
-        catch (error)
-        {
+        catch (error) {
+            // If proxied fetch fails, retry direct
+            if (HttpClient.enableCorsProxy && !wrapOptions.bypassProxy) {
+                console.warn("[WebToEpub] Proxied fetch failed. Retrying direct:", url);
+                let newOptions = Object.assign({}, wrapOptions, { bypassProxy: true });
+                return HttpClient.wrapFetchImpl(url, newOptions);
+            }
+            // If direct fetch fails with a TypeError (CORS / network error) and proxy not yet tried,
+            // auto-retry through CORS proxy
+            if (!HttpClient.enableCorsProxy && error instanceof TypeError) {
+                console.warn("[WebToEpub] Direct fetch failed (possible CORS). Retrying via CORS proxy:", url);
+                HttpClient.enableCorsProxy = true;
+                HttpClient.updateCorsProxyUi();
+                return HttpClient.wrapFetchImpl(url, wrapOptions);
+            }
             return wrapOptions.errorHandler.onFetchError(url, error);
         }
+    }
+
+    /** Update CORS proxy UI controls to reflect current state */
+    static updateCorsProxyUi() {
+        try {
+            let checkbox = document.getElementById("enableCorsProxyCheckbox");
+            if (checkbox) checkbox.checked = HttpClient.enableCorsProxy;
+            let input = document.getElementById("corsProxyInput");
+            if (input) HttpClient.corsProxyUrl = input.value || HttpClient.corsProxyUrl;
+        } catch (e) { /* ignore if DOM not available */ }
     }
 
     static checkResponseAndGetData(url, wrapOptions, response) {
@@ -231,61 +263,87 @@ class HttpClient {
         }
     }
 
+    /**
+     * Extracts the original URL from a potentially proxied URL
+     * @param {string} url The URL to unproxy
+     * @returns {string} The original URL
+     */
+    static unproxyUrl(url) {
+        if (url.startsWith(HttpClient.corsProxyUrl)) {
+            let encodedUrl = url.substring(HttpClient.corsProxyUrl.length);
+            try {
+                return decodeURIComponent(encodedUrl);
+            } catch (e) {
+                // If decoding fails, return as is (might not be encoded)
+                return encodedUrl;
+            }
+        }
+        // handle other possible proxy formats if needed
+        // for "https://corsproxy.io/?https%3A%2F%2..." format mentioned by user
+        let proxyBase = "https://corsproxy.io/?";
+        if (url.startsWith(proxyBase)) {
+            let encodedUrl = url.substring(proxyBase.length);
+            try {
+                return decodeURIComponent(encodedUrl);
+            } catch (e) {
+                return encodedUrl;
+            }
+        }
+        return url;
+    }
+
     static async setDeclarativeNetRequestRules(RulesArray) {
-        let url = chrome.runtime.getURL("").split("/").filter(a => a != "");
-        let id = url[url.length - 1];
-        for (let i = 0; i < RulesArray.length; i++) {
-            //limit rule to only webtoepub domain to prevent potiential security problems
-            RulesArray[i].condition.initiatorDomains = [id];
+        // No-op in website mode (declarativeNetRequest is extension-only)
+        // In extension mode, gracefully skip if chrome.declarativeNetRequest is unavailable
+        try {
+            if (typeof chrome === "undefined" || !chrome.declarativeNetRequest?.updateSessionRules) return;
+            let url = chrome.runtime.getURL("").split("/").filter(a => a != "");
+            let id = url[url.length - 1];
+            for (let i = 0; i < RulesArray.length; i++) {
+                RulesArray[i].condition.initiatorDomains = [id];
+            }
+            let oldRules = await chrome.declarativeNetRequest.getSessionRules();
+            if (oldRules == null) { oldRules = []; }
+            let oldRuleIds = oldRules.map(rule => rule.id);
+            await chrome.declarativeNetRequest.updateSessionRules({
+                removeRuleIds: oldRuleIds,
+                addRules: RulesArray
+            });
+        } catch (e) {
+            console.log("setDeclarativeNetRequestRules skipped:", e.message);
         }
-        let oldRules = await chrome.declarativeNetRequest.getSessionRules();
-        //In firefox i had declarativeNetRequest.getSessionRules() fail with undefined
-        if (oldRules == null) {
-            oldRules = [];
-        }
-        let oldRuleIds = oldRules.map(rule => rule.id);
-        await chrome.declarativeNetRequest.updateSessionRules({
-            removeRuleIds: oldRuleIds,
-            addRules: RulesArray
-        });
     }
 
     static async setPartitionCookies(url) {
-        // get partitionKey in the form of https://<site name>.<tld>
-        let parsedUrl = new URL(url);
-        //keep old code for reference in case it changes again
-        //let topLevelSite = parsedUrl.protocol + "//" + parsedUrl.hostname;
-
+        // In website mode (CORS proxy active) cookie injection is not possible or needed.
+        if (HttpClient.enableCorsProxy) return;
+        // Extension mode: attempt partitioned cookie injection
         try {
-            //  get all cookie from the site which use the partitionKey (e.g. cloudflare)
-            //keep old code for reference in case it changes again
-            //let cookies = await chrome.cookies.getAll({partitionKey: {topLevelSite: topLevelSite}});
-            
-            //set domain to the highest level from the website as all subdomains are included #1447 #1445
+            let parsedUrl = new URL(url);
             let urlparts = parsedUrl.hostname.split(".");
-            let cookies = "";
-            if (!util.isFirefox()) {
-                cookies = await chrome.cookies.getAll({domain: urlparts[urlparts.length-2]+"."+urlparts[urlparts.length-1],partitionKey: {}});
-            } else {
-                cookies = await browser.cookies.getAll({domain: urlparts[urlparts.length-2]+"."+urlparts[urlparts.length-1],partitionKey: {}});
-            }
-            cookies = cookies.filter(item => item.partitionKey != undefined);
-            //create new cookies for the site without the partitionKey
-            //cookies without the partitionKey get sent with fetch
+            let domain = urlparts[urlparts.length - 2] + "." + urlparts[urlparts.length - 1];
+            let cookieApi = (typeof browser !== "undefined" && util.isFirefox()) ? browser.cookies : chrome.cookies;
+            let cookies = await cookieApi.getAll({ domain: domain, partitionKey: {} });
+            cookies = (cookies || []).filter(item => item.partitionKey != undefined);
             cookies.forEach(element => chrome.cookies.set({
                 domain: element.domain,
-                url: "https://"+element.domain.substring(1),
-                name: element.name, 
+                url: "https://" + element.domain.substring(1),
+                name: element.name,
                 value: element.value
             }));
         } catch {
-            // Probably running browser that doesn't support partitionKey, e.g. Kiwi
-            console.log("failed to set cookie");
-        } 
+            // Browsers without partitionKey support (e.g. Kiwi, website mode)
+            // silently skip
+        }
     }
 }
 
 let BlockedHostNames = new Set();
+
+// CORS proxy settings (website mode)
+// These can be updated via the UI CORS proxy controls in popup.html
+HttpClient.corsProxyUrl = "https://corsproxy.io/?url=";
+HttpClient.enableCorsProxy = false; // auto-enabled on first CORS failure
 
 class FetchResponseHandler {
     isHtml() {
@@ -306,31 +364,31 @@ class FetchResponseHandler {
     }
 
     responseToHtml(response) {
-        return response.arrayBuffer().then(function(rawBytes) {
+        return response.arrayBuffer().then(function (rawBytes) {
             let data = this.makeTextDecoder(response).decode(rawBytes);
             let html = new DOMParser().parseFromString(data, "text/html");
-            util.setBaseTag(this.response.url, html);
+            util.setBaseTag(HttpClient.unproxyUrl(this.response.url), html);
             this.responseXML = html;
             return this;
         }.bind(this));
     }
 
     responseToBinary(response) {
-        return response.arrayBuffer().then(function(data) {
+        return response.arrayBuffer().then(function (data) {
             this.arrayBuffer = data;
             return this;
         }.bind(this));
     }
 
     responseToText(response) {
-        return response.arrayBuffer().then(function(rawBytes) {
+        return response.arrayBuffer().then(function (rawBytes) {
             return this.makeTextDecoder(response).decode(rawBytes);
         }.bind(this));
     }
 
     responseToJson(response) {
-        return response.text().then(function(data) {
-            this.json =  JSON.parse(data);
+        return response.text().then(function (data) {
+            this.json = JSON.parse(data);
             return this;
         }.bind(this));
     }

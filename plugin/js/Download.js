@@ -4,8 +4,22 @@ class Download {
     constructor() {
     }
 
+    /**
+     * Detect whether we are running as a plain website (as opposed to a Chrome extension).
+     * In website mode we always use the anchor-click download path.
+     */
+    static isWebsiteMode() {
+        // If ChromePolyfill loaded, chrome.downloads.download is a stub → website mode
+        // A simple flag is set by ChromePolyfill.js to signal this.
+        return (typeof window.WTE_WEBSITE_MODE !== "undefined" && window.WTE_WEBSITE_MODE === true);
+    }
+
     static init() {
-        Download.saveOn = util.isFirefox() ? Download.saveOnFirefox : Download.saveOnChrome;
+        if (Download.isWebsiteMode()) {
+            // Website mode: always use anchor-click, skip chrome.downloads listener
+            Download.saveOn = Download.saveWeb;
+            return;
+        }
         if (util.isFirefox()) {
             Download.saveOn = Download.saveOnFirefox;
             browser.downloads.onChanged.addListener(Download.onChanged);
@@ -34,8 +48,8 @@ class Download {
             "%Title%": document.getElementById("titleInput").value,
             "%Author%": document.getElementById("authorInput").value,
             "%Language%": document.getElementById("languageInput").value,
-            "%Chapters_Count%":  document.getElementById("spanChapterCount").innerHTML,
-            "%Chapters_Downloaded%":  document.getElementById("fetchProgress").value-1,
+            "%Chapters_Count%": document.getElementById("spanChapterCount").innerHTML,
+            "%Chapters_Downloaded%": document.getElementById("fetchProgress").value - 1,
             "%Filename%": document.getElementById("fileNameInput").value,
         };
         for (const [key, value] of Object.entries(ToReplace)) {
@@ -66,10 +80,40 @@ class Download {
         // on Chrome call to download() will resolve when "Save As" dialog OPENS
         // so need to delay return until after file is actually saved
         // Otherwise, we get multiple Save As Dialogs open.
-        return new Promise((resolve,reject) => {
-            chrome.downloads.download(options, 
+        return new Promise((resolve, reject) => {
+            chrome.downloads.download(options,
                 downloadId => Download.downloadCallback(downloadId, cleanup, resolve, reject)
             );
+        });
+    }
+
+    /**
+     * Web-native download via anchor click + blob URL.
+     * Used in website mode (no chrome.downloads needed).
+     */
+    static saveWeb(options, cleanup) {
+        return new Promise((resolve) => {
+            const link = document.createElement("a");
+            link.href = options.url;
+            link.download = options.filename;
+            link.style.display = "none";
+            document.body.appendChild(link);
+            try {
+                // Dispatch a click event to improve reliability in some environments
+                let clickEvent = new MouseEvent("click", {
+                    view: window,
+                    bubbles: true,
+                    cancelable: true
+                });
+                link.dispatchEvent(clickEvent);
+            } catch (e) {
+                link.click();
+            } finally {
+                // Delay removal slightly to allow the click to be processed
+                setTimeout(() => { if (link.parentNode) document.body.removeChild(link); }, 200);
+            }
+            // Revoke blob URL after a longer delay to ensure the browser has started the download
+            setTimeout(() => { cleanup(); resolve(); }, 10000);
         });
     }
 
@@ -77,8 +121,8 @@ class Download {
         if (downloadId === undefined) {
             reject(new Error(chrome.runtime.lastError.message));
         } else {
-            Download.onDownloadStarted(downloadId, 
-                () => { 
+            Download.onDownloadStarted(downloadId,
+                () => {
                     const tenSeconds = 10 * 1000;
                     setTimeout(cleanup, tenSeconds);
                     resolve();
@@ -108,18 +152,27 @@ class Download {
         // "Firefox for Android" yet, so we starts downloads
         // the same way any normal web page would do it:
         const link = document.createElement("a");
-        link.style.display = "hidden";
+        link.style.display = "none";
 
         link.href = options.url;
         link.download = options.filename;
 
         document.body.appendChild(link);
         try {
+            // Dispatch a click event to improve reliability
+            let clickEvent = new MouseEvent("click", {
+                view: window,
+                bubbles: true,
+                cancelable: true
+            });
+            link.dispatchEvent(clickEvent);
+        } catch (e) {
             link.click();
         } finally {
-            document.body.removeChild(link);
+            setTimeout(() => { if (link.parentNode) document.body.removeChild(link); }, 200);
         }
-        cleanup();
+        // Revoke blob URL after a delay
+        setTimeout(cleanup, 10000);
     }
 
     static isAndroid(platformInfo) {

@@ -7,7 +7,7 @@
 
 "use strict";
 
-const util = (function() {
+const util = (function () {
     var sleepController = new AbortController;
 
     function sleep(ms) {
@@ -26,17 +26,14 @@ const util = (function() {
     }
 
     function isFirefox() {
-        if (navigator.brave && navigator.brave.isBrave)
-        {
+        if (navigator.brave && navigator.brave.isBrave) {
             return false;
         }
-        else if (typeof (browser) === "undefined")
-        {
+        else if (typeof (browser) === "undefined") {
             // old version of chrome
             return false;
         }
-        else
-        {
+        else {
             // this only works as long as firefox hasn't implemented this 
             // https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/runtime/PlatformNaclArch
             return (typeof (browser.runtime.PlatformNaclArch) == "undefined");
@@ -45,8 +42,8 @@ const util = (function() {
 
     function extensionVersion() {
         let runtime = isFirefox() ? browser.runtime : chrome.runtime;
-        // when running unit tests, runtime is not available
-        return (typeof (runtime) === "undefined") ? "unknown" : runtime.getManifest().version;
+        // when running unit tests or in website mode without extension polyfill, getManifest() might not exist
+        return (typeof (runtime?.getManifest) === "function") ? runtime.getManifest().version : "unknown";
     }
 
     function createEmptyXhtmlDoc() {
@@ -482,7 +479,7 @@ const util = (function() {
     }
 
     function findPrimaryStyleSettings(element, styleProperties) {
-        let characterCountForElement = function(element) {
+        let characterCountForElement = function (element) {
             let count = 0;
             let child = element.firstChild;
             while (child) {
@@ -494,7 +491,7 @@ const util = (function() {
             return count;
         };
 
-        let findMaxCount = function(map) {
+        let findMaxCount = function (map) {
             let maxPair = [undefined, 0];
             for (let pair of map) {
                 if (maxPair[1] <= pair[1]) {
@@ -504,7 +501,7 @@ const util = (function() {
             return maxPair[0];
         };
 
-        let mergeStyles = function(parentStyle, currentStyle, styleProperty) {
+        let mergeStyles = function (parentStyle, currentStyle, styleProperty) {
             if (currentStyle === null || currentStyle === undefined) {
                 return parentStyle;
             }
@@ -512,7 +509,7 @@ const util = (function() {
             return c !== "" ? c : parentStyle;
         };
 
-        let updateStat = function(map, key, count) {
+        let updateStat = function (map, key, count) {
             let total = map.get(key);
             if (total === undefined) {
                 total = 0;
@@ -520,7 +517,7 @@ const util = (function() {
             map.set(key, total + count);
         };
 
-        let walk = function(element, stats, parentStyle, styleProperties) {
+        let walk = function (element, stats, parentStyle, styleProperties) {
             let mergedStyle = [];
             let count = characterCountForElement(element);
             for (let i = 0; i < styleProperties.length; ++i) {
@@ -604,7 +601,7 @@ const util = (function() {
         }
 
         let linkSet = new Set();
-        let includeLink = function(link) {
+        let includeLink = function (link) {
             // ignore links with no name or link
             if (isNullOrEmpty(link.innerText) || isNullOrEmpty(link.href)) {
                 return false;
@@ -622,7 +619,7 @@ const util = (function() {
 
         // only set newArc when arc changes
         let currentArc = null;
-        let newArcValueForChapter = function(link) {
+        let newArcValueForChapter = function (link) {
             if (getChapterArc) {
                 let arc = getChapterArc(link);
                 if (arc === currentArc) {
@@ -926,7 +923,7 @@ const util = (function() {
      * @param {string} prefix - text that precedes the embedded JSON
      */
     function locateAndExtractJson(s, prefix) {
-        const findOpeningBracket = function(s, index) {
+        const findOpeningBracket = function (s, index) {
             while (index < s.length) {
                 let ch = s[index];
                 if ((ch === "[") || (ch === "{")) {
@@ -953,7 +950,7 @@ const util = (function() {
 
     function createChapterTab(url) {
         return new Promise((resolve) => {
-            chrome.tabs.create({url: url, active: false}, (tab) => {
+            chrome.tabs.create({ url: url, active: false }, (tab) => {
                 resolve(tab.id);
             });
         });
@@ -1054,8 +1051,7 @@ const util = (function() {
         element.appendChild(wrapper);
     }
 
-    function getDefaultExtensionByMime(mimeType)
-    {
+    function getDefaultExtensionByMime(mimeType) {
         let retval = MIME_TYPE_EXTENSIONS[mimeType];
         if (retval) retval = retval[0];
         return retval;
