@@ -215,9 +215,6 @@ class HttpClient {
             let fetchOptions = useProxy
                 ? Object.assign({}, wrapOptions.fetchOptions, { credentials: "omit" })
                 : wrapOptions.fetchOptions;
-            if (useProxy && HttpClient.corsProxyUrl === "https://corsproxy.io/?url=") {
-                fetchOptions.headers = { ...(fetchOptions.headers || {}), 'Origin': 'http://localhost:8080' };
-            }
 
             let response = await fetch(fetchUrl, fetchOptions);
 
@@ -355,7 +352,7 @@ let BlockedHostNames = new Set();
 // CORS proxy settings (website mode)
 // These can be updated via the UI CORS proxy controls in popup.html
 HttpClient.CORS_PROXIES = [
-    { name: "corsproxy.io", url: "https://corsproxy.io/?url=" },
+    { name: "corsproxy.io", url: "https://corsproxy.io/?key=ab3170e1&url=" },
     { name: "cors-anywhere (requires opt-in)", url: "https://cors-anywhere.herokuapp.com/" },
     { name: "allOrigins", url: "https://api.allorigins.win/get?url=" },
     { name: "CORS Proxy Org", url: "https://corsproxy.org/?" }
