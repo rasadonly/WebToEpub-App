@@ -165,8 +165,11 @@
                 </tr>
                 <tr id="corsProxyRow">
                     <td>CORS Proxy</td>
-                    <td colspan="2">
-                        <input id="corsProxyInput" style="width: 55%;" type="url" value="https://corsproxy.io/?url=" />
+                    <td colspan="3">
+                        <select id="corsProxySelect" style="width: 30%;">
+                            <option value="">Custom...</option>
+                        </select>
+                        <input id="corsProxyInput" style="width: 38%;" type="url" value="https://corsproxy.io/?url=" />
                         <input type="checkbox" id="enableCorsProxyCheckbox"
                             title="Route fetches through the CORS proxy URL (required for website mode)" />
                         <label for="enableCorsProxyCheckbox">Enable</label>

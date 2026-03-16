@@ -217,6 +217,17 @@ class HttpClient {
                 : wrapOptions.fetchOptions;
 
             let response = await fetch(fetchUrl, fetchOptions);
+
+            // Handle CORS Proxy limitations (e.g. usage limited)
+            if (useProxy && !response.ok && (response.status === 403 || response.status === 429)) {
+                let text = await response.text();
+                if (text.includes("corsproxy.io") || text.includes("usage limited")) {
+                    console.error("[WebToEpub] CORS Proxy limit reached:", HttpClient.corsProxyUrl);
+                    // Cycle to next proxy if it's one of the defaults? 
+                    // For now, just let it fail and let user choose another in UI
+                }
+            }
+
             let ret = await HttpClient.checkResponseAndGetData(url, wrapOptions, response);
             if (wrapOptions.parser?.isCustomError(ret)) {
                 let CustomErrorResponse = wrapOptions.parser.setCustomErrorResponse(url, wrapOptions, ret);
@@ -269,20 +280,18 @@ class HttpClient {
      * @returns {string} The original URL
      */
     static unproxyUrl(url) {
-        if (url.startsWith(HttpClient.corsProxyUrl)) {
-            let encodedUrl = url.substring(HttpClient.corsProxyUrl.length);
-            try {
-                return decodeURIComponent(encodedUrl);
-            } catch (e) {
-                // If decoding fails, return as is (might not be encoded)
-                return encodedUrl;
+        for (let proxy of HttpClient.CORS_PROXIES) {
+            if (url.startsWith(proxy.url)) {
+                let encodedUrl = url.substring(proxy.url.length);
+                try {
+                    return decodeURIComponent(encodedUrl);
+                } catch (e) {
+                    return encodedUrl;
+                }
             }
         }
-        // handle other possible proxy formats if needed
-        // for "https://corsproxy.io/?https%3A%2F%2..." format mentioned by user
-        let proxyBase = "https://corsproxy.io/?";
-        if (url.startsWith(proxyBase)) {
-            let encodedUrl = url.substring(proxyBase.length);
+        if (url.startsWith(HttpClient.corsProxyUrl)) {
+            let encodedUrl = url.substring(HttpClient.corsProxyUrl.length);
             try {
                 return decodeURIComponent(encodedUrl);
             } catch (e) {
@@ -342,7 +351,13 @@ let BlockedHostNames = new Set();
 
 // CORS proxy settings (website mode)
 // These can be updated via the UI CORS proxy controls in popup.html
-HttpClient.corsProxyUrl = "https://corsproxy.io/?url=";
+HttpClient.CORS_PROXIES = [
+    { name: "corsproxy.io", url: "https://corsproxy.io/?url=" },
+    { name: "cors-anywhere (requires opt-in)", url: "https://cors-anywhere.herokuapp.com/" },
+    { name: "allOrigins", url: "https://api.allorigins.win/get?url=" },
+    { name: "CORS Proxy Org", url: "https://corsproxy.org/?" }
+];
+HttpClient.corsProxyUrl = HttpClient.CORS_PROXIES[0].url;
 HttpClient.enableCorsProxy = false; // auto-enabled on first CORS failure
 
 class FetchResponseHandler {

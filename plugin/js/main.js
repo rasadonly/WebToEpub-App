@@ -260,6 +260,20 @@ var main = (function () {
     function populateControls() {
         loadUserPreferences();
         parserFactory.populateManualParserSelectionTag(getManuallySelectParserTag());
+
+        // CORS Proxy selection (website mode)
+        let corsProxySelect = document.getElementById("corsProxySelect");
+        if (corsProxySelect) {
+            HttpClient.CORS_PROXIES.forEach(proxy => {
+                let option = document.createElement("option");
+                option.text = proxy.name;
+                option.value = proxy.url;
+                corsProxySelect.add(option);
+            });
+            // Set select to match current proxy if possible
+            corsProxySelect.value = HttpClient.CORS_PROXIES.find(p => p.url === HttpClient.corsProxyUrl)?.url || "";
+        }
+
         // In website mode there is no active tab to scrape: user enters URL manually.
         // In extension mode, load the content from the current tab.
         if (!window.WTE_WEBSITE_MODE) {
@@ -273,6 +287,10 @@ var main = (function () {
         userPreferences.writeToUi();
         userPreferences.hookupUi();
         BakaTsukiSeriesPageParser.registerBakaParsers(userPreferences.autoSelectBTSeriesPage.value);
+
+        // Sync HttpClient with preferences
+        HttpClient.enableCorsProxy = userPreferences.enableCorsProxy.value;
+        HttpClient.corsProxyUrl = userPreferences.corsProxyUrl.value;
     }
 
     function isRunningInTabMode() {
@@ -531,17 +549,32 @@ var main = (function () {
         // CORS proxy controls (website mode only)
         let corsProxyCheckbox = document.getElementById("enableCorsProxyCheckbox");
         let corsProxyInput = document.getElementById("corsProxyInput");
+        let corsProxySelect = document.getElementById("corsProxySelect");
+
         if (corsProxyCheckbox) {
-            corsProxyCheckbox.checked = HttpClient.enableCorsProxy;
             corsProxyCheckbox.onchange = () => {
                 HttpClient.enableCorsProxy = corsProxyCheckbox.checked;
-                if (corsProxyInput) HttpClient.corsProxyUrl = corsProxyInput.value || HttpClient.corsProxyUrl;
+                userPreferences.readFromUi();
+            };
+        }
+        if (corsProxySelect) {
+            corsProxySelect.onchange = () => {
+                if (corsProxySelect.value !== "") {
+                    corsProxyInput.value = corsProxySelect.value;
+                    HttpClient.corsProxyUrl = corsProxySelect.value;
+                    userPreferences.readFromUi();
+                }
             };
         }
         if (corsProxyInput) {
-            corsProxyInput.value = HttpClient.corsProxyUrl;
             corsProxyInput.onchange = () => {
                 HttpClient.corsProxyUrl = corsProxyInput.value || HttpClient.corsProxyUrl;
+                // update select to "Custom" if input doesn't match any preset
+                if (corsProxySelect) {
+                    let matching = HttpClient.CORS_PROXIES.find(p => p.url === corsProxyInput.value);
+                    corsProxySelect.value = matching ? matching.url : "";
+                }
+                userPreferences.readFromUi();
             };
         }
     }
