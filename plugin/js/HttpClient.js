@@ -205,29 +205,57 @@ class HttpClient {
         if (wrapOptions.errorHandler == null) {
             wrapOptions.errorHandler = new FetchErrorHandler();
         }
-        try {
-            // Use CORS proxy if enabled (website mode), unless bypassed
-            let useProxy = (HttpClient.enableCorsProxy && !wrapOptions.bypassProxy);
-            let fetchUrl = useProxy
-                ? HttpClient.corsProxyUrl + encodeURIComponent(url)
-                : url;
-            // In website mode, avoid sending cookies cross-origin via credentials
-            let fetchOptions = useProxy
-                ? Object.assign({}, wrapOptions.fetchOptions, { credentials: "omit" })
-                : wrapOptions.fetchOptions;
 
-            let response = await fetch(fetchUrl, fetchOptions);
-
-            // Handle CORS Proxy limitations (e.g. usage limited)
-            if (useProxy && !response.ok && (response.status === 403 || response.status === 429)) {
-                let text = await response.text();
-                if (text.includes("corsproxy.io") || text.includes("usage limited")) {
-                    console.error("[WebToEpub] CORS Proxy limit reached:", HttpClient.corsProxyUrl);
-                    // Cycle to next proxy if it's one of the defaults? 
-                    // For now, just let it fail and let user choose another in UI
+        let useProxy = (HttpClient.enableCorsProxy && !wrapOptions.bypassProxy);
+        if (useProxy) {
+            // Logic to try multiple proxies automatically if one fails
+            let proxiesToTry = [HttpClient.corsProxyUrl];
+            // Add other default proxies if they aren't already the selected one
+            for (let p of HttpClient.CORS_PROXIES) {
+                if (p.url !== HttpClient.corsProxyUrl) {
+                    proxiesToTry.push(p.url);
                 }
             }
 
+            for (let proxyUrl of proxiesToTry) {
+                try {
+                    let fetchUrl = proxyUrl + encodeURIComponent(url);
+                    let fetchOptions = Object.assign({}, wrapOptions.fetchOptions, { credentials: "omit" });
+
+                    let response = await fetch(fetchUrl, fetchOptions);
+
+                    // If proxy returns a "Usage Limited" or "Forbidden" status, try next one
+                    if (!response.ok && (response.status === 403 || response.status === 429 || response.status === 503)) {
+                        let text = await response.text();
+                        if (text.includes("usage limited") || text.includes("corsproxy.io") || text.includes("rate limit") || text.includes("blocked")) {
+                            console.warn(`[WebToEpub] Proxy ${proxyUrl} failed (${response.status}). Trying next...`);
+                            continue;
+                        }
+                        // If it's a 404 from the actual site via proxy, we might want to stop, but usually 
+                        // it's safer to try another proxy if unsure if it's the proxy or the site.
+                    }
+
+                    let ret = await HttpClient.checkResponseAndGetData(url, wrapOptions, response);
+                    if (wrapOptions.parser?.isCustomError(ret)) {
+                        let CustomErrorResponse = wrapOptions.parser.setCustomErrorResponse(url, wrapOptions, ret);
+                        return wrapOptions.errorHandler.onResponseError(CustomErrorResponse.url, CustomErrorResponse.wrapOptions, CustomErrorResponse.response, CustomErrorResponse.errorMessage);
+                    }
+                    return ret;
+                } catch (e) {
+                    // This catches CORS errors (TypeError) if the proxy itself blocks our origin
+                    console.warn(`[WebToEpub] Proxy ${proxyUrl} failed (CORS/Network Error). Trying next...`);
+                }
+            }
+
+            // If all proxies failed, retry direct as last resort
+            console.warn("[WebToEpub] All CORS proxies failed. Retrying direct:", url);
+            let newOptions = Object.assign({}, wrapOptions, { bypassProxy: true });
+            return HttpClient.wrapFetchImpl(url, newOptions);
+        }
+
+        // Direct fetch
+        try {
+            let response = await fetch(url, wrapOptions.fetchOptions);
             let ret = await HttpClient.checkResponseAndGetData(url, wrapOptions, response);
             if (wrapOptions.parser?.isCustomError(ret)) {
                 let CustomErrorResponse = wrapOptions.parser.setCustomErrorResponse(url, wrapOptions, ret);
@@ -236,14 +264,7 @@ class HttpClient {
             return ret;
         }
         catch (error) {
-            // If proxied fetch fails, retry direct
-            if (HttpClient.enableCorsProxy && !wrapOptions.bypassProxy) {
-                console.warn("[WebToEpub] Proxied fetch failed. Retrying direct:", url);
-                let newOptions = Object.assign({}, wrapOptions, { bypassProxy: true });
-                return HttpClient.wrapFetchImpl(url, newOptions);
-            }
-            // If direct fetch fails with a TypeError (CORS / network error) and proxy not yet tried,
-            // auto-retry through CORS proxy
+            // Move to proxy if direct failed with CORS error
             if (!HttpClient.enableCorsProxy && error instanceof TypeError) {
                 console.warn("[WebToEpub] Direct fetch failed (possible CORS). Retrying via CORS proxy:", url);
                 HttpClient.enableCorsProxy = true;
