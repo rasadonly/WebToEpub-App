@@ -264,6 +264,7 @@ var main = (function () {
         // CORS Proxy selection (website mode)
         let corsProxySelect = document.getElementById("corsProxySelect");
         if (corsProxySelect) {
+            corsProxySelect.innerHTML = '<option value="">Custom...</option>';
             HttpClient.CORS_PROXIES.forEach(proxy => {
                 let option = document.createElement("option");
                 option.text = proxy.name;

@@ -352,10 +352,12 @@ let BlockedHostNames = new Set();
 // CORS proxy settings (website mode)
 // These can be updated via the UI CORS proxy controls in popup.html
 HttpClient.CORS_PROXIES = [
-    { name: "corsproxy.io", url: "https://corsproxy.io/?key=ab3170e1&url=" },
-    { name: "cors-anywhere (requires opt-in)", url: "https://cors-anywhere.herokuapp.com/" },
-    { name: "allOrigins", url: "https://api.allorigins.win/get?url=" },
-    { name: "CORS Proxy Org", url: "https://corsproxy.org/?" }
+    { name: "allOrigins (raw)", url: "https://api.allorigins.win/raw?url=" },
+    { name: "CORS.SH", url: "https://proxy.cors.sh/" },
+    { name: "CodeTabs", url: "https://api.codetabs.com/v1/proxy?quest=" },
+    { name: "ThingProxy", url: "https://thingproxy.freeboard.io/fetch/" },
+    { name: "cors.lol", url: "https://cors.lol/?url=" },
+    { name: "corsproxy.io (with key)", url: "https://corsproxy.io/?key=ab3170e1&url=" }
 ];
 HttpClient.corsProxyUrl = HttpClient.CORS_PROXIES[0].url;
 HttpClient.enableCorsProxy = false; // auto-enabled on first CORS failure
