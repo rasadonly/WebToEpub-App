@@ -189,6 +189,7 @@
             <div class="HiddenButtonSection">
                 <button id="hiddenBibButton">__MSG_button_Lib_Library__</button>
                 <button id="advancedOptionsButton">__MSG_button_Advanced_Options__</button>
+                <button id="navSearchButton">Search Novels</button>
             </div>
             <section id="hiddenBibSection" hidden="true">
                 <div id="LibraryTemplate" hidden="true">
@@ -593,6 +594,31 @@
                 </table>
             </section>
         </section>
+
+        <!-- New Search Section -->
+        <section id="searchEngineSection" hidden="true" style="margin-top: 15px;">
+            <h2>Search Supported Novels</h2>
+            <div style="margin-bottom: 10px; display: flex; gap: 10px;">
+                <input id="searchEngineQuery" type="text" placeholder="e.g. Tensei Slime"
+                    style="flex: 1; padding: 5px;">
+                <select id="searchEngineSelect" style="padding: 5px;">
+                    <option value="duckduckgo">DuckDuckGo</option>
+                    <option value="bing">Bing</option>
+                    <option value="google">Google</option>
+                    <option value="yandex">Yandex</option>
+                </select>
+                <button id="searchEngineGoButton" class="expandedButton" style="width: auto;">Search</button>
+            </div>
+            <div style="margin-bottom: 10px; font-weight: bold; color: #a78bfa;">
+                <span id="searchEngineStatus"></span>
+            </div>
+            <div class="scrollingtable" style="max-height: 400px; overflow-y: auto;">
+                <table id="searchEngineResultsTable" style="width: 100%; border-collapse: collapse;">
+                    <!-- Results populated by SearchEngineUI.js -->
+                </table>
+            </div>
+        </section>
+
         <section id="testSection"></section>
         <section id="imageSection" hidden="true">
             <table id="imageOptionsTable">
@@ -700,6 +726,7 @@
         <script src="js/ProgressBar.js"></script>
         <script src="js/Parser.js"></script>
         <script src="js/Library.js"></script>
+        <script src="js/SearchEngineUI.js"></script>
 
         <!-- These parsers are (or might be) used as base for other pareser-->
         <script src="js/parsers/WordpressBaseParser.js"></script>

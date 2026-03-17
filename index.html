@@ -1,38 +1,310 @@
 <!doctype html>
-<!--
-    WebToEpub - Website Edition
-    Redirect from root to the app. 
-    
-    This file is part of the `website` branch only.
--->
 <html lang="en">
 
 <head>
     <meta charset="utf-8">
-    <title>WebToEpub — Web App</title>
-    <meta name="description"
-        content="Convert web novels and fan-fiction to EPUB format, right in your browser. No extension required.">
-    <meta http-equiv="refresh" content="0;url=plugin/popup.html">
+    <title>WebToEpub — Novel Search Engine</title>
+    <meta name="description" content="Search supported web novel sites and import them directly into WebToEpub.">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            background: #1a1a2e;
-            color: #eee;
+        :root {
+            --primary: #a78bfa;
+            --primary-hover: #8b5cf6;
+            --bg: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+            --glass: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.1);
         }
 
-        a {
-            color: #a78bfa;
+        body {
+            font-family: 'Inter', sans-serif;
+            background: radial-gradient(circle at 50% -20%, #1e1b4b 0%, var(--bg) 80%);
+            color: var(--text);
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow-x: hidden;
+        }
+
+        /* Hero Section */
+        header {
+            width: 100%;
+            max-width: 1000px;
+            padding: 40px 20px;
+            text-align: center;
+            margin-top: 5vh;
+        }
+
+        h1 {
+            font-size: 3.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(to right, #fff, var(--primary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.02em;
+        }
+
+        p.subtitle {
+            color: var(--text-muted);
+            font-size: 1.2rem;
+            max-width: 600px;
+            margin: 0 auto 2rem;
+        }
+
+        /* Search Container */
+        .search-container {
+            width: 90%;
+            max-width: 800px;
+            background: var(--glass);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 8px;
+            display: flex;
+            gap: 8px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            transition: all 0.3s ease;
+        }
+
+        .search-container:focus-within {
+            border-color: var(--primary);
+            box-shadow: 0 0 20px rgba(167, 139, 250, 0.2);
+        }
+
+        input#searchEngineQuery {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: white;
+            padding: 12px 24px;
+            font-size: 1.1rem;
+            outline: none;
+        }
+
+        select#searchEngineSelect {
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid var(--glass-border);
+            color: var(--text-muted);
+            border-radius: 16px;
+            padding: 0 16px;
+            outline: none;
+            cursor: pointer;
+        }
+
+        button#searchEngineGoButton {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 32px;
+            border-radius: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        button#searchEngineGoButton:hover {
+            background: var(--primary-hover);
+            transform: translateY(-1px);
+        }
+
+        button#searchEngineGoButton:active {
+            transform: translateY(0);
+        }
+
+        button#searchEngineGoButton:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Status & Results */
+        #searchEngineStatus {
+            margin-top: 20px;
+            color: var(--primary);
+            font-weight: 500;
+            min-height: 24px;
+        }
+
+        .results-wrapper {
+            width: 100%;
+            max-width: 900px;
+            margin-top: 40px;
+            padding: 0 20px 100px;
+        }
+
+        #searchEngineResultsTable {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0 12px;
+        }
+
+        #searchEngineResultsTable th {
+            display: none;
+        }
+
+        .searchResultItem {
+            background: var(--card-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            transition: transform 0.2s ease, border-color 0.2s ease;
+        }
+
+        .searchResultItem:hover {
+            transform: scale(1.01);
+            border-color: rgba(167, 139, 250, 0.4);
+        }
+
+        .searchResultItem td {
+            padding: 24px;
+        }
+
+        .searchResultItem a {
+            color: white;
+            text-decoration: none;
+            font-size: 1.3rem;
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .searchResultUrl {
+            color: var(--primary);
+            font-size: 0.85rem;
+            margin-bottom: 12px;
+            display: block;
+            opacity: 0.8;
+        }
+
+        .searchResultSnippet {
+            color: var(--text-muted);
+            line-height: 1.6;
+            font-size: 0.95rem;
+        }
+
+        .import-btn {
+            background: rgba(167, 139, 250, 0.1);
+            border: 1px solid var(--primary);
+            color: var(--primary);
+            padding: 10px 20px;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+        }
+
+        .import-btn:hover {
+            background: var(--primary);
+            color: white;
+        }
+
+        /* Launch Tool Button */
+        .launch-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            padding: 10px 20px;
+            border-radius: 12px;
+            color: white;
+            text-decoration: none;
+            font-weight: 500;
+            backdrop-filter: blur(8px);
+            transition: border-color 0.2s;
+        }
+
+        .launch-btn:hover {
+            border-color: var(--primary);
+        }
+
+        /* Navigation specifically for searchEngineSection */
+        #searchEngineSection {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
     </style>
 </head>
 
 <body>
-    <p>Redirecting to <a href="plugin/popup.html">WebToEpub</a>…</p>
+
+    <a href="plugin/popup.html" class="launch-btn">Launch WebToEpub Tool →</a>
+
+    <header>
+        <h1>WebToEpub</h1>
+        <p class="subtitle">Search 550+ supported novel sites and import them with a single click. No more manually
+            hunting for URLs.</p>
+    </header>
+
+    <div class="search-container">
+        <input id="searchEngineQuery" type="text" placeholder="Search for a novel title..." autocomplete="off">
+        <select id="searchEngineSelect">
+            <option value="duckduckgo">DuckDuckGo</option>
+            <option value="bing">Bing</option>
+            <option value="google">Google</option>
+            <option value="yandex">Yandex</option>
+        </select>
+        <button id="searchEngineGoButton">Search</button>
+    </div>
+
+    <div id="searchEngineStatus"></div>
+
+    <section id="searchEngineSection" class="results-wrapper">
+        <table id="searchEngineResultsTable">
+            <!-- Results populated by script -->
+        </table>
+    </section>
+
+    <!-- Dependencies -->
+    <script src="plugin/js/ChromePolyfill.js"></script>
+    <script src="plugin/js/Util.js"></script>
+    <script src="plugin/js/HttpClient.js"></script>
+    <script src="plugin/js/ParserFactory.js"></script>
+    <!-- Add at least one parser so ParserFactory isn't empty if we were just testing, 
+         but actually ParserFactory.js registers them globally when included.
+         In popup.html they are all listed. Here we might need to list them or a subset?
+         Actually, we need the parsers to be registered so filterSupportedResults works.
+    -->
+    <script src="plugin/js/parsers/DefaultParser.js"></script>
+
+    <!-- We need to load all parsers to populate parserFactory.parsers map -->
+    <!-- For now, I will include a subset or just rely on common ones for demonstration, 
+         but for a real app, we should probably have a 'parsers.js' that bundles them. 
+         Since I can't easily bundle, I'll add the script tags for some major ones.
+    -->
+    <script src="plugin/js/parsers/WordpressBaseParser.js"></script>
+    <script src="plugin/js/parsers/MadaraParser.js"></script>
+    <script src="plugin/js/parsers/RoyalRoadParser.js"></script>
+    <script src="plugin/js/parsers/WuxiaWorldParser.js"></script>
+    <script src="plugin/js/parsers/NovelUpdatesParser.js"></script>
+    <script src="plugin/js/parsers/ScribbleHubParser.js"></script>
+
+    <script src="plugin/js/SearchEngineUI.js"></script>
+
+    <script>
+        // Override startImport to redirect to popup.html instead of internal toggle
+        SearchEngineUI.startImport = function (url) {
+            window.location.href = `plugin/popup.html?url=${encodeURIComponent(url)}`;
+        };
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            if (typeof SearchEngineUI !== 'undefined') {
+                SearchEngineUI.init();
+                // If user presses enter in query input
+                document.getElementById('searchEngineQuery').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') SearchEngineUI.onSearch();
+                });
+            }
+        });
+    </script>
 </body>
 
 </html>

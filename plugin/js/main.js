@@ -386,8 +386,20 @@ var main = (function () {
         addMessageListener();
         let windowId = window.location.search.split("=")[1];
         if (!util.isNullOrEmpty(windowId)) {
+            // Check if it's a URL parameter or a Tab ID
+            let params = new URLSearchParams(window.location.search);
+            let targetUrl = params.get("url");
+            if (targetUrl) {
+                setUiFieldToValue("startingUrlInput", targetUrl);
+                // Trigger analysis
+                onLoadAndAnalyseButtonClick();
+                return;
+            }
+
             let tabId = parseInt(windowId, 10);
-            injectContentScript(tabId);
+            if (!isNaN(tabId)) {
+                injectContentScript(tabId);
+            }
         }
     }
 
@@ -661,6 +673,11 @@ var main = (function () {
             getAdditionalMetadataSection().hidden = !userPreferences.ShowMoreMetadataOptions.value;
             addEventHandlers();
             populateControls();
+
+            if (typeof SearchEngineUI !== "undefined") {
+                SearchEngineUI.init();
+            }
+
             if (!window.WTE_WEBSITE_MODE && util.isFirefox()) {
                 Firefox.startWebRequestListeners();
             }
