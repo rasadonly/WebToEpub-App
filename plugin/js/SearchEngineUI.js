@@ -200,13 +200,31 @@ class SearchEngineUI {
             document.getElementById("searchEngineGoButton").disabled = true;
             let results = await SearchEngineAPI.search(query, engine);
             console.log(`Raw results from ${engine}:`, results);
+
+            // Automatic fallback if 0 results
+            if (results.length === 0) {
+                const altEngines = ["duckduckgo", "bing", "google", "yandex"].filter(e => e !== engine);
+                for (let alt of altEngines) {
+                    statusSpan.textContent = `No results from ${engine}. Trying ${alt}...`;
+                    results = await SearchEngineAPI.search(query, alt);
+                    console.log(`Raw results from fallback ${alt}:`, results);
+                    if (results.length > 0) {
+                        engine = alt;
+                        engineSelect.value = alt;
+                        break;
+                    }
+                }
+            }
+
             let filteredResults = SearchEngineUI.filterSupportedResults(results);
             SearchEngineUI.renderResults(filteredResults);
 
-            if (filteredResults.length === 0) {
-                statusSpan.textContent = `No supported parsers found in top ${results.length} results.`;
+            if (results.length === 0) {
+                statusSpan.textContent = "Error: All search engines returned 0 results. This usually means the CORS proxy is blocked by search engines. Try switching to a different proxy in the dropdown.";
+            } else if (filteredResults.length === 0) {
+                statusSpan.textContent = `Found ${results.length} general results, but none are from supported novel sites in our database.`;
             } else {
-                statusSpan.textContent = `Found ${filteredResults.length} supported novel sites.`;
+                statusSpan.textContent = `Found ${filteredResults.length} supported novel sites using ${engine}.`;
             }
         } catch (error) {
             statusSpan.textContent = "Search Error: " + error.message;
