@@ -662,6 +662,12 @@ var main = (function () {
 
     // actions to do when window opened
     window.onload = async () => {
+        // In website mode: if no URL or manual mode is provided, redirect to landing page
+        if (window.WTE_WEBSITE_MODE && util.isNullOrEmpty(window.location.search)) {
+            window.location.href = "../index.html";
+            return;
+        }
+
         userPreferences = UserPreferences.readFromLocalStorage();
         // In website mode: always run in direct mode (no tab injection).
         // In extension mode: check if we got a tab ID in the query string.
