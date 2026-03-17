@@ -35,6 +35,13 @@ class FetchErrorHandler {
         } else {
             failError = new Error(this.makeFailMessage(response.url, response.status));
         }
+
+        // If this is a proxy attempt and NOT the final one, or if we want to skip retries,
+        // then just reject so the loop can move on.
+        if (wrapOptions.isProxyAttempt && !wrapOptions.isFinalProxyAttempt) {
+            return Promise.reject(failError);
+        }
+
         let retry = FetchErrorHandler.getAutomaticRetryBehaviourForStatus(response);
         if (retry.retryDelay.length === 0) {
             return Promise.reject(failError);
@@ -230,7 +237,9 @@ class HttpClient {
                 }
             }
 
-            for (let proxyUrl of proxiesToTry) {
+            for (let i = 0; i < proxiesToTry.length; i++) {
+                let proxyUrl = proxiesToTry[i];
+                let isFinalProxyAttempt = (i === proxiesToTry.length - 1);
 
                 if (BlockedHostNames.has(new URL(proxyUrl).hostname)) {
                     continue;
@@ -253,32 +262,26 @@ class HttpClient {
                         continue;
                     }
 
-                    if (!response.ok && (response.status === 403 || response.status === 429 || response.status === 503)) {
-
-                        let text = "";
-
-                        try {
-                            text = await response.text();
-                        } catch { }
-
-                        if (
-                            text.includes("usage limited") ||
-                            text.includes("corsproxy.io") ||
-                            text.includes("rate limit") ||
-                            text.includes("blocked")
-                        ) {
-                            console.warn(`[WebToEpub] Proxy ${proxyUrl} blocked. Trying next...`);
-                            continue;
+                    if (!response.ok) {
+                        if (isFinalProxyAttempt) {
+                            return wrapOptions.errorHandler.onResponseError(url, wrapOptions, response);
                         }
+                        console.warn(`[WebToEpub] Proxy ${proxyUrl} failed with status ${response.status}. Trying next...`);
+                        continue;
                     }
 
-                    let ret = await HttpClient.checkResponseAndGetData(url, wrapOptions, response);
+                    let proxyWrapOptions = Object.assign({}, wrapOptions, {
+                        isProxyAttempt: true,
+                        isFinalProxyAttempt: isFinalProxyAttempt
+                    });
 
-                    if (wrapOptions.parser?.isCustomError(ret)) {
+                    let ret = await HttpClient.checkResponseAndGetData(url, proxyWrapOptions, response);
 
-                        let CustomErrorResponse = wrapOptions.parser.setCustomErrorResponse(url, wrapOptions, ret);
+                    if (proxyWrapOptions.parser?.isCustomError(ret)) {
 
-                        return wrapOptions.errorHandler.onResponseError(
+                        let CustomErrorResponse = proxyWrapOptions.parser.setCustomErrorResponse(url, proxyWrapOptions, ret);
+
+                        return proxyWrapOptions.errorHandler.onResponseError(
                             CustomErrorResponse.url,
                             CustomErrorResponse.wrapOptions,
                             CustomErrorResponse.response,
