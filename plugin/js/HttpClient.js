@@ -68,8 +68,7 @@ class FetchErrorHandler {
             if (wrapOptions.retry.HTTP === 403) {
                 // If the error URL is a proxy URL, then we should block the proxy, not the target site
                 let errorUrl = response.url;
-                let actualTargetUrl = HttpClient.unproxyUrl(errorUrl);
-                if (actualTargetUrl !== errorUrl) {
+                if (HttpClient.isProxyUrl(errorUrl)) {
                     msg.blockurl = errorUrl;
                 } else {
                     msg.blockurl = url;
@@ -367,9 +366,10 @@ class HttpClient {
      * @returns {string} The original URL
      */
     static unproxyUrl(url) {
-        for (let proxy of HttpClient.CORS_PROXIES) {
-            if (url.startsWith(proxy.url)) {
-                let encodedUrl = url.substring(proxy.url.length);
+        let proxies = HttpClient.CORS_PROXIES.map(p => p.url).concat([HttpClient.corsProxyUrl]);
+        for (let proxyUrl of proxies) {
+            if (url.startsWith(proxyUrl)) {
+                let encodedUrl = url.substring(proxyUrl.length);
                 try {
                     return decodeURIComponent(encodedUrl);
                 } catch (e) {
@@ -377,15 +377,38 @@ class HttpClient {
                 }
             }
         }
-        if (url.startsWith(HttpClient.corsProxyUrl)) {
-            let encodedUrl = url.substring(HttpClient.corsProxyUrl.length);
-            try {
-                return decodeURIComponent(encodedUrl);
-            } catch (e) {
-                return encodedUrl;
+        // Fallback: check if the URL origin matches any proxy origin
+        // This handles cases where the proxy redirects or changes paths
+        try {
+            let parsedUrl = new URL(url);
+            for (let proxyUrl of proxies) {
+                let parsedProxy = new URL(proxyUrl);
+                if (parsedUrl.origin === parsedProxy.origin) {
+                    // Try to find target URL in search params
+                    let target = parsedUrl.searchParams.get("url");
+                    if (target) return target;
+                }
             }
-        }
+        } catch (e) { }
         return url;
+    }
+
+    /**
+     * Checks if a URL is a proxy URL based on origin matching
+     * @param {string} url The URL to check
+     * @returns {boolean} True if the URL is a proxy URL
+     */
+    static isProxyUrl(url) {
+        try {
+            let parsedUrl = new URL(url);
+            let proxies = HttpClient.CORS_PROXIES.map(p => p.url).concat([HttpClient.corsProxyUrl]);
+            for (let proxyUrl of proxies) {
+                if (parsedUrl.origin === new URL(proxyUrl).origin) {
+                    return true;
+                }
+            }
+        } catch (e) { }
+        return false;
     }
 
     static async setDeclarativeNetRequestRules(RulesArray) {
