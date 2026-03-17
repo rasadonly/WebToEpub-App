@@ -66,11 +66,21 @@ class FetchErrorHandler {
         let cancelLabel = this.getCancelButtonText();
         return new Promise((resolve, reject) => {
             if (wrapOptions.retry.HTTP === 403) {
-                msg.openurl = response.url;
-                msg.blockurl = url;
+                // If the error URL is a proxy URL, then we should block the proxy, not the target site
+                let errorUrl = response.url;
+                let actualTargetUrl = HttpClient.unproxyUrl(errorUrl);
+                if (actualTargetUrl !== errorUrl) {
+                    msg.blockurl = errorUrl;
+                } else {
+                    msg.blockurl = url;
+                }
+                msg.openurl = errorUrl;
             }
             msg.retryAction = () => resolve(HttpClient.wrapFetchImpl(url, wrapOptions));
-            msg.cancelAction = () => reject(failError);
+            msg.cancelAction = () => {
+                failError.isUserCancel = true;
+                reject(failError);
+            };
             msg.cancelLabel = cancelLabel;
             ErrorLog.showErrorMessage(msg);
         });
@@ -223,6 +233,10 @@ class HttpClient {
 
             for (let proxyUrl of proxiesToTry) {
 
+                if (BlockedHostNames.has(new URL(proxyUrl).hostname)) {
+                    continue;
+                }
+
                 try {
 
                     let fetchUrl = proxyUrl + encodeURIComponent(url.trim());
@@ -276,6 +290,9 @@ class HttpClient {
                     return ret;
 
                 } catch (e) {
+                    if (e.isUserCancel) {
+                        throw e;
+                    }
                     console.warn(`[WebToEpub] Proxy ${proxyUrl} failed. Trying next...`);
                 }
             }
