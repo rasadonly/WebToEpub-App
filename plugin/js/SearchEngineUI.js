@@ -18,17 +18,20 @@ class SearchEngineAPI {
         let url = "https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query);
         let dom = await SearchEngineAPI.fetchDom(url);
         let results = [];
+        // DDG HTML version uses several possible selectors
         let resultNodes = dom.querySelectorAll(".result");
         if (resultNodes.length === 0) resultNodes = dom.querySelectorAll(".result__body");
+        if (resultNodes.length === 0) resultNodes = dom.querySelectorAll("tr"); // Very old DDG HTML
+
         console.log(`DDG Results found: ${resultNodes.length}`);
 
         for (let node of resultNodes) {
-            let a = node.querySelector(".result__title a") || node.querySelector("a.result__a");
-            let snippet = node.querySelector(".result__snippet") || node.querySelector(".result__snippet");
-            if (a) {
+            let a = node.querySelector(".result__title a") || node.querySelector("a.result__a") || node.querySelector("a[href*='&uddg=']");
+            let snippet = node.querySelector(".result__snippet") || node.querySelector(".snippet");
+            if (a && a.href && a.href.includes("uddg=")) {
                 results.push({
                     title: a.textContent.trim(),
-                    url: a.href,
+                    url: SearchEngineUI.extractRealUrl(a.href),
                     snippet: snippet ? snippet.textContent.trim() : ""
                 });
             }
@@ -41,12 +44,13 @@ class SearchEngineAPI {
         let dom = await SearchEngineAPI.fetchDom(url);
         let results = [];
         let resultNodes = dom.querySelectorAll(".b_algo");
+        if (resultNodes.length === 0) resultNodes = dom.querySelectorAll("li.b_algo");
         console.log(`Bing Results found: ${resultNodes.length}`);
 
         for (let node of resultNodes) {
             let a = node.querySelector("h2 a") || node.querySelector("a");
-            let snippet = node.querySelector(".b_caption p") || node.querySelector(".b_algoSlug") || node.querySelector(".b_lineclamp3");
-            if (a && a.href && !a.href.startsWith("javascript:")) {
+            let snippet = node.querySelector(".b_caption p") || node.querySelector(".b_algoSlug") || node.querySelector(".b_lineclamp3") || node.querySelector(".b_vList");
+            if (a && a.href && !a.href.startsWith("javascript:") && a.href.includes("http")) {
                 results.push({
                     title: a.textContent.trim(),
                     url: a.href,
@@ -62,24 +66,25 @@ class SearchEngineAPI {
         let dom = await SearchEngineAPI.fetchDom(url);
         let results = [];
         let resultNodes = dom.querySelectorAll("div.g");
+        if (resultNodes.length === 0) resultNodes = dom.querySelectorAll("div.MjjYud"); // Modern google container
         console.log(`Google Results found: ${resultNodes.length}`);
 
         for (let node of resultNodes) {
             let a = node.querySelector("a");
-            let titleNode = node.querySelector("h3");
-            let snippetNodes = node.querySelectorAll("div[style*='-webkit-line-clamp']"); // Simple heuristic for modern google snippets
+            let titleNode = node.querySelector("h3") || node.querySelector("span[role='heading']");
+            let snippetNodes = node.querySelectorAll("div[style*='-webkit-line-clamp']");
 
-            if (a && titleNode) {
+            if (a && a.href && a.href.includes("http") && (titleNode || a.textContent.length > 10)) {
                 let snippetText = "";
                 if (snippetNodes.length > 0) {
                     snippetText = snippetNodes[snippetNodes.length - 1].textContent.trim();
                 } else {
-                    let textDiv = node.querySelector("div[data-sncf]");
+                    let textDiv = node.querySelector("div[data-sncf]") || node.querySelector(".VwiC3b");
                     if (textDiv) snippetText = textDiv.textContent.trim();
                 }
 
                 results.push({
-                    title: titleNode.textContent.trim(),
+                    title: titleNode ? titleNode.textContent.trim() : a.textContent.trim(),
                     url: a.href,
                     snippet: snippetText
                 });
