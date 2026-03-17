@@ -18,11 +18,13 @@ class SearchEngineAPI {
         let url = "https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query);
         let dom = await SearchEngineAPI.fetchDom(url);
         let results = [];
-        let resultNodes = dom.querySelectorAll(".result__body");
+        let resultNodes = dom.querySelectorAll(".result");
+        if (resultNodes.length === 0) resultNodes = dom.querySelectorAll(".result__body");
+        console.log(`DDG Results found: ${resultNodes.length}`);
 
         for (let node of resultNodes) {
-            let a = node.querySelector(".result__title a");
-            let snippet = node.querySelector(".result__snippet");
+            let a = node.querySelector(".result__title a") || node.querySelector("a.result__a");
+            let snippet = node.querySelector(".result__snippet") || node.querySelector(".result__snippet");
             if (a) {
                 results.push({
                     title: a.textContent.trim(),
@@ -39,11 +41,12 @@ class SearchEngineAPI {
         let dom = await SearchEngineAPI.fetchDom(url);
         let results = [];
         let resultNodes = dom.querySelectorAll(".b_algo");
+        console.log(`Bing Results found: ${resultNodes.length}`);
 
         for (let node of resultNodes) {
-            let a = node.querySelector("h2 a");
-            let snippet = node.querySelector(".b_caption p") || node.querySelector(".b_algoSlug");
-            if (a) {
+            let a = node.querySelector("h2 a") || node.querySelector("a");
+            let snippet = node.querySelector(".b_caption p") || node.querySelector(".b_algoSlug") || node.querySelector(".b_lineclamp3");
+            if (a && a.href && !a.href.startsWith("javascript:")) {
                 results.push({
                     title: a.textContent.trim(),
                     url: a.href,
@@ -59,6 +62,7 @@ class SearchEngineAPI {
         let dom = await SearchEngineAPI.fetchDom(url);
         let results = [];
         let resultNodes = dom.querySelectorAll("div.g");
+        console.log(`Google Results found: ${resultNodes.length}`);
 
         for (let node of resultNodes) {
             let a = node.querySelector("a");
@@ -89,6 +93,7 @@ class SearchEngineAPI {
         let dom = await SearchEngineAPI.fetchDom(url);
         let results = [];
         let resultNodes = dom.querySelectorAll("li.serp-item");
+        console.log(`Yandex Results found: ${resultNodes.length}`);
 
         for (let node of resultNodes) {
             let a = node.querySelector("h2 a[href]");
@@ -106,6 +111,11 @@ class SearchEngineAPI {
 
     static async fetchDom(url) {
         let response = await HttpClient.fetchHtml(url);
+        if (!response || !response.responseXML) {
+            console.error("fetchDom: responseXML is missing", response);
+            return document.implementation.createHTMLDocument();
+        }
+        console.log(`fetchDom: Received ${response.responseXML.documentElement.innerHTML.length} bytes of HTML`);
         return response.responseXML;
     }
 }
@@ -159,6 +169,7 @@ class SearchEngineUI {
         try {
             document.getElementById("searchEngineGoButton").disabled = true;
             let results = await SearchEngineAPI.search(query, engine);
+            console.log(`Raw results from ${engine}:`, results);
             let filteredResults = SearchEngineUI.filterSupportedResults(results);
             SearchEngineUI.renderResults(filteredResults);
 
