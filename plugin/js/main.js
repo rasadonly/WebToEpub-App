@@ -684,6 +684,17 @@ var main = (function () {
                 SearchEngineUI.init();
             }
 
+            // If a URL was passed in the query string, automatically start analysis
+            let params = new URLSearchParams(window.location.search);
+            let targetUrl = params.get("url");
+            if (targetUrl) {
+                setUiFieldToValue("startingUrlInput", targetUrl);
+                // Wait a tiny bit for handlers to be fully ready
+                setTimeout(() => {
+                    onLoadAndAnalyseButtonClick();
+                }, 100);
+            }
+
             if (!window.WTE_WEBSITE_MODE && util.isFirefox()) {
                 Firefox.startWebRequestListeners();
             }
