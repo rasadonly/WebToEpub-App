@@ -128,6 +128,7 @@ class SearchEngineUI {
     static bindEvents() {
         const searchBtn = document.getElementById("searchEngineGoButton");
         const navBtn = document.getElementById("navSearchButton");
+        const proxySelect = document.getElementById("corsProxySelect");
 
         if (searchBtn) {
             searchBtn.addEventListener("click", SearchEngineUI.onSearch);
@@ -135,6 +136,25 @@ class SearchEngineUI {
 
         if (navBtn) {
             navBtn.addEventListener("click", SearchEngineUI.toggleSearchSection);
+        }
+
+        if (proxySelect && typeof HttpClient !== 'undefined') {
+            // Populate proxies
+            proxySelect.innerHTML = "";
+            HttpClient.CORS_PROXIES.forEach(p => {
+                let opt = document.createElement("option");
+                opt.value = p.url;
+                opt.textContent = p.name;
+                proxySelect.appendChild(opt);
+            });
+            // Match current global
+            proxySelect.value = HttpClient.corsProxyUrl;
+
+            proxySelect.addEventListener("change", () => {
+                HttpClient.corsProxyUrl = proxySelect.value;
+                HttpClient.enableCorsProxy = true;
+                console.log(`Switched proxy to: ${HttpClient.corsProxyUrl}`);
+            });
         }
     }
 
@@ -159,6 +179,11 @@ class SearchEngineUI {
 
         if (!queryInput || !engineSelect || !resultsTable || !queryInput.value.trim()) {
             return;
+        }
+
+        // Force enable proxy for search as it will always be needed for cross-domain search results
+        if (typeof HttpClient !== 'undefined') {
+            HttpClient.enableCorsProxy = true;
         }
 
         let query = queryInput.value.trim();

@@ -251,6 +251,10 @@
             <option value="google">Google</option>
             <option value="yandex">Yandex</option>
         </select>
+        <select id="corsProxySelect"
+            style="max-width: 150px; background: rgba(15, 23, 42, 0.5); border: 1px solid var(--glass-border); color: var(--text-muted); border-radius: 16px; padding: 0 16px; outline: none; cursor: pointer;">
+            <!-- Populated by HttpClient.CORS_PROXIES -->
+        </select>
         <button id="searchEngineGoButton">Search</button>
     </div>
 
@@ -279,12 +283,31 @@
          but for a real app, we should probably have a 'parsers.js' that bundles them. 
          Since I can't easily bundle, I'll add the script tags for some major ones.
     -->
+    <script src="plugin/js/parsers/DefaultParser.js"></script>
     <script src="plugin/js/parsers/WordpressBaseParser.js"></script>
     <script src="plugin/js/parsers/MadaraParser.js"></script>
     <script src="plugin/js/parsers/RoyalRoadParser.js"></script>
     <script src="plugin/js/parsers/WuxiaWorldParser.js"></script>
     <script src="plugin/js/parsers/NovelUpdatesParser.js"></script>
     <script src="plugin/js/parsers/ScribbleHubParser.js"></script>
+    <script src="plugin/js/parsers/BoxnovelOrgParser.js"></script>
+    <script src="plugin/js/parsers/ReadLightNovelParser.js"></script>
+    <script src="plugin/js/parsers/ReLibraryParser.js"></script>
+    <script src="plugin/js/parsers/CreativeNovelsParser.js"></script>
+    <script src="plugin/js/parsers/VolareNovelsParser.js"></script>
+    <script src="plugin/js/parsers/LightNovelWorldParser.js"></script>
+    <script src="plugin/js/parsers/FanFictionNetParser.js"></script>
+    <script src="plugin/js/parsers/WattpadParser.js"></script>
+    <script src="plugin/js/parsers/ZenithNovelsParser.js"></script>
+    <script src="plugin/js/parsers/WordExcerptParser.js"></script>
+    <script src="plugin/js/parsers/ChrysanthemumgardenParser.js"></script>
+    <script src="plugin/js/parsers/WuxiaWorldDotSiteParser.js"></script>
+    <script src="plugin/js/parsers/NovelFullParser.js"></script>
+    <script src="plugin/js/parsers/TapReadParser.js"></script>
+    <script src="plugin/js/parsers/WebnovelParser.js"></script>
+    <script src="plugin/js/parsers/AllNovelFullParser.js"></script>
+    <script src="plugin/js/parsers/RanobeNekotinaParser.js"></script>
+    <script src="plugin/js/parsers/LibersparkParser.js"></script>
 
     <script src="plugin/js/SearchEngineUI.js"></script>
 
