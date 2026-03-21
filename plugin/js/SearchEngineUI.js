@@ -1,31 +1,34 @@
 "use strict";
 
+/**
+ * SearchEngineAPI — thin adapter between UI and search backends.
+ * Supports custom site search (SiteSearchEngine) and traditional engines (DDG, Bing, Google, Yandex).
+ */
 class SearchEngineAPI {
-    static async search(query, engine) {
-        // Appending 'novel' or 'chapter' helps hone in on the right results when using general search engines
+    static async search(query, engine, onProgress, onResults) {
+        if (engine === "custom") {
+            return await SiteSearchEngine.search(query.trim(), onProgress, false, onResults);
+        }
+        if (engine === "custom_all") {
+            return await SiteSearchEngine.search(query.trim(), onProgress, true, onResults);
+        }
         let searchQuery = query.trim() + " novel chapter";
-
         switch (engine) {
             case "duckduckgo": return await SearchEngineAPI.searchDuckDuckGo(searchQuery);
             case "bing": return await SearchEngineAPI.searchBing(searchQuery);
             case "google": return await SearchEngineAPI.searchGoogle(searchQuery);
             case "yandex": return await SearchEngineAPI.searchYandex(searchQuery);
-            default: throw new Error("Unknown search engine");
+            default: throw new Error("Unknown search engine: " + engine);
         }
     }
 
     static async searchDuckDuckGo(query) {
-        let url = "https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query);
-        let dom = await SearchEngineAPI.fetchDom(url);
+        let dom = await SearchEngineAPI.fetchDom("https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query));
         let results = [];
-        // DDG HTML version uses several possible selectors
-        let resultNodes = dom.querySelectorAll(".result");
-        if (resultNodes.length === 0) resultNodes = dom.querySelectorAll(".result__body");
-        if (resultNodes.length === 0) resultNodes = dom.querySelectorAll("tr"); // Very old DDG HTML
-
-        console.log(`DDG Results found: ${resultNodes.length}`);
-
-        for (let node of resultNodes) {
+        let nodes = dom.querySelectorAll(".result");
+        if (nodes.length === 0) nodes = dom.querySelectorAll(".result__body");
+        if (nodes.length === 0) nodes = dom.querySelectorAll("tr");
+        for (let node of nodes) {
             let a = node.querySelector(".result__title a") || node.querySelector("a.result__a") || node.querySelector("a[href*='&uddg=']");
             let snippet = node.querySelector(".result__snippet") || node.querySelector(".snippet");
             if (a && a.href && a.href.includes("uddg=")) {
@@ -40,16 +43,13 @@ class SearchEngineAPI {
     }
 
     static async searchBing(query) {
-        let url = "https://www.bing.com/search?q=" + encodeURIComponent(query);
-        let dom = await SearchEngineAPI.fetchDom(url);
+        let dom = await SearchEngineAPI.fetchDom("https://www.bing.com/search?q=" + encodeURIComponent(query));
         let results = [];
-        let resultNodes = dom.querySelectorAll(".b_algo");
-        if (resultNodes.length === 0) resultNodes = dom.querySelectorAll("li.b_algo");
-        console.log(`Bing Results found: ${resultNodes.length}`);
-
-        for (let node of resultNodes) {
+        let nodes = dom.querySelectorAll(".b_algo");
+        if (nodes.length === 0) nodes = dom.querySelectorAll("li.b_algo");
+        for (let node of nodes) {
             let a = node.querySelector("h2 a") || node.querySelector("a");
-            let snippet = node.querySelector(".b_caption p") || node.querySelector(".b_algoSlug") || node.querySelector(".b_lineclamp3") || node.querySelector(".b_vList");
+            let snippet = node.querySelector(".b_caption p") || node.querySelector(".b_algoSlug") || node.querySelector(".b_lineclamp3");
             if (a && a.href && !a.href.startsWith("javascript:") && a.href.includes("http")) {
                 results.push({
                     title: a.textContent.trim(),
@@ -62,27 +62,22 @@ class SearchEngineAPI {
     }
 
     static async searchGoogle(query) {
-        let url = "https://www.google.com/search?q=" + encodeURIComponent(query);
-        let dom = await SearchEngineAPI.fetchDom(url);
+        let dom = await SearchEngineAPI.fetchDom("https://www.google.com/search?q=" + encodeURIComponent(query));
         let results = [];
-        let resultNodes = dom.querySelectorAll("div.g");
-        if (resultNodes.length === 0) resultNodes = dom.querySelectorAll("div.MjjYud"); // Modern google container
-        console.log(`Google Results found: ${resultNodes.length}`);
-
-        for (let node of resultNodes) {
+        let nodes = dom.querySelectorAll("div.g");
+        if (nodes.length === 0) nodes = dom.querySelectorAll("div.MjjYud");
+        for (let node of nodes) {
             let a = node.querySelector("a");
             let titleNode = node.querySelector("h3") || node.querySelector("span[role='heading']");
-            let snippetNodes = node.querySelectorAll("div[style*='-webkit-line-clamp']");
-
             if (a && a.href && a.href.includes("http") && (titleNode || a.textContent.length > 10)) {
                 let snippetText = "";
+                let snippetNodes = node.querySelectorAll("div[style*='-webkit-line-clamp']");
                 if (snippetNodes.length > 0) {
                     snippetText = snippetNodes[snippetNodes.length - 1].textContent.trim();
                 } else {
                     let textDiv = node.querySelector("div[data-sncf]") || node.querySelector(".VwiC3b");
                     if (textDiv) snippetText = textDiv.textContent.trim();
                 }
-
                 results.push({
                     title: titleNode ? titleNode.textContent.trim() : a.textContent.trim(),
                     url: a.href,
@@ -94,13 +89,10 @@ class SearchEngineAPI {
     }
 
     static async searchYandex(query) {
-        let url = "https://yandex.com/search/?text=" + encodeURIComponent(query);
-        let dom = await SearchEngineAPI.fetchDom(url);
+        let dom = await SearchEngineAPI.fetchDom("https://yandex.com/search/?text=" + encodeURIComponent(query));
         let results = [];
-        let resultNodes = dom.querySelectorAll("li.serp-item");
-        console.log(`Yandex Results found: ${resultNodes.length}`);
-
-        for (let node of resultNodes) {
+        let nodes = dom.querySelectorAll("li.serp-item");
+        for (let node of nodes) {
             let a = node.querySelector("h2 a[href]");
             let snippetNode = node.querySelector(".organic__content-wrapper");
             if (a) {
@@ -117,226 +109,269 @@ class SearchEngineAPI {
     static async fetchDom(url) {
         let response = await HttpClient.fetchHtml(url);
         if (!response || !response.responseXML) {
-            console.error("fetchDom: responseXML is missing", response);
             return document.implementation.createHTMLDocument();
         }
-        console.log(`fetchDom: Received ${response.responseXML.documentElement.innerHTML.length} bytes of HTML`);
         return response.responseXML;
     }
 }
 
+/**
+ * SearchEngineUI — handles the search UI, event binding, and result rendering.
+ * 
+ * Optimizations:
+ *   - Uses DocumentFragment for batch DOM operations
+ *   - Debounces progressive renders (max once per 300ms)
+ *   - Separates badge into its own span (not inside the link text)
+ */
 class SearchEngineUI {
+
+    /** Minimum time between progressive re-renders (ms) */
+    static RENDER_DEBOUNCE_MS = 300;
+    static _lastRenderTime = 0;
+    static _pendingRender = null;
+
     static init() {
         SearchEngineUI.bindEvents();
     }
 
     static bindEvents() {
-        const searchBtn = document.getElementById("searchEngineGoButton");
-        const navBtn = document.getElementById("navSearchButton");
-        const proxySelect = document.getElementById("corsProxySelect");
+        let searchBtn = document.getElementById("searchEngineGoButton");
+        let navBtn = document.getElementById("navSearchButton");
+        let proxySelect = document.getElementById("corsProxySelect");
+        let queryInput = document.getElementById("searchEngineQuery");
 
-        if (searchBtn) {
-            searchBtn.addEventListener("click", SearchEngineUI.onSearch);
+        if (searchBtn) searchBtn.addEventListener("click", SearchEngineUI.onSearch);
+        if (navBtn) navBtn.addEventListener("click", SearchEngineUI.toggleSearchSection);
+
+        // Enter key triggers search
+        if (queryInput) {
+            queryInput.addEventListener("keypress", (e) => {
+                if (e.key === "Enter") SearchEngineUI.onSearch();
+            });
         }
 
-        if (navBtn) {
-            navBtn.addEventListener("click", SearchEngineUI.toggleSearchSection);
-        }
-
-        if (proxySelect && typeof HttpClient !== 'undefined') {
-            // Populate proxies
+        // Populate proxy dropdown
+        if (proxySelect && typeof HttpClient !== "undefined") {
             proxySelect.innerHTML = "";
-            HttpClient.CORS_PROXIES.forEach(p => {
+            for (let p of HttpClient.CORS_PROXIES) {
                 let opt = document.createElement("option");
                 opt.value = p.url;
                 opt.textContent = p.name;
                 proxySelect.appendChild(opt);
-            });
-            // Match current global
+            }
             proxySelect.value = HttpClient.corsProxyUrl;
-
             proxySelect.addEventListener("change", () => {
                 HttpClient.corsProxyUrl = proxySelect.value;
                 HttpClient.enableCorsProxy = true;
-                console.log(`Switched proxy to: ${HttpClient.corsProxyUrl}`);
             });
         }
     }
 
     static toggleSearchSection() {
         let sections = ["inputSection", "advancedOptionsSection", "hiddenBibSection", "testSection", "imageSection", "outputSection", "readingListSection", "defaultParserSection"];
-        for (let secId of sections) {
-            let el = document.getElementById(secId);
+        for (let id of sections) {
+            let el = document.getElementById(id);
             if (el) el.hidden = true;
         }
-
         let searchSec = document.getElementById("searchEngineSection");
-        if (searchSec) {
-            searchSec.hidden = false;
-        }
+        if (searchSec) searchSec.hidden = false;
     }
 
     static async onSearch() {
-        const queryInput = document.getElementById("searchEngineQuery");
-        const engineSelect = document.getElementById("searchEngineSelect");
-        const statusSpan = document.getElementById("searchEngineStatus");
-        const resultsTable = document.getElementById("searchEngineResultsTable");
+        let queryInput = document.getElementById("searchEngineQuery");
+        let engineSelect = document.getElementById("searchEngineSelect");
+        let statusSpan = document.getElementById("searchEngineStatus");
+        let resultsTable = document.getElementById("searchEngineResultsTable");
 
-        if (!queryInput || !engineSelect || !resultsTable || !queryInput.value.trim()) {
-            return;
-        }
+        if (!queryInput || !engineSelect || !resultsTable || !queryInput.value.trim()) return;
 
-        // Force enable proxy for search as it will always be needed for cross-domain search results
-        if (typeof HttpClient !== 'undefined') {
-            HttpClient.enableCorsProxy = true;
-        }
+        // Always enable proxy for cross-domain
+        if (typeof HttpClient !== "undefined") HttpClient.enableCorsProxy = true;
 
         let query = queryInput.value.trim();
         let engine = engineSelect.value;
-        statusSpan.textContent = "Searching through CORS proxy...";
-        resultsTable.innerHTML = ""; // Clear old results
+        let isCustom = engine === "custom" || engine === "custom_all";
+
+        resultsTable.innerHTML = "";
+        statusSpan.textContent = isCustom ? "Searching supported novel sites..." : "Searching through CORS proxy...";
 
         try {
             document.getElementById("searchEngineGoButton").disabled = true;
-            let results = await SearchEngineAPI.search(query, engine);
-            console.log(`Raw results from ${engine}:`, results);
 
-            // Automatic fallback if 0 results
-            if (results.length === 0) {
-                const altEngines = ["duckduckgo", "bing", "google", "yandex"].filter(e => e !== engine);
-                for (let alt of altEngines) {
-                    statusSpan.textContent = `No results from ${engine}. Trying ${alt}...`;
-                    results = await SearchEngineAPI.search(query, alt);
-                    console.log(`Raw results from fallback ${alt}:`, results);
-                    if (results.length > 0) {
-                        engine = alt;
-                        engineSelect.value = alt;
-                        break;
+            let onProgress = isCustom ? (siteName, status) => {
+                statusSpan.textContent = `Searching ${siteName}... (${status})`;
+            } : null;
+
+            // Progressive rendering with debounce
+            let onResults = isCustom ? (resultsSoFar, completed, total) => {
+                SearchEngineUI.renderResultsDebounced(resultsSoFar);
+                statusSpan.textContent = `Searching... ${completed}/${total} sites done, ${resultsSoFar.length} results`;
+            } : null;
+
+            let results = await SearchEngineAPI.search(query, engine, onProgress, onResults);
+
+            // For non-custom engines, auto-fallback if no results
+            let displayResults;
+            if (isCustom) {
+                displayResults = results;
+            } else {
+                if (results.length === 0) {
+                    let alts = ["duckduckgo", "bing", "google", "yandex"].filter(e => e !== engine);
+                    for (let alt of alts) {
+                        statusSpan.textContent = `No results from ${engine}. Trying ${alt}...`;
+                        results = await SearchEngineAPI.search(query, alt, null, null);
+                        if (results.length > 0) { engine = alt; break; }
                     }
                 }
+                displayResults = SearchEngineUI.filterSupportedResults(results);
             }
 
-            let filteredResults = SearchEngineUI.filterSupportedResults(results);
-            SearchEngineUI.renderResults(filteredResults);
+            // Final render (always do a full render at the end)
+            SearchEngineUI.renderResults(displayResults);
 
             if (results.length === 0) {
-                statusSpan.textContent = "Error: All search engines returned 0 results. This usually means the CORS proxy is blocked by search engines. Try switching to a different proxy in the dropdown.";
-            } else if (filteredResults.length === 0) {
-                statusSpan.textContent = `Found ${results.length} general results, but none are from supported novel sites in our database.`;
+                statusSpan.textContent = isCustom
+                    ? "No results found. Try a different search term."
+                    : "No results from any engine. Try Custom search.";
+            } else if (displayResults.length === 0) {
+                statusSpan.textContent = `Found ${results.length} results, but none from supported novel sites.`;
             } else {
-                statusSpan.textContent = `Found ${filteredResults.length} supported novel sites using ${engine}.`;
+                statusSpan.textContent = `Found ${displayResults.length} results` +
+                    (isCustom ? " from supported novel sites." : ` using ${engine}.`);
             }
         } catch (error) {
             statusSpan.textContent = "Search Error: " + error.message;
-            console.error("Search fetch error", error);
+            console.error("Search error:", error);
         } finally {
             document.getElementById("searchEngineGoButton").disabled = false;
         }
     }
 
-    static filterSupportedResults(results) {
-        let supported = [];
-        let parserMap = null;
-        if (typeof parserFactory !== 'undefined') {
-            parserMap = parserFactory.parsers;
-        }
-
-        if (!parserMap) return results; // fallback
-
-        for (let res of results) {
-            // Unproxy URL in case DDG/Google prepends wrappers
-            let realUrl = SearchEngineUI.extractRealUrl(res.url);
-            let hostName = "unknown";
-            try {
-                hostName = ParserFactory.hostNameForParserSelection(realUrl);
-            } catch (e) { }
-
-            if (parserMap.has(hostName)) {
-                res.url = realUrl; // normalized
-                supported.push(res);
+    /**
+     * Debounced render — prevents excessive DOM thrashing during progressive updates.
+     */
+    static renderResultsDebounced(results) {
+        let now = Date.now();
+        if (now - SearchEngineUI._lastRenderTime < SearchEngineUI.RENDER_DEBOUNCE_MS) {
+            // Schedule a deferred render if not already scheduled
+            if (!SearchEngineUI._pendingRender) {
+                SearchEngineUI._pendingRender = setTimeout(() => {
+                    SearchEngineUI._pendingRender = null;
+                    SearchEngineUI._lastRenderTime = Date.now();
+                    SearchEngineUI.renderResults(results);
+                }, SearchEngineUI.RENDER_DEBOUNCE_MS);
             }
+            return;
+        }
+        SearchEngineUI._lastRenderTime = now;
+        SearchEngineUI.renderResults(results);
+    }
+
+    static filterSupportedResults(results) {
+        let parserMap = null;
+        if (typeof parserFactory !== "undefined") parserMap = parserFactory.parsers;
+        if (!parserMap) return results;
+
+        let supported = [];
+        for (let res of results) {
+            let realUrl = SearchEngineUI.extractRealUrl(res.url);
+            try {
+                let hostName = ParserFactory.hostNameForParserSelection(realUrl);
+                if (parserMap.has(hostName)) {
+                    res.url = realUrl;
+                    supported.push(res);
+                }
+            } catch (e) { /* skip */ }
         }
         return supported;
     }
 
-    // Some search engines add tracking wrappers to their URL results
     static extractRealUrl(url) {
         try {
             if (url.includes("duckduckgo.com/l/?uddg=")) {
-                let u = new URL(url);
-                return decodeURIComponent(u.searchParams.get("uddg"));
+                return decodeURIComponent(new URL(url).searchParams.get("uddg"));
             }
-        } catch (e) { }
+        } catch (e) { /* ignore */ }
         return url;
     }
 
+    /**
+     * Render results using DocumentFragment for efficient batch DOM insertion.
+     */
     static renderResults(results) {
-        const table = document.getElementById("searchEngineResultsTable");
+        let table = document.getElementById("searchEngineResultsTable");
         table.innerHTML = "";
+        if (results.length === 0) return;
 
-        if (results.length === 0) {
-            return;
-        }
+        let fragment = document.createDocumentFragment();
 
+        // Header
         let headerTr = document.createElement("tr");
         headerTr.innerHTML = "<th>Web Novel</th><th>Action</th>";
-        table.appendChild(headerTr);
+        fragment.appendChild(headerTr);
 
         for (let res of results) {
             let tr = document.createElement("tr");
             tr.className = "searchResultItem";
 
+            // Info cell
             let infoTd = document.createElement("td");
+
             let titleLink = document.createElement("a");
             titleLink.href = res.url;
             titleLink.target = "_blank";
             titleLink.textContent = res.title;
             titleLink.style.fontWeight = "bold";
             titleLink.style.fontSize = "1.1em";
+            infoTd.appendChild(titleLink);
+
+            // Source badge (outside the link for better accessibility)
+            if (res.source) {
+                let badge = document.createElement("span");
+                badge.textContent = res.source;
+                badge.className = "source-badge";
+                badge.style.cssText = "display:inline-block;background:#a78bfa;color:#fff;padding:1px 6px;border-radius:3px;font-size:0.7em;margin-left:8px;vertical-align:middle;";
+                infoTd.appendChild(badge);
+            }
 
             let urlDiv = document.createElement("div");
-            urlDiv.className = "searchResultUrl";
             urlDiv.textContent = res.url;
-            urlDiv.style.color = "#777";
-            urlDiv.style.fontSize = "0.8em";
-            urlDiv.style.marginBottom = "5px";
-
-            let snipDiv = document.createElement("div");
-            snipDiv.className = "searchResultSnippet";
-            snipDiv.textContent = res.snippet;
-
-            infoTd.appendChild(titleLink);
+            urlDiv.style.cssText = "color:#777;font-size:0.8em;margin:2px 0 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:600px;";
             infoTd.appendChild(urlDiv);
-            infoTd.appendChild(snipDiv);
+
+            if (res.snippet) {
+                let snipDiv = document.createElement("div");
+                snipDiv.textContent = res.snippet;
+                snipDiv.style.cssText = "color:#999;font-size:0.85em;";
+                infoTd.appendChild(snipDiv);
+            }
+
             tr.appendChild(infoTd);
 
+            // Action cell
             let actionTd = document.createElement("td");
-            actionTd.style.verticalAlign = "middle";
-            actionTd.style.textAlign = "center";
-
+            actionTd.style.cssText = "vertical-align:middle;text-align:center;";
             let btn = document.createElement("button");
             btn.className = "expandedButton";
             btn.textContent = "Import to WebToEpub";
-            btn.onclick = () => { SearchEngineUI.startImport(res.url); };
+            btn.onclick = () => SearchEngineUI.startImport(res.url);
             actionTd.appendChild(btn);
-
             tr.appendChild(actionTd);
-            table.appendChild(tr);
+
+            fragment.appendChild(tr);
         }
+
+        table.appendChild(fragment);
     }
 
     static startImport(url) {
         document.getElementById("searchEngineSection").hidden = true;
         document.getElementById("inputSection").hidden = false;
-
         let startInput = document.getElementById("startingUrlInput");
         if (startInput) {
             startInput.value = url;
-            // trigger auto load
             let loadBtn = document.getElementById("loadAndAnalyseButton");
-            if (loadBtn) {
-                loadBtn.click();
-            }
+            if (loadBtn) loadBtn.click();
         }
     }
 }

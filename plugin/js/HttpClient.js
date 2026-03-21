@@ -467,7 +467,6 @@ let BlockedHostNames = new Set();
 HttpClient.CORS_PROXIES = [
     { name: "Nexuspage Proxy", url: "https://nexuspage-extractor.vercel.app/?url=" },
     { name: "Workers Proxy", url: "https://fragrant-frost-f292.tufive.workers.dev/?url=" },
-    { name: "cors.lol", url: "https://cors.lol/?url=" },
     { name: "corsproxy.io (with key)", url: "https://corsproxy.io/?key=ab3170e1&url=" }
 ];
 HttpClient.corsProxyUrl = HttpClient.CORS_PROXIES[0].url;

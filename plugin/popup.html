@@ -602,6 +602,8 @@
                 <input id="searchEngineQuery" type="text" placeholder="e.g. Tensei Slime"
                     style="flex: 1; padding: 5px;">
                 <select id="searchEngineSelect" style="padding: 5px;">
+                    <option value="custom" selected>Custom (All Sites)</option>
+                    <option value="custom_all">Custom + Secondary Sites</option>
                     <option value="duckduckgo">DuckDuckGo</option>
                     <option value="bing">Bing</option>
                     <option value="google">Google</option>
@@ -726,6 +728,7 @@
         <script src="js/ProgressBar.js"></script>
         <script src="js/Parser.js"></script>
         <script src="js/Library.js"></script>
+        <script src="js/SiteSearchEngine.js"></script>
         <script src="js/SearchEngineUI.js"></script>
 
         <!-- These parsers are (or might be) used as base for other pareser-->

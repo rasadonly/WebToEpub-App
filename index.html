@@ -246,6 +246,8 @@
     <div class="search-container">
         <input id="searchEngineQuery" type="text" placeholder="Search for a novel title..." autocomplete="off">
         <select id="searchEngineSelect">
+            <option value="custom" selected>Custom (All Sites)</option>
+            <option value="custom_all">Custom + Secondary Sites</option>
             <option value="duckduckgo">DuckDuckGo</option>
             <option value="bing">Bing</option>
             <option value="google">Google</option>
@@ -266,53 +268,37 @@
         </table>
     </section>
 
-    <!-- Dependencies -->
+    <!-- Core Dependencies -->
     <script src="plugin/js/ChromePolyfill.js"></script>
     <script src="plugin/js/Util.js"></script>
+    <script src="plugin/js/ErrorLog.js"></script>
+    <script src="plugin/js/UIText.js"></script>
     <script src="plugin/js/HttpClient.js"></script>
     <script src="plugin/js/ParserFactory.js"></script>
-    <!-- Add at least one parser so ParserFactory isn't empty if we were just testing, 
-         but actually ParserFactory.js registers them globally when included.
-         In popup.html they are all listed. Here we might need to list them or a subset?
-         Actually, we need the parsers to be registered so filterSupportedResults works.
-    -->
-    <script src="plugin/js/parsers/DefaultParser.js"></script>
+    <script src="plugin/js/ImageCollector.js"></script>
+    <script src="plugin/js/Parser.js"></script>
 
-    <!-- We need to load all parsers to populate parserFactory.parsers map -->
-    <!-- For now, I will include a subset or just rely on common ones for demonstration, 
-         but for a real app, we should probably have a 'parsers.js' that bundles them. 
-         Since I can't easily bundle, I'll add the script tags for some major ones.
-    -->
+    <!-- Parsers (needed for fallback DDG/Bing search filtering) -->
     <script src="plugin/js/parsers/DefaultParser.js"></script>
     <script src="plugin/js/parsers/WordpressBaseParser.js"></script>
-    <script src="plugin/js/parsers/MadaraParser.js"></script>
     <script src="plugin/js/parsers/RoyalRoadParser.js"></script>
-    <script src="plugin/js/parsers/WuxiaWorldParser.js"></script>
+    <script src="plugin/js/parsers/WuxiaworldParser.js"></script>
     <script src="plugin/js/parsers/NovelUpdatesParser.js"></script>
-    <script src="plugin/js/parsers/ScribbleHubParser.js"></script>
-    <script src="plugin/js/parsers/BoxnovelOrgParser.js"></script>
-    <script src="plugin/js/parsers/ReadLightNovelParser.js"></script>
-    <script src="plugin/js/parsers/ReLibraryParser.js"></script>
-    <script src="plugin/js/parsers/CreativeNovelsParser.js"></script>
-    <script src="plugin/js/parsers/VolareNovelsParser.js"></script>
     <script src="plugin/js/parsers/LightNovelWorldParser.js"></script>
-    <script src="plugin/js/parsers/FanFictionNetParser.js"></script>
+    <script src="plugin/js/parsers/NovelfullParser.js"></script>
+    <script src="plugin/js/parsers/NovelhallParser.js"></script>
+    <script src="plugin/js/parsers/FreeWebNovelParser.js"></script>
+    <script src="plugin/js/parsers/WtrlabParser.js"></script>
+    <script src="plugin/js/parsers/NovelgoParser.js"></script>
     <script src="plugin/js/parsers/WattpadParser.js"></script>
-    <script src="plugin/js/parsers/ZenithNovelsParser.js"></script>
-    <script src="plugin/js/parsers/WordExcerptParser.js"></script>
-    <script src="plugin/js/parsers/ChrysanthemumgardenParser.js"></script>
-    <script src="plugin/js/parsers/WuxiaWorldDotSiteParser.js"></script>
-    <script src="plugin/js/parsers/NovelFullParser.js"></script>
-    <script src="plugin/js/parsers/TapReadParser.js"></script>
-    <script src="plugin/js/parsers/WebnovelParser.js"></script>
-    <script src="plugin/js/parsers/AllNovelFullParser.js"></script>
-    <script src="plugin/js/parsers/RanobeNekotinaParser.js"></script>
-    <script src="plugin/js/parsers/LibersparkParser.js"></script>
+    <script src="plugin/js/parsers/ArchiveOfOurOwnParser.js"></script>
 
+    <!-- Custom Search Engine + UI -->
+    <script src="plugin/js/SiteSearchEngine.js"></script>
     <script src="plugin/js/SearchEngineUI.js"></script>
 
     <script>
-        // Override startImport to redirect to popup.html instead of internal toggle
+        // Override startImport to redirect to popup.html
         SearchEngineUI.startImport = function (url) {
             window.location.href = `plugin/popup.html?url=${encodeURIComponent(url)}`;
         };
@@ -321,10 +307,6 @@
         document.addEventListener('DOMContentLoaded', () => {
             if (typeof SearchEngineUI !== 'undefined') {
                 SearchEngineUI.init();
-                // If user presses enter in query input
-                document.getElementById('searchEngineQuery').addEventListener('keypress', (e) => {
-                    if (e.key === 'Enter') SearchEngineUI.onSearch();
-                });
             }
         });
     </script>
