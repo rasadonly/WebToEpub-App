@@ -237,6 +237,15 @@ class HttpClient {
                 }
             }
 
+            // Filter out blacklisted proxies for this attempt
+            proxiesToTry = proxiesToTry.filter(url => !HttpClient.BLACKLISTED_PROXIES.has(url));
+
+            // If everything is blacklisted, clear it to allow an honest retry
+            if (proxiesToTry.length === 0) {
+                HttpClient.BLACKLISTED_PROXIES.clear();
+                proxiesToTry = [HttpClient.corsProxyUrl].concat(HttpClient.CORS_PROXIES.map(p => p.url).filter(u => u !== HttpClient.corsProxyUrl));
+            }
+
             for (let i = 0; i < proxiesToTry.length; i++) {
                 let proxyUrl = proxiesToTry[i];
                 let isFinalProxyAttempt = (i === proxiesToTry.length - 1);
@@ -289,13 +298,20 @@ class HttpClient {
                         );
                     }
 
+                    // Success! This proxy is working, so "stick" to it for future requests
+                    if (HttpClient.corsProxyUrl !== proxyUrl) {
+                        HttpClient.corsProxyUrl = proxyUrl;
+                        HttpClient.updateCorsProxyUi();
+                    }
+
                     return ret;
 
                 } catch (e) {
                     if (e.isUserCancel) {
                         throw e;
                     }
-                    console.warn(`[WebToEpub] Proxy ${proxyUrl} failed. Trying next...`);
+                    console.warn(`[WebToEpub] Proxy ${proxyUrl} failed. Blacklisting...`);
+                    HttpClient.BLACKLISTED_PROXIES.add(proxyUrl);
                 }
             }
 
@@ -348,8 +364,16 @@ class HttpClient {
         try {
             let checkbox = document.getElementById("enableCorsProxyCheckbox");
             if (checkbox) checkbox.checked = HttpClient.enableCorsProxy;
+
             let input = document.getElementById("corsProxyInput");
-            if (input) HttpClient.corsProxyUrl = input.value || HttpClient.corsProxyUrl;
+            if (input) input.value = HttpClient.corsProxyUrl;
+
+            let select = document.getElementById("corsProxySelect");
+            if (select) {
+                let matching = HttpClient.CORS_PROXIES.find(p => p.url === HttpClient.corsProxyUrl);
+                select.value = matching ? matching.url : "custom";
+                if (input) input.style.display = matching ? "none" : "block";
+            }
         } catch (e) { /* ignore if DOM not available */ }
     }
 
@@ -465,10 +489,15 @@ let BlockedHostNames = new Set();
 // CORS proxy settings (website mode)
 // These can be updated via the UI CORS proxy controls in popup.html
 HttpClient.CORS_PROXIES = [
-    { name: "Nexuspage Proxy", url: "https://nexuspage-extractor.vercel.app/?url=" },
     { name: "Workers Proxy", url: "https://fragrant-frost-f292.tufive.workers.dev/?url=" },
-    { name: "corsproxy.io (with key)", url: "https://corsproxy.io/?key=ab3170e1&url=" }
+    { name: "AllOrigins (Raw)", url: "https://api.allorigins.win/raw?url=" },
+    { name: "corsproxy.io", url: "https://corsproxy.io/?url=" },
+    { name: "CodeTabs Proxy", url: "https://api.codetabs.com/v1/proxy/?url=" },
+    { name: "Nexuspage Proxy", url: "https://nexuspage-extractor.vercel.app/?url=" },
+    { name: "corsproxy.io (with key)", url: "https://corsproxy.io/?key=ab3170e1&url=" },
+    { name: "CORS.lol", url: "https://api.cors.lol/?url=" }
 ];
+HttpClient.BLACKLISTED_PROXIES = new Set();
 HttpClient.corsProxyUrl = HttpClient.CORS_PROXIES[0].url;
 HttpClient.enableCorsProxy = false; // auto-enabled on first CORS failure
 

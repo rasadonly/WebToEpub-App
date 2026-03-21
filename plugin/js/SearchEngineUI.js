@@ -159,11 +159,58 @@ class SearchEngineUI {
                 opt.textContent = p.name;
                 proxySelect.appendChild(opt);
             }
-            proxySelect.value = HttpClient.corsProxyUrl;
+            let customOpt = document.createElement("option");
+            customOpt.value = "custom";
+            customOpt.textContent = "Custom URL...";
+            proxySelect.appendChild(customOpt);
+
+            let proxyInput = document.getElementById("corsProxyInput");
+            let enableCheckbox = document.getElementById("enableCorsProxyCheckbox");
+
+            // Initial state
+            let currentProxy = HttpClient.corsProxyUrl;
+            let isKnownProxy = HttpClient.CORS_PROXIES.some(p => p.url === currentProxy);
+
+            if (isKnownProxy) {
+                proxySelect.value = currentProxy;
+                if (proxyInput) proxyInput.style.display = "none";
+            } else {
+                proxySelect.value = "custom";
+                if (proxyInput) {
+                    proxyInput.style.display = "block";
+                    proxyInput.value = currentProxy;
+                }
+            }
+
+            if (enableCheckbox) enableCheckbox.checked = HttpClient.enableCorsProxy;
+
             proxySelect.addEventListener("change", () => {
-                HttpClient.corsProxyUrl = proxySelect.value;
+                if (proxySelect.value === "custom") {
+                    if (proxyInput) {
+                        proxyInput.style.display = "block";
+                        HttpClient.corsProxyUrl = proxyInput.value;
+                    }
+                } else {
+                    if (proxyInput) proxyInput.style.display = "none";
+                    HttpClient.corsProxyUrl = proxySelect.value;
+                }
                 HttpClient.enableCorsProxy = true;
+                if (enableCheckbox) enableCheckbox.checked = true;
             });
+
+            if (proxyInput) {
+                proxyInput.addEventListener("input", () => {
+                    if (proxySelect.value === "custom") {
+                        HttpClient.corsProxyUrl = proxyInput.value;
+                    }
+                });
+            }
+
+            if (enableCheckbox) {
+                enableCheckbox.addEventListener("change", () => {
+                    HttpClient.enableCorsProxy = enableCheckbox.checked;
+                });
+            }
         }
     }
 
@@ -296,72 +343,81 @@ class SearchEngineUI {
     }
 
     /**
-     * Render results using DocumentFragment for efficient batch DOM insertion.
+     * Render results as modern cards using the defined search.css classes.
      */
     static renderResults(results) {
-        let table = document.getElementById("searchEngineResultsTable");
-        table.innerHTML = "";
+        const container = document.getElementById("searchEngineResultsTable");
+        if (!container) return;
+        container.innerHTML = "";
         if (results.length === 0) return;
 
-        let fragment = document.createDocumentFragment();
+        const fragment = document.createDocumentFragment();
 
-        // Header
-        let headerTr = document.createElement("tr");
-        headerTr.innerHTML = "<th>Web Novel</th><th>Action</th>";
-        fragment.appendChild(headerTr);
+        for (const res of results) {
+            const card = document.createElement("div");
+            card.className = "searchResultItem";
 
-        for (let res of results) {
-            let tr = document.createElement("tr");
-            tr.className = "searchResultItem";
+            const row = document.createElement("div");
+            row.style.display = "flex";
+            row.style.justifyContent = "space-between";
+            row.style.alignItems = "center";
+            row.style.padding = "28px";
+            row.style.gap = "24px";
 
-            // Info cell
-            let infoTd = document.createElement("td");
+            // Info Section
+            const info = document.createElement("div");
+            info.className = "result-info";
 
-            let titleLink = document.createElement("a");
+            const titleWrap = document.createElement("div");
+            titleWrap.style.display = "flex";
+            titleWrap.style.alignItems = "center";
+            titleWrap.style.gap = "10px";
+            titleWrap.style.marginBottom = "4px";
+
+            const titleLink = document.createElement("a");
             titleLink.href = res.url;
             titleLink.target = "_blank";
             titleLink.textContent = res.title;
-            titleLink.style.fontWeight = "bold";
-            titleLink.style.fontSize = "1.1em";
-            infoTd.appendChild(titleLink);
+            titleWrap.appendChild(titleLink);
 
-            // Source badge (outside the link for better accessibility)
             if (res.source) {
-                let badge = document.createElement("span");
-                badge.textContent = res.source;
+                const badge = document.createElement("span");
                 badge.className = "source-badge";
-                badge.style.cssText = "display:inline-block;background:#a78bfa;color:#fff;padding:1px 6px;border-radius:3px;font-size:0.7em;margin-left:8px;vertical-align:middle;";
-                infoTd.appendChild(badge);
+                badge.textContent = res.source;
+                titleWrap.appendChild(badge);
             }
+            info.appendChild(titleWrap);
 
-            let urlDiv = document.createElement("div");
-            urlDiv.textContent = res.url;
-            urlDiv.style.cssText = "color:#777;font-size:0.8em;margin:2px 0 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:600px;";
-            infoTd.appendChild(urlDiv);
+            const urlText = document.createElement("span");
+            urlText.className = "searchResultUrl";
+            urlText.textContent = res.url;
+            info.appendChild(urlText);
 
             if (res.snippet) {
-                let snipDiv = document.createElement("div");
-                snipDiv.textContent = res.snippet;
-                snipDiv.style.cssText = "color:#999;font-size:0.85em;";
-                infoTd.appendChild(snipDiv);
+                const snippet = document.createElement("div");
+                snippet.className = "searchResultSnippet";
+                snippet.textContent = res.snippet;
+                info.appendChild(snippet);
             }
 
-            tr.appendChild(infoTd);
+            // Action Section
+            const action = document.createElement("div");
+            const importBtn = document.createElement("button");
+            importBtn.className = "import-btn";
+            importBtn.textContent = "Import to WebToEpub";
+            importBtn.onclick = () => {
+                const manualUrl = "plugin/popup.html?mode=manual&url=" + encodeURIComponent(res.url);
+                window.location.href = manualUrl;
+            };
+            action.appendChild(importBtn);
 
-            // Action cell
-            let actionTd = document.createElement("td");
-            actionTd.style.cssText = "vertical-align:middle;text-align:center;";
-            let btn = document.createElement("button");
-            btn.className = "expandedButton";
-            btn.textContent = "Import to WebToEpub";
-            btn.onclick = () => SearchEngineUI.startImport(res.url);
-            actionTd.appendChild(btn);
-            tr.appendChild(actionTd);
-
-            fragment.appendChild(tr);
+            row.appendChild(info);
+            row.appendChild(action);
+            card.appendChild(row);
+            fragment.appendChild(card);
         }
 
-        table.appendChild(fragment);
+        container.appendChild(fragment);
     }
 
     static startImport(url) {

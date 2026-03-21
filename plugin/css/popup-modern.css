@@ -1,0 +1,290 @@
+/* Popup Modern UI - Overrides for WebToEpub */
+
+@import url('design-system.css');
+
+body {
+    min-width: 650px;
+    min-height: 500px;
+    padding: 10px;
+    overflow-x: hidden;
+}
+
+.container {
+    border: none !important;
+    background: transparent !important;
+    width: 100% !important;
+    max-width: none !important;
+    padding: 0 !important;
+    display: block !important;
+}
+
+section {
+    background: var(--card-bg);
+    backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px;
+    padding: 24px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow-lg);
+    animation: fadeIn 0.3s ease-out;
+    position: relative;
+    /* Blinking fix */
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    transform: translateZ(0);
+    will-change: transform, backdrop-filter;
+}
+
+section h1,
+section h2,
+section h3 {
+    margin-top: 0;
+    color: var(--primary);
+}
+
+.app-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 10px 0 20px 0;
+}
+
+.app-logo {
+    width: 48px;
+    height: 48px;
+    filter: drop-shadow(0 0 10px var(--primary-glow));
+}
+
+.app-title {
+    margin: 0;
+    font-size: 2rem;
+    font-weight: 800;
+    color: var(--text);
+    letter-spacing: -0.02em;
+}
+
+/* Form Elements */
+input[type=text],
+input[type=url],
+textarea,
+select {
+    background: rgba(15, 23, 42, 0.6) !important;
+    border: 1px solid var(--glass-border) !important;
+    color: var(--text) !important;
+    border-radius: 10px !important;
+    padding: 8px 12px !important;
+    outline: none !important;
+    transition: var(--transition-fast) !important;
+    margin: 4px 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    box-sizing: border-box !important;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 10px var(--primary-glow) !important;
+}
+
+/* Buttons */
+button {
+    background: var(--primary) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 10px !important;
+    padding: 10px 20px !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+    transition: all var(--transition-fast) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+    font-family: inherit !important;
+    font-size: 13px !important;
+    height: auto !important;
+    max-height: none !important;
+    margin: 4px !important;
+}
+
+button:hover {
+    background: var(--primary-hover) !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 10px var(--primary-glow) !important;
+}
+
+button:active {
+    transform: translateY(0) !important;
+}
+
+button:disabled {
+    opacity: 0.4 !important;
+    cursor: not-allowed !important;
+}
+
+/* Tables */
+table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+td,
+th {
+    padding: 10px;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+th {
+    color: var(--primary);
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+    text-align: left;
+}
+
+#chapterUrlsTable {
+    margin-top: 15px;
+}
+
+#chapterUrlsTable tr:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+/* Progress Section Fix */
+.progressSection {
+    background: var(--glass) !important;
+    border: 1px solid var(--glass-border) !important;
+    color: var(--text) !important;
+    height: auto !important;
+    min-height: 80px !important;
+    padding: 20px !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 0 20px 0 !important;
+}
+
+progress {
+    height: 12px !important;
+    width: 100% !important;
+    border-radius: 6px !important;
+    overflow: hidden !important;
+}
+
+progress::-webkit-progress-bar {
+    background: rgba(15, 23, 42, 0.5);
+}
+
+progress::-webkit-progress-value {
+    background: var(--primary);
+}
+
+progress::-moz-progress-bar {
+    background: var(--primary);
+}
+
+#progressString {
+    position: static !important;
+    margin: 10px 0 !important;
+    font-size: 1.2rem !important;
+    width: auto !important;
+    font-weight: 700 !important;
+}
+
+/* Sidebar */
+.sidebar {
+    background: rgba(15, 23, 42, 0.95) !important;
+    backdrop-filter: blur(20px) !important;
+    border-left: 1px solid var(--glass-border) !important;
+}
+
+.sidebar label:hover {
+    background: rgba(167, 139, 250, 0.1) !important;
+}
+
+/* Utilities */
+.warning {
+    color: #f87171 !important;
+    border: 1px solid rgba(248, 113, 113, 0.2);
+    background: rgba(248, 113, 113, 0.05);
+    padding: 10px;
+    border-radius: 8px;
+    font-size: 1rem !important;
+}
+
+/* Fix for Alignment Issues in Tables */
+td input[type="checkbox"],
+td label {
+    display: inline-block !important;
+    vertical-align: middle !important;
+    margin: 0 4px !important;
+    width: auto !important;
+}
+
+#corsProxyRow td[colspan] {
+    text-align: left !important;
+}
+
+/* Specific Fixes for Layout Alignment */
+#inputSection table,
+#advancedOptionsSection table,
+#rangeSelectTable {
+    width: 100% !important;
+}
+
+#inputSection td:first-child,
+#advancedOptionsTable td:first-child,
+#AdditionalMetadatatable td:first-child {
+    width: 180px !important;
+    min-width: 180px !important;
+}
+
+#inputSection table input {
+    width: 100% !important;
+}
+
+#coverUrlSection input {
+    width: calc(100% - 100px) !important;
+}
+
+#sampleCoverImg {
+    position: absolute !important;
+    top: 24px !important;
+    right: 24px !important;
+    max-width: 120px !important;
+    max-height: 160px !important;
+    width: auto !important;
+    height: auto !important;
+    border-radius: 12px !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5) !important;
+    border: 1px solid var(--glass-border) !important;
+    background: rgba(15, 23, 42, 0.4) !important;
+    z-index: 10 !important;
+    transition: transform 0.3s ease !important;
+}
+
+#sampleCoverImg:hover {
+    transform: scale(1.05) !important;
+}
+
+/* Checkbox Modernization */
+input[type="checkbox"] {
+    accent-color: var(--primary);
+    width: 18px !important;
+    height: 18px !important;
+    cursor: pointer;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

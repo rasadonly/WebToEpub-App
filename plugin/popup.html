@@ -4,12 +4,18 @@
 <head>
     <meta charset="utf-8">
     <title>WebToEpub</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link href="css/default.css" rel="stylesheet" type="text/css" />
     <link href="css/autoDark.css" rel="stylesheet" type="text/css" id="autoDark" />
     <link href="css/alwaysDark.css" rel="stylesheet" type="text/css" id="alwaysDark" disabled="true" />
+    <link href="css/popup-modern.css" rel="stylesheet" type="text/css" />
 </head>
 
 <body>
+    <header class="app-header">
+        <img src="book128.png" alt="Logo" class="app-logo">
+        <h1 class="app-title">WebToEpub</h1>
+    </header>
     <div class="container">
         <section id="readingListSection" hidden="true">
             <button id="closeReadingList">__MSG_button_Close_ReadingList__</button>
@@ -169,7 +175,8 @@
                         <select id="corsProxySelect" style="width: 30%;">
                             <option value="">Custom...</option>
                         </select>
-                        <input id="corsProxyInput" style="width: 38%;" type="url" value="https://corsproxy.io/?url=" />
+                        <input id="corsProxyInput" style="width: 38%;" type="url"
+                            value="https://fragrant-frost-f292.tufive.workers.dev/?url=" />
                         <input type="checkbox" id="enableCorsProxyCheckbox"
                             title="Route fetches through the CORS proxy URL (required for website mode)" />
                         <label for="enableCorsProxyCheckbox">Enable</label>

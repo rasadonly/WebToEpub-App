@@ -1,0 +1,56 @@
+:root {
+    /* Colors */
+    --primary: #00f5ff;
+    --primary-hover: #00d1da;
+    --primary-glow: rgba(0, 245, 255, 0.15);
+    --bg: #0a0f0f;
+    --bg-gradient: radial-gradient(circle at 50% -20%, #003b46 0%, #0a0f0f 80%);
+    --card-bg: rgba(15, 23, 23, 0.7);
+    --text: #f0fdfa;
+    --text-muted: #94a3a8;
+
+    /* Glassmorphism */
+    --glass: rgba(255, 255, 255, 0.03);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --glass-blur: blur(12px);
+
+    /* Effects */
+    --shadow-lg: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    --shadow-inner: inset 0 2px 4px 0 rgba(0, 0, 0, 0.06);
+
+    /* Transitions */
+    --transition-fast: 0.2s ease;
+    --transition-normal: 0.3s ease;
+}
+
+/* Base Styles */
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg-gradient);
+    color: var(--text);
+    margin: 0;
+    line-height: 1.5;
+}
+
+/* Scrollbar Modernization */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--glass-border);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--primary);
+}
