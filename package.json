@@ -36,10 +36,7 @@
   "keywords": [
     "epub"
   ],
-  "author": {
-    "name": "David Teviotdale",
-    "email": "dteviot@gmail.com"
-  },
+  "author": "David Teviotdale <dteviot@gmail.com>",
   "contributors": [
     {
       "name": "Alen Toma"
@@ -123,7 +120,8 @@
       "name": "Dimava"
     },
     {
-      "name": "Leone Jacob Sunil (ImLJS)"
+      "name": "Leone Jacob Sunil",
+      "url": "ImLJS"
     },
     {
       "name": "Yoanhg421"

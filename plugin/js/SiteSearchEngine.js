@@ -269,7 +269,7 @@ class SiteSearchEngine {
     }
 
     static _buildSecondarySites() {
-        return [
+        let sites = [
             {
                 name: "NovelBin",
                 hostname: "novelbin.com",
@@ -286,23 +286,7 @@ class SiteSearchEngine {
                 name: "LightNovelWorld",
                 hostname: "lightnovelworld.co",
                 searchUrl: (q) => `https://www.lightnovelworld.co/search?keyword=${encodeURIComponent(q)}`,
-                parseResults: (dom) => {
-                    let results = [];
-                    let items = dom.querySelectorAll(".novel-item, .search-item, .novel-list .novel-entry");
-                    for (let item of items) {
-                        let a = item.querySelector("a[href*='/novel/']") || item.querySelector("a");
-                        if (a && a.href) {
-                            let titleEl = item.querySelector("h4, h3, .novel-title") || a;
-                            results.push({
-                                title: titleEl.textContent.trim(),
-                                url: a.href,
-                                snippet: "",
-                                source: "LightNovelWorld"
-                            });
-                        }
-                    }
-                    return results;
-                }
+                parseResults: (dom) => SiteSearchEngine.parseLightNovelWorldStyle(dom, "https://lightnovelworld.co", "LightNovelWorld")
             },
             {
                 name: "FanFiction.net",
@@ -347,21 +331,189 @@ class SiteSearchEngine {
                 }
             }
         ];
+
+        // Categorized batch addition for the ~500 sites
+        SiteSearchEngine._addEngineSites(sites);
+
+        return sites;
     }
 
-    // ─── Shared Parsers ──────────────────────────────────────────────────
+    // ─── Shared Parsers & Helpers ────────────────────────────────────────
+
+    static _addEngineSites(sites) {
+        // NovelFull Engine
+        const novelFullHosts = ["allnovelbin.net", "allnovelbook.com", "allnovelfull.app", "allnovelfull.com", "all-novelfull.net", "allnovelfull.net", "allnovelnext.com", "allnovel.org", "bestlightnovel.com", "boxnovelfull.com", "chinesewuxia.world", "fastnovel.net", "freewn.com", "fullnovel.co", "novelactive.org", "novel-bin.com", "novelbin.me", "novel-bin.net", "novelbin.net", "novel-bin.org", "novelbin.org", "noveldrama.org", "novelfullbook.com", "novelfull.com", "novelfulll.com", "novelfull.net", "novelgate.net", "novelmax.net", "novel-next.com", "novelnext.com", "novelnext.dramanovels.io", "novelnext.net", "novelnextz.com", "novelonlinefree.com", "novelonlinefree.info", "novelonlinefull.com", "noveltrust.net", "novelusb.com", "novelusb.net", "novelxo.net", "novlove.com", "onlinenovelbook.com", "readnoveldaily.com", "readnovelfull.me", "topnovelfull.com", "wuxiaworld.live", "wuxia-world.online", "wuxiaworld.online", "zinnovel.net"];
+        for (let h of novelFullHosts) {
+            sites.push({
+                name: h, hostname: h,
+                searchUrl: (q) => `https://${h}/search?keyword=${encodeURIComponent(q)}`,
+                parseResults: (dom) => SiteSearchEngine.parseNovelFullStyle(dom, `https://${h}`, h)
+            });
+        }
+
+        // Madara Engine
+        const madaraHosts = ["greenztl2.com", "isekaiscan.com", "listnovel.com", "mangabob.com", "mangasushi.net", "manhwatop.com", "morenovel.net", "nightcomic.com", "noveltrench.com", "pery.info", "readwebnovel.xyz", "vipnovel.com", "webnovel.live", "wuxiaworld.site"];
+        for (let h of madaraHosts) {
+            sites.push({
+                name: h, hostname: h,
+                searchUrl: (q) => `https://${h}/?s=${encodeURIComponent(q)}&post_type=wp-manga`,
+                parseResults: (dom) => SiteSearchEngine.parseMadaraStyle(dom, `https://${h}`, h)
+            });
+        }
+
+        // Readwn Engine
+        const readwnHosts = ["fanmtl.com", "fannovel.com", "fannovels.com", "fansmtl.com", "novellive.app", "novellive.com", "novellive.net", "novelmt.com", "novelmtl.com", "readwn.com", "readwn.org", "wuxiabee.com", "wuxiabee.net", "wuxiabee.org", "wuxiafox.com", "wuxiago.com", "wuxiahere.com", "wuxiahub.com", "wuxiamtl.com", "wuxiaone.com", "wuxiap.com", "wuxiapub.com", "wuxiar.com", "wuxiaspot.com", "wuxiau.com", "wuxiazone.com"];
+        for (let h of readwnHosts) {
+            sites.push({
+                name: h, hostname: h,
+                searchUrl: (q) => `https://${h}/search?q=${encodeURIComponent(q)}`,
+                parseResults: (dom) => SiteSearchEngine.parseReadwnStyle(dom, `https://${h}`, h)
+            });
+        }
+
+        // Wordpress Engine
+        const wpHosts = ["bakapervert.wordpress.com", "blossomtranslation.com", "cherrymist.cafe", "crimsonmagic.me", "emberlib731.xyz", "flyonthewalls.blog", "frostfire10.wordpress.com", "igniforge.com", "isekaicyborg.wordpress.com", "lilyonthevalley.com", "moonbunnycafe.com", "nhvnovels.com", "novelib.com", "pienovels.com", "rainingtl.org", "raisingthedead.ninja", "razentl.com", "sasakitomyiano.wordpress.com", "shalvationtranslations.wordpress.com", "skythewoodtl.com", "smeraldogarden.com", "springofromance.com", "yoraikun.wordpress.com"];
+        for (let h of wpHosts) {
+            sites.push({
+                name: h, hostname: h,
+                searchUrl: (q) => `https://${h}/?s=${encodeURIComponent(q)}`,
+                parseResults: (dom) => SiteSearchEngine.parseWordpressStyle(dom, `https://${h}`, h)
+            });
+        }
+
+        // Noblemtl Engine
+        const nobleHosts = ["arcanetranslations.com", "bookalb.com", "daotranslate.com", "daotranslate.us", "faloomtl.com", "genesistls.com", "hoxionia.com", "jobnib.com", "moonlightnovel.com", "noblemtl.com", "novelcranel.org", "novelsknight.com", "novelsparadise.net", "pandamtl.com", "readfreebooksonline.org", "tamagotl.com", "taonovel.com", "universalnovel.com"];
+        for (let h of nobleHosts) {
+            sites.push({
+                name: h, hostname: h,
+                searchUrl: (q) => `https://${h}/?s=${encodeURIComponent(q)}`,
+                parseResults: (dom) => SiteSearchEngine.parseNoblemtlStyle(dom, `https://${h}`, h)
+            });
+        }
+
+        // LightNovelWorld Engine
+        const lnwHosts = ["lightnovelcave.com", "lightnovelpub.fan", "lightnovelworld.co", "lightnovelworld.com", "novelbob.org", "novelfire.docsachhay.net", "novelpub.com", "pandanovel.co", "webnovelpub.com", "webnovelpub.pro"];
+        for (let h of lnwHosts) {
+            sites.push({
+                name: h, hostname: h,
+                searchUrl: (q) => `https://${h}/search?keyword=${encodeURIComponent(q)}`,
+                parseResults: (dom) => SiteSearchEngine.parseLightNovelWorldStyle(dom, `https://${h}`, h)
+            });
+        }
+
+        // General / Other Sites (~400 sites)
+        const generalHosts = ["27k.net", "4ksw.com", "69shuba.tw", "888novel.com", "88xiaoshuo.net", "aerialrain.com", "akknovel.com", "alicesw.com", "alphapolis.co.jp", "alternatehistory.com", "amor-yaoi.com", "anythingnovel.com", "api.mangadex.org", "app.yoru.world", "archiveofourown.org", "asianfanfics.com", "asianhobbyist.com", "asianovel.net", "asstr.org", "a-t.nu", "babelnovel.com", "bednovel.com", "betwixtedbutterfly.com", "b.faloo.com", "biquge.tw", "bnatranslations.com", "book18.org", "bookswithqianya.com", "botitranslation.com", "boxnovel.net", "boxnovel.org", "boylove.cc", "bqka.cc", "brightnovels.com", "brittanypage43.com", "buntls.com", "cangji.net", "chaleuria.com", "chichipeph.com", "chickengege.org", "chosentwofanfic.com", "chrysanthemumgarden.com", "chyoa.com", "ckandawrites.online", "comics.8muses.com", "comrademao.com", "coronatranslation.com", "creativenovels.com", "crimsontranslations.com", "crushnovelpo.blog", "cyborg-tl.com", "czbooks.net", "dao-divine-tl.com", "dark-novels.ru", "dasuitl.com", "ddxs.com", "deviantart.com", "diurnis.com", "dummynovels.com", "edanglarstranslations.com", "empirenovel.com", "engnovel.com", "erofus.com", "estar.jp", "exiledrebelsscanlations.com", "fanficparadise.com", "fanfiction.com.br", "fanfictionero.com", "fanfiction.mugglenet.com", "fanficus.com", "fenrirealm.com", "ffxs8.com", "ficador.com", "ficbook.net", "fic.fan", "fictionhunt.com", "fictionmania.tv", "fictionzone.net", "ficwad.com", "fimfiction.net", "findnovel.net", "finestories.com", "flying-lines.com", "forum.questionablequesting.com", "forums.nrvnqsr.com", "forums.spacebattles.com", "forums.sufficientvelocity.com", "foxteller.com", "freelightnovel.net", "freewebnovel.com", "fuhuzz.pro", "gamefaqs.gamespot.com", "genesistudio.com", "global.novelpia.com", "goblinsguide.com", "goldennovel.com", "goodnovel.com", "graverobbertl.site", "gravitynovels.com", "gravitytales.com", "gunnerkrigg.com", "gutenberg.spiegel.de", "helheimscans.com", "helheimscans.org", "helioscans.com", "hellping.org", "hentai-foundry.com", "hiscension.com", "hostednovel.com", "hui3r.wordpress.com", "idleturtle-translations.com", "idnovel.my.id", "ilwxs.com", "imgur.com", "indomtl.com", "indowebnovel.id", "indratranslations.com", "inkitt.com", "innnovel.com", "inoveltranslation.com", "isotls.com", "ixdzs8.com", "ixdzs.tw", "jade-rabbit.net", "jadescrolls.com", "japtem.com", "jjwxc.net", "jonaxxstories.com", "jpmtl.com", "kakuyomu.jp", "karistudio.com", "kaystls.site", "kdtnovels.com", "knoxt.space", "kobatochan.com", "krytykal.org", "lanry.space", "lazygirltranslations.com", "leafstudio.site", "liberspark.com", "libread.com", "libri7.com", "lightnovelasia.com", "lightnovelbastion.com", "lightnovelbox.com", "lightnovelfr.com", "lightnovelread.com", "lightnovelreader.org", "lightnovels.live", "lightnovels.me", "lightnovelstranslations.com", "literotica.com", "lnmtl.com", "lnreader.org", "lorenovels.com", "m.38xs.com", "m.88xiaoshuo.net", "machine-translation.org", "madnovel.com", "magic.wizards.com", "mandarinducktales.com", "mangadex.org", "mangakakalot.com", "mangallama.com", "manganelo.com", "manganov.com", "mangaread.co", "manhwaden.com", "marx2mao.com", "marxists.org", "mayanovel.com", "m.bqg225.com", "m.chinesefantasynovels.com", "mcstories.com", "meionovel.id", "m.freelightnovel.net", "m.gzbpi.com", "midnightrambles.in", "m.ilwxs.com", "mimihui.com", "mistminthaven.com", "m.metanovel.org", "m.mywuxiaworld.com", "m.novelspread.com", "moondaisyscans.biz", "moonquill.com", "mottruyen.com.vn", "mottruyen.vn", "m.qbxsw.com", "m.qqxs.vip", "m.shuhaige.net", "m.sjks88.com", "m.tapas.io", "mtled-novels.com", "mtlnation.com", "mtlnovel.com", "mtlnovels.com", "mtlreader.com", "mtnovel.net", "m.ttshu8.com", "mvlempyr.io", "m.wuxiaworld.co", "m.xklxsw.net", "m.xpaoshuba.com", "mydramanovel.com", "my-novel.online", "mystorywave.com", "myxls.net", "mznovels.com", "nanomashin.online", "ncode.syosetu.com", "neobook.org", "nepustation.com", "nineheavens.org", "nobadnovel.com", "novel18.syosetu.com", "novel543.com", "novelall.com", "novel.babelchain.org", "novelbin.com", "novelbuddy.com", "novelbuddy.io", "novelcool.com", "novelcrush.com", "novelfever.com", "novelfire.net", "novelgo.id", "novelgreat.net", "novelhall.com", "novelhi.com", "novelhold.com", "novelight.net", "novelingua.com", "novelmania.com.br", "novelmao.com", "novelmedium.com", "novel.naver.com", "novelonomicon.com", "novelpassion.com", "novelplex.org", "novelsect.com", "novelsemperor.com", "novelsemperor.net", "novelsfull.com", "novelshub.org", "novelsknight.punchmanga.online", "novelsonline.net", "novelsonline.org", "novels.pl", "novelspread.com", "novelsquare.blog", "novelsrock.com", "noveltoon.mobi", "noveltranslatedbyc.blogspot.com", "noveluniverse.com", "novelupdates.cc", "novelupdates.com", "novelupdates.online", "novelversetranslations.com", "novicetranslations.com", "ntruyen.vn", "nyantl.wordpress.com", "octopii.co", "old.ranobelib.me", "ontimestory.eu", "ossantl.com", "panda-novel.com", "pandapama.com", "pandasnovel.com", "patreon.com", "pawread.com", "peachblossomcodex.com", "peachpitting.com", "peachpuff.in", "peachygardens.blogspot.com", "piaotia.com", "pindangscans.com", "powanjuan.cc", "puretl.com", "qbxsw.com", "qinxiaoshuo.com", "quanben5.io", "quanben.io", "queenrosenovel.blogspot.com", "questionablequesting.com", "quotev.com", "raeitranslations.com", "rainofsnow.com", "randomtranslator.com", "ranobelib.me", "ranobes.com", "ranobes.net", "ranobes.top", "readcomiconline.li", "readernovel.net", "readhive.org", "readingpia.me", "readlightnovel.cc", "readlightnovel.me", "readlightnovel.meme", "readlightnovel.org", "readlightnovel.today", "readlitenovel.com", "readnovelfull.com", "readnovelfull.org", "readnovelmtl.com", "reddit.com", "re-library.com", "requiemtls.com", "royalroad.com", "royalroadl.com", "rtd.moe", "rtenzo.net", "rubymaybetranslations.com", "ruvers.ru", "sangtacviet.com", "sangtacviet.vip", "scifistories.com", "scribblehub.com", "secondlifetranslations.com", "semprot.com", "sexstories.com", "shanghaifantasy.com", "shinningnoveltranslations.com", "shinsori.com", "shintranslations.com", "shirokuns.com", "shitouxs.com", "shmtranslations.com", "shubaowb.com", "shubaow.net", "shuhaige.net", "shw5.cc", "sites.google.com", "sjks88.com", "sj.uukanshu.com", "skydemonorder.com", "snoutandco.ca", "snowycodex.com", "soafp.com", "sonako.fandom.com", "sonako.wikia.com", "sousetsuka.com", "soverse.com", "spiritfanfiction.com", "sspai.com", "starlightstream.net", "sto.cx", "storiesonline.net", "storyseedling.com", "sweek.com", "systemtranslation.com", "taffygirl13.wordpress.com", "tapas.io", "tapread.com", "teanovel.com", "teanovel.net", "teenfic.net", "template.org", "tigertranslations.org", "timotxt.com", "titannovel.net", "tl.rulate.ru", "toctruyen.net", "tomotranslations.com", "tongrenquan.org", "tongrenshe.cc", "translationchicken.com", "travistranslations.com", "truyenfull.vision", "truyenfull.vn", "truyennhabo.com", "truyenyy.com", "trxs.cc", "ttshu8.com", "twkan.com", "uaa.com", "untamedalley.com", "velvet-reverie.org", "veratales.com", "volarenovels.com", "vynovel.com", "wanderertl130.id", "wanderinginn.com", "watashiwasugoidesu.com", "wattpad.com", "wattpad.com.vn", "webnovel.com", "webnovelonline.com", "wenku8.net", "wetriedtls.com", "wfxs.tw", "whitemoonlightnovels.com", "wnmtl.com", "wnmtl.org", "woopread.com", "wordexcerpt.com", "worldnovel.online", "wtnovels.com", "wtr-lab.com", "wuxia.blog", "wuxia.city", "wuxia.click", "wuxiaworld.co", "wuxiaworld.com", "wuxiaworld.eu", "wuxiaworld.world", "www.8muses.com", "www.dudushuge.com", "www.fanfiction.net", "www.fictionpress.com", "www.lightsnovel.com", "www.mangahere.cc", "www.rebirth.online", "wxscs.com", "xbanxia.cc", "xbiquge.so", "xiaoshubao.net", "xiaoshuogui.com", "xiaxuenovels.xyz", "xpaoshuba.com", "yeduge.com", "yushubo.net", "zenithnovels.com", "zenithtls.com", "zeonic-republic.net", "zhenhunxiaoshuo.com", "zirusmusings.com", "zirusmusings.net"];
+        for (let h of generalHosts) {
+            sites.push({
+                name: h, hostname: h,
+                searchUrl: (q) => `https://${h}/?s=${encodeURIComponent(q)}`,
+                parseResults: (dom) => SiteSearchEngine.parseWordpressStyle(dom, `https://${h}`, h)
+            });
+        }
+    }
 
     static parseNovelFullStyle(dom, baseUrl, sourceName) {
         let results = [];
         let items = dom.querySelectorAll(".list-truyen .row, .archive .list-truyen-item-wrap, .list .row");
         for (let item of items) {
-            let a = item.querySelector(".truyen-title a") || item.querySelector("h3 a") || item.querySelector("a");
+            let a = item.querySelector(".truyen-title a, h3 a, a");
             if (a && a.href) {
-                let snippet = item.querySelector(".text-primary") || item.querySelector(".author");
+                let snippet = item.querySelector(".text-primary, .author");
                 results.push({
                     title: a.textContent.trim(),
                     url: SiteSearchEngine.resolveUrl(baseUrl, a.getAttribute("href")),
                     snippet: snippet ? snippet.textContent.trim() : "",
+                    source: sourceName
+                });
+            }
+        }
+        return results;
+    }
+
+    static parseMadaraStyle(dom, baseUrl, sourceName) {
+        let results = [];
+        let items = dom.querySelectorAll(".c-tabs-item__content, .search-wrap .manga-item, .manga-item");
+        for (let item of items) {
+            let a = item.querySelector(".post-title a, h3 a, a");
+            if (a && a.href) {
+                let snippet = item.querySelector(".summary__content, .excerpt, .summary");
+                results.push({
+                    title: a.textContent.trim(),
+                    url: SiteSearchEngine.resolveUrl(baseUrl, a.getAttribute("href")),
+                    snippet: snippet ? snippet.textContent.trim() : "",
+                    source: sourceName
+                });
+            }
+        }
+        return results;
+    }
+
+    static parseWordpressStyle(dom, baseUrl, sourceName) {
+        let results = [];
+        let items = dom.querySelectorAll("article, .post-item, .latest-post, .entry");
+        for (let item of items) {
+            let a = item.querySelector(".entry-title a, .post-title a, h2 a, a");
+            if (a && a.href) {
+                let snippet = item.querySelector(".entry-summary, .post-excerpt, p");
+                results.push({
+                    title: a.textContent.trim(),
+                    url: SiteSearchEngine.resolveUrl(baseUrl, a.getAttribute("href")),
+                    snippet: snippet ? snippet.textContent.trim().substring(0, 150) : "",
+                    source: sourceName
+                });
+            }
+        }
+        return results;
+    }
+
+    static parseReadwnStyle(dom, baseUrl, sourceName) {
+        let results = [];
+        let items = dom.querySelectorAll(".novels-list li, .chapter-list li, .list-chapter li, li");
+        for (let item of items) {
+            let a = item.querySelector("a");
+            if (a && a.href && (a.href.includes("/novel/") || a.href.includes("/book/"))) {
+                let title = item.querySelector(".novel-title, h4, .title") || a;
+                results.push({
+                    title: title.textContent.trim(),
+                    url: SiteSearchEngine.resolveUrl(baseUrl, a.getAttribute("href")),
+                    snippet: "",
+                    source: sourceName
+                });
+            }
+        }
+        return results;
+    }
+
+    static parseNoblemtlStyle(dom, baseUrl, sourceName) {
+        // Similar to Madara/WP but tailored
+        let results = [];
+        let items = dom.querySelectorAll(".bs, .listupd .bs, article");
+        for (let item of items) {
+            let a = item.querySelector("a");
+            if (a && a.href) {
+                let title = item.querySelector(".tt, h2, h3, .title") || a;
+                results.push({
+                    title: title.textContent.trim(),
+                    url: SiteSearchEngine.resolveUrl(baseUrl, a.getAttribute("href")),
+                    snippet: "",
+                    source: sourceName
+                });
+            }
+        }
+        return results;
+    }
+
+    static parseLightNovelWorldStyle(dom, baseUrl, sourceName) {
+        let results = [];
+        let items = dom.querySelectorAll(".novel-item, .search-item, .novel-entry");
+        for (let item of items) {
+            let a = item.querySelector("a[href*='/novel/'], a");
+            if (a && a.href) {
+                let titleEl = item.querySelector("h4, h3, .novel-title, .title") || a;
+                results.push({
+                    title: titleEl.textContent.trim(),
+                    url: SiteSearchEngine.resolveUrl(baseUrl, a.getAttribute("href")),
+                    snippet: "",
                     source: sourceName
                 });
             }
@@ -493,17 +645,22 @@ class SiteSearchEngine {
             }
         };
 
-        let promises = sites.map(async (site) => {
-            if (onProgress) onProgress(site.name, "searching");
-            let results = await SiteSearchEngine.fetchSiteResults(site, query);
-            completedCount++;
-            mergeResults(results);
-            if (onProgress) onProgress(site.name, `done (${results.length})`);
-            if (onResults) onResults([...merged], completedCount, sites.length);
-            return results;
-        });
+        // BATCHING: To prevent overwhelming proxies and browser connection limits
+        const BATCH_SIZE = 10;
+        for (let i = 0; i < sites.length; i += BATCH_SIZE) {
+            let batch = sites.slice(i, i + BATCH_SIZE);
+            let promises = batch.map(async (site) => {
+                if (onProgress) onProgress(site.name, "searching");
+                let results = await SiteSearchEngine.fetchSiteResults(site, query);
+                completedCount++;
+                mergeResults(results);
+                if (onProgress) onProgress(site.name, `done (${results.length})`);
+                if (onResults) onResults([...merged], completedCount, sites.length);
+                return results;
+            });
+            await Promise.all(promises);
+        }
 
-        await Promise.all(promises);
         return merged;
     }
 

@@ -124,6 +124,8 @@ class SearchEngineAPI {
  *   - Separates badge into its own span (not inside the link text)
  */
 class SearchEngineUI {
+    static VERSION = "1.1.0"; // Cache-buster version
+
 
     /** Minimum time between progressive re-renders (ms) */
     static RENDER_DEBOUNCE_MS = 300;
@@ -241,6 +243,8 @@ class SearchEngineUI {
 
         resultsTable.innerHTML = "";
         statusSpan.textContent = isCustom ? "Searching supported novel sites..." : "Searching through CORS proxy...";
+        console.log(`[SearchEngineUI v${SearchEngineUI.VERSION}] Starting search for: "${query}"`);
+
 
         try {
             document.getElementById("searchEngineGoButton").disabled = true;
@@ -251,8 +255,9 @@ class SearchEngineUI {
 
             // Progressive rendering with debounce
             let onResults = isCustom ? (resultsSoFar, completed, total) => {
-                SearchEngineUI.renderResultsDebounced(resultsSoFar);
-                statusSpan.textContent = `Searching... ${completed}/${total} sites done, ${resultsSoFar.length} results`;
+                let filtered = SearchEngineUI.filterResultsByRelevancy(resultsSoFar, query);
+                SearchEngineUI.renderResultsDebounced(filtered, query);
+                statusSpan.textContent = `Searching... ${completed}/${total} sites done, ${filtered.length} results`;
             } : null;
 
             let results = await SearchEngineAPI.search(query, engine, onProgress, onResults);
@@ -260,7 +265,7 @@ class SearchEngineUI {
             // For non-custom engines, auto-fallback if no results
             let displayResults;
             if (isCustom) {
-                displayResults = results;
+                displayResults = SearchEngineUI.filterResultsByRelevancy(results, query);
             } else {
                 if (results.length === 0) {
                     let alts = ["duckduckgo", "bing", "google", "yandex"].filter(e => e !== engine);
@@ -270,7 +275,7 @@ class SearchEngineUI {
                         if (results.length > 0) { engine = alt; break; }
                     }
                 }
-                displayResults = SearchEngineUI.filterSupportedResults(results);
+                displayResults = SearchEngineUI.filterResultsByRelevancy(SearchEngineUI.filterSupportedResults(results), query);
             }
 
             // Final render (always do a full render at the end)
@@ -297,7 +302,7 @@ class SearchEngineUI {
     /**
      * Debounced render — prevents excessive DOM thrashing during progressive updates.
      */
-    static renderResultsDebounced(results) {
+    static renderResultsDebounced(results, query) {
         let now = Date.now();
         if (now - SearchEngineUI._lastRenderTime < SearchEngineUI.RENDER_DEBOUNCE_MS) {
             // Schedule a deferred render if not already scheduled
@@ -305,13 +310,29 @@ class SearchEngineUI {
                 SearchEngineUI._pendingRender = setTimeout(() => {
                     SearchEngineUI._pendingRender = null;
                     SearchEngineUI._lastRenderTime = Date.now();
-                    SearchEngineUI.renderResults(results);
+                    let filtered = SearchEngineUI.filterResultsByRelevancy(results, query);
+                    SearchEngineUI.renderResults(filtered);
                 }, SearchEngineUI.RENDER_DEBOUNCE_MS);
             }
             return;
         }
         SearchEngineUI._lastRenderTime = now;
         SearchEngineUI.renderResults(results);
+    }
+
+    /**
+     * Filters results to only those containing all keywords of the query in their title.
+     * @param {Array} results Array of result objects
+     * @param {string} query The search query
+     * @returns {Array} Filtered results
+     */
+    static filterResultsByRelevancy(results, query) {
+        if (!query || !query.trim()) return results;
+        let keywords = query.toLowerCase().split(/\s+/).filter(k => k.length > 0);
+        return results.filter(res => {
+            let title = res.title.toLowerCase();
+            return keywords.every(kw => title.includes(kw));
+        });
     }
 
     static filterSupportedResults(results) {
