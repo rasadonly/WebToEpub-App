@@ -499,7 +499,7 @@ HttpClient.CORS_PROXIES = [
 ];
 HttpClient.BLACKLISTED_PROXIES = new Set();
 HttpClient.corsProxyUrl = HttpClient.CORS_PROXIES[0].url;
-HttpClient.enableCorsProxy = false; // auto-enabled on first CORS failure
+HttpClient.enableCorsProxy = true;
 
 class FetchResponseHandler {
     isHtml() {

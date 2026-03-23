@@ -642,7 +642,7 @@ class SiteSearchEngine {
         // Using small batches (3) to balance speed vs. "don't over-load" requirement
         const BATCH_SIZE = 3;
 
-        while (currentIndex < sites.length && results.length < targetResultCount) {
+        while (currentIndex < sites.length) {
             let batch = sites.slice(currentIndex, currentIndex + BATCH_SIZE);
             let promises = batch.map(async (site) => {
                 if (onProgress) onProgress(site.name, "searching");
@@ -663,8 +663,12 @@ class SiteSearchEngine {
             }
             currentIndex += batch.length;
 
-            // Short-circuit if we have enough
-            if (results.length >= targetResultCount) break;
+            let sitesProcessedSoFar = currentIndex - startIndex;
+            // Stop if we have enough results AND we've searched at least 10 sites.
+            if (results.length >= targetResultCount && sitesProcessedSoFar >= 10) break;
+            // If we have at least one result AND we've searched at least 10 sites, we can stop.
+            if (results.length > 0 && sitesProcessedSoFar >= 10) break;
+            // Otherwise, keep searching (if results.length === 0, we continue until we find something or run out of sites).
         }
 
         return {
