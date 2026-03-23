@@ -280,8 +280,8 @@ progress::-moz-progress-bar {
 
     #coverUrlSection #sampleCoverImg {
         position: absolute !important;
-        left: 850px !important;
-        top: 20px !important;
+        right: 40px !important;
+        top: 40px !important;
         z-index: 100 !important;
         margin: 0 !important;
     }
