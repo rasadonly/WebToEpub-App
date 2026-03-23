@@ -7,6 +7,11 @@ class ArchiveOfOurOwnParser extends Parser {
         super();
     }
 
+    isExtension() {
+        return (typeof chrome !== "undefined" && !!chrome.runtime && !!chrome.runtime.id) ||
+            (typeof browser !== "undefined" && !!browser.runtime && !!browser.runtime.id);
+    }
+
     async getChapterUrls(dom, chapterUrlsUI) {
         let isSeries = dom.baseURI.includes("/series/");
         if (isSeries) {
@@ -55,7 +60,8 @@ class ArchiveOfOurOwnParser extends Parser {
     }
 
     async fetchChapterUrls(url) {
-        let dom = (await HttpClient.wrapFetch(url, { bypassProxy: true })).responseXML;
+        let options = this.isExtension() ? { bypassProxy: true } : {};
+        let dom = (await HttpClient.wrapFetch(url, options)).responseXML;
         return [...dom.querySelectorAll("ol.chapter a")]
             .map(link => this.linkToTocEntry(link));
     }
@@ -117,7 +123,8 @@ class ArchiveOfOurOwnParser extends Parser {
     }
 
     async fetchChapter(url) {
-        return (await HttpClient.wrapFetch(url, { bypassProxy: true })).responseXML;
+        let options = this.isExtension() ? { bypassProxy: true } : {};
+        return (await HttpClient.wrapFetch(url, options)).responseXML;
     }
 
     removeUnwantedElementsFromContentElement(element) {
