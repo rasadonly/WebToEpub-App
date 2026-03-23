@@ -622,9 +622,10 @@ class SiteSearchEngine {
      * @param {number} targetResultCount - Number of NEW results to find before stopping.
      * @param {boolean} includeSecondary
      * @param {function} onProgress - (siteName, status) => void
+     * @param {function} onResults - (newResults) => void
      * @returns {Promise<{results: Array, nextIndex: number}>}
      */
-    static async search(query, startIndex = 0, targetResultCount = 10, includeSecondary = false, onProgress) {
+    static async search(query, startIndex = 0, targetResultCount = 10, includeSecondary = false, onProgress, onResults) {
         let sites = [...SiteSearchEngine.PRIMARY_SITES];
         if (includeSecondary) {
             sites = sites.concat(SiteSearchEngine.SECONDARY_SITES);
@@ -652,15 +653,22 @@ class SiteSearchEngine {
             });
 
             let batchResults = await Promise.all(promises);
+            let newResultsFound = [];
             for (let siteResults of batchResults) {
                 for (let r of siteResults) {
                     let key = SiteSearchEngine.normalizeUrl(r.url);
                     if (!seenUrls.has(key)) {
                         seenUrls.add(key);
                         results.push(r);
+                        newResultsFound.push(r);
                     }
                 }
             }
+
+            if (newResultsFound.length > 0 && onResults) {
+                onResults(newResultsFound);
+            }
+
             currentIndex += batch.length;
 
             let sitesProcessedSoFar = currentIndex - startIndex;

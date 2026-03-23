@@ -5,12 +5,12 @@
  * Supports custom site search (SiteSearchEngine) and traditional engines (DDG, Bing, Google, Yandex).
  */
 class SearchEngineAPI {
-    static async search(query, engine, onProgress, startIndex = 0) {
+    static async search(query, engine, onProgress, startIndex = 0, onResults) {
         if (engine === "custom") {
-            return await SiteSearchEngine.search(query.trim(), startIndex, 10, false, onProgress);
+            return await SiteSearchEngine.search(query.trim(), startIndex, 10, false, onProgress, onResults);
         }
         if (engine === "custom_all") {
-            return await SiteSearchEngine.search(query.trim(), startIndex, 10, true, onProgress);
+            return await SiteSearchEngine.search(query.trim(), startIndex, 10, true, onProgress, onResults);
         }
         let searchQuery = query.trim() + " novel chapter";
         let results = [];
@@ -268,37 +268,27 @@ class SearchEngineUI {
             statusSpan.textContent = `Searching ${siteName}... (${status})`;
         } : null;
 
+        let onResults = isCustom ? (newResults) => {
+            let filtered = SearchEngineUI.filterResultsByRelevancy(newResults, SearchEngineUI._currentQuery);
+            if (filtered.length > 0) {
+                SearchEngineUI.renderResults(filtered, true);
+            }
+        } : null;
+
         let { results, nextIndex } = await SearchEngineAPI.search(
             SearchEngineUI._currentQuery,
             SearchEngineUI._currentEngine,
             onProgress,
-            SearchEngineUI._nextIndex
+            SearchEngineUI._nextIndex,
+            onResults
         );
 
         SearchEngineUI._nextIndex = nextIndex;
 
-        let displayResults;
-        if (isCustom) {
-            displayResults = SearchEngineUI.filterResultsByRelevancy(results, SearchEngineUI._currentQuery);
-        } else {
-            // For non-custom engines, auto-fallback if no results
-            if (results.length === 0 && SearchEngineUI._nextIndex === 0) { // Only try fallback on first batch
-                let alts = ["duckduckgo", "bing", "google", "yandex"].filter(e => e !== SearchEngineUI._currentEngine);
-                for (let alt of alts) {
-                    statusSpan.textContent = `No results from ${SearchEngineUI._currentEngine}. Trying ${alt}...`;
-                    let fallbackResult = await SearchEngineAPI.search(SearchEngineUI._currentQuery, alt, null, 0);
-                    if (fallbackResult.results.length > 0) {
-                        SearchEngineUI._currentEngine = alt;
-                        results = fallbackResult.results;
-                        SearchEngineUI._nextIndex = fallbackResult.nextIndex;
-                        break;
-                    }
-                }
-            }
-            displayResults = SearchEngineUI.filterResultsByRelevancy(SearchEngineUI.filterSupportedResults(results), SearchEngineUI._currentQuery);
+        if (!isCustom) {
+            let displayResults = SearchEngineUI.filterResultsByRelevancy(SearchEngineUI.filterSupportedResults(results), SearchEngineUI._currentQuery);
+            SearchEngineUI.renderResults(displayResults, true);
         }
-
-        SearchEngineUI.renderResults(displayResults, true);
 
         if (SearchEngineUI._allResults.length === 0) {
             statusSpan.textContent = "No results found.";
