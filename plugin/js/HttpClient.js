@@ -489,6 +489,7 @@ let BlockedHostNames = new Set();
 // CORS proxy settings (website mode)
 // These can be updated via the UI CORS proxy controls in popup.html
 HttpClient.CORS_PROXIES = [
+    { name: "Huggingface Proxy", url: "https://amono5667-versal-scrapper.hf.space/?url=" },
     { name: "Workers Proxy", url: "https://nexuspage-extractor.prasadghanwat123.workers.dev/?url=" },
     { name: "AllOrigins (Raw)", url: "https://api.allorigins.win/raw?url=" },
     { name: "corsproxy.io", url: "https://corsproxy.io/?url=" },
