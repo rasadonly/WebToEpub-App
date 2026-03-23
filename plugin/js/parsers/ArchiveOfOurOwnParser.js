@@ -19,20 +19,27 @@ class ArchiveOfOurOwnParser extends Parser {
             }
             return chapters;
         }
-    
+
         let baseUrl = this.getBaseUrl(dom);
         let chaptersElement = dom.querySelector("li.chapter");
         if (chaptersElement === null) {
             return this.singleChapterStory(baseUrl, dom);
         } else {
-            let chaptersUrl = dom.querySelector("ul#chapter_index a");
-            return this.fetchChapterUrls(chaptersUrl);
+            // Find the Full-Page Index link. 
+            // It could be directly in ul#chapter_index or inside a noscript tag.
+            let chaptersUrlLink = dom.querySelector("ul#chapter_index a") ||
+                dom.querySelector("li.chapter noscript a");
+            if (chaptersUrlLink) {
+                return this.fetchChapterUrls(chaptersUrlLink.href);
+            }
+            // Fallback for single-chapter work (or if navigate is missing)
+            return this.singleChapterStory(baseUrl, dom);
         }
     }
 
     async processWorkElement(work) {
         let chaptersLink = work.querySelector("dd.chapters a");
-        return chaptersLink === null 
+        return chaptersLink === null
             ? this.processSingleChapterWork(work)
             : this.processMultiChapterWork(chaptersLink);
     }
@@ -48,7 +55,7 @@ class ArchiveOfOurOwnParser extends Parser {
     }
 
     async fetchChapterUrls(url) {
-        let dom = (await HttpClient.wrapFetch(url)).responseXML;
+        let dom = (await HttpClient.wrapFetch(url, { bypassProxy: true })).responseXML;
         return [...dom.querySelectorAll("ol.chapter a")]
             .map(link => this.linkToTocEntry(link));
     }
@@ -77,7 +84,7 @@ class ArchiveOfOurOwnParser extends Parser {
     }
 
     populateUIImpl() {
-        document.getElementById("removeAuthorNotesRow").hidden = false; 
+        document.getElementById("removeAuthorNotesRow").hidden = false;
     }
 
     extractTitleImpl(dom) {
@@ -90,16 +97,16 @@ class ArchiveOfOurOwnParser extends Parser {
     }
 
     extractLanguage(dom) {
-        return dom.querySelector("meta[name='language']").getAttribute("content");
+        return dom.querySelector("meta[name='language']")?.getAttribute("content") ?? "en";
     }
 
     extractSubject(dom) {
         let tags = ([...dom.querySelectorAll(".meta .tags a")]);
-        return tags.map(e => e.textContent.trim()).join(", ");
+        return tags.map(e => e.textContent.trim()).filter(t => t).join(", ");
     }
 
     extractDescription(dom) {
-        return dom.querySelector("div.summary blockquote")?.textContent.trim();
+        return dom.querySelector("div.summary blockquote")?.textContent.trim() ?? "";
     }
 
     findChapterTitle(dom) {
@@ -107,6 +114,10 @@ class ArchiveOfOurOwnParser extends Parser {
         return contentHasTitle
             ? null
             : dom.querySelector("h2.heading");
+    }
+
+    async fetchChapter(url) {
+        return (await HttpClient.wrapFetch(url, { bypassProxy: true })).responseXML;
     }
 
     removeUnwantedElementsFromContentElement(element) {
