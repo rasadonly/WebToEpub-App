@@ -5,21 +5,23 @@
  * Supports custom site search (SiteSearchEngine) and traditional engines (DDG, Bing, Google, Yandex).
  */
 class SearchEngineAPI {
-    static async search(query, engine, onProgress, onResults) {
+    static async search(query, engine, onProgress, startIndex = 0) {
         if (engine === "custom") {
-            return await SiteSearchEngine.search(query.trim(), onProgress, false, onResults);
+            return await SiteSearchEngine.search(query.trim(), startIndex, 10, false, onProgress);
         }
         if (engine === "custom_all") {
-            return await SiteSearchEngine.search(query.trim(), onProgress, true, onResults);
+            return await SiteSearchEngine.search(query.trim(), startIndex, 10, true, onProgress);
         }
         let searchQuery = query.trim() + " novel chapter";
+        let results = [];
         switch (engine) {
-            case "duckduckgo": return await SearchEngineAPI.searchDuckDuckGo(searchQuery);
-            case "bing": return await SearchEngineAPI.searchBing(searchQuery);
-            case "google": return await SearchEngineAPI.searchGoogle(searchQuery);
-            case "yandex": return await SearchEngineAPI.searchYandex(searchQuery);
+            case "duckduckgo": results = await SearchEngineAPI.searchDuckDuckGo(searchQuery); break;
+            case "bing": results = await SearchEngineAPI.searchBing(searchQuery); break;
+            case "google": results = await SearchEngineAPI.searchGoogle(searchQuery); break;
+            case "yandex": results = await SearchEngineAPI.searchYandex(searchQuery); break;
             default: throw new Error("Unknown search engine: " + engine);
         }
+        return { results, nextIndex: -1 }; // Traditional engines don't easily paginate in this POC
     }
 
     static async searchDuckDuckGo(query) {
@@ -217,14 +219,13 @@ class SearchEngineUI {
     }
 
     static toggleSearchSection() {
-        let sections = ["inputSection", "advancedOptionsSection", "hiddenBibSection", "testSection", "imageSection", "outputSection", "readingListSection", "defaultParserSection"];
-        for (let id of sections) {
-            let el = document.getElementById(id);
-            if (el) el.hidden = true;
-        }
-        let searchSec = document.getElementById("searchEngineSection");
-        if (searchSec) searchSec.hidden = false;
+        // Navigate to the standalone search page instead of just toggling sections
+        window.location.href = "../index.html";
     }
+
+    static _currentQuery = "";
+    static _currentEngine = "";
+    static _nextIndex = 0;
 
     static async onSearch() {
         let queryInput = document.getElementById("searchEngineQuery");
@@ -234,68 +235,75 @@ class SearchEngineUI {
 
         if (!queryInput || !engineSelect || !resultsTable || !queryInput.value.trim()) return;
 
+        // Reset state
+        SearchEngineUI._currentQuery = queryInput.value.trim();
+        SearchEngineUI._currentEngine = engineSelect.value;
+        SearchEngineUI._nextIndex = 0;
+        SearchEngineUI._allResults = [];
+        SearchEngineUI._displayedCount = 0;
+
         // Always enable proxy for cross-domain
         if (typeof HttpClient !== "undefined") HttpClient.enableCorsProxy = true;
 
-        let query = queryInput.value.trim();
-        let engine = engineSelect.value;
-        let isCustom = engine === "custom" || engine === "custom_all";
-
         resultsTable.innerHTML = "";
-        statusSpan.textContent = isCustom ? "Searching supported novel sites..." : "Searching through CORS proxy...";
-        console.log(`[SearchEngineUI v${SearchEngineUI.VERSION}] Starting search for: "${query}"`);
-
+        statusSpan.textContent = "Starting search...";
+        console.log(`[SearchEngineUI v${SearchEngineUI.VERSION}] Starting search for: "${SearchEngineUI._currentQuery}"`);
 
         try {
             document.getElementById("searchEngineGoButton").disabled = true;
-
-            let onProgress = isCustom ? (siteName, status) => {
-                statusSpan.textContent = `Searching ${siteName}... (${status})`;
-            } : null;
-
-            // Progressive rendering with debounce
-            let onResults = isCustom ? (resultsSoFar, completed, total) => {
-                let filtered = SearchEngineUI.filterResultsByRelevancy(resultsSoFar, query);
-                SearchEngineUI.renderResultsDebounced(filtered, query);
-                statusSpan.textContent = `Searching... ${completed}/${total} sites done, ${filtered.length} results`;
-            } : null;
-
-            let results = await SearchEngineAPI.search(query, engine, onProgress, onResults);
-
-            // For non-custom engines, auto-fallback if no results
-            let displayResults;
-            if (isCustom) {
-                displayResults = SearchEngineUI.filterResultsByRelevancy(results, query);
-            } else {
-                if (results.length === 0) {
-                    let alts = ["duckduckgo", "bing", "google", "yandex"].filter(e => e !== engine);
-                    for (let alt of alts) {
-                        statusSpan.textContent = `No results from ${engine}. Trying ${alt}...`;
-                        results = await SearchEngineAPI.search(query, alt, null, null);
-                        if (results.length > 0) { engine = alt; break; }
-                    }
-                }
-                displayResults = SearchEngineUI.filterResultsByRelevancy(SearchEngineUI.filterSupportedResults(results), query);
-            }
-
-            // Final render (always do a full render at the end)
-            SearchEngineUI.renderResults(displayResults);
-
-            if (results.length === 0) {
-                statusSpan.textContent = isCustom
-                    ? "No results found. Try a different search term."
-                    : "No results from any engine. Try Custom search.";
-            } else if (displayResults.length === 0) {
-                statusSpan.textContent = `Found ${results.length} results, but none from supported novel sites.`;
-            } else {
-                statusSpan.textContent = `Found ${displayResults.length} results` +
-                    (isCustom ? " from supported novel sites." : ` using ${engine}.`);
-            }
+            await SearchEngineUI.fetchNextBatch();
         } catch (error) {
             statusSpan.textContent = "Search Error: " + error.message;
             console.error("Search error:", error);
         } finally {
             document.getElementById("searchEngineGoButton").disabled = false;
+        }
+    }
+
+    static async fetchNextBatch() {
+        let statusSpan = document.getElementById("searchEngineStatus");
+        let isCustom = SearchEngineUI._currentEngine === "custom" || SearchEngineUI._currentEngine === "custom_all";
+
+        let onProgress = isCustom ? (siteName, status) => {
+            statusSpan.textContent = `Searching ${siteName}... (${status})`;
+        } : null;
+
+        let { results, nextIndex } = await SearchEngineAPI.search(
+            SearchEngineUI._currentQuery,
+            SearchEngineUI._currentEngine,
+            onProgress,
+            SearchEngineUI._nextIndex
+        );
+
+        SearchEngineUI._nextIndex = nextIndex;
+
+        let displayResults;
+        if (isCustom) {
+            displayResults = SearchEngineUI.filterResultsByRelevancy(results, SearchEngineUI._currentQuery);
+        } else {
+            // For non-custom engines, auto-fallback if no results
+            if (results.length === 0 && SearchEngineUI._nextIndex === 0) { // Only try fallback on first batch
+                let alts = ["duckduckgo", "bing", "google", "yandex"].filter(e => e !== SearchEngineUI._currentEngine);
+                for (let alt of alts) {
+                    statusSpan.textContent = `No results from ${SearchEngineUI._currentEngine}. Trying ${alt}...`;
+                    let fallbackResult = await SearchEngineAPI.search(SearchEngineUI._currentQuery, alt, null, 0);
+                    if (fallbackResult.results.length > 0) {
+                        SearchEngineUI._currentEngine = alt;
+                        results = fallbackResult.results;
+                        SearchEngineUI._nextIndex = fallbackResult.nextIndex;
+                        break;
+                    }
+                }
+            }
+            displayResults = SearchEngineUI.filterResultsByRelevancy(SearchEngineUI.filterSupportedResults(results), SearchEngineUI._currentQuery);
+        }
+
+        SearchEngineUI.renderResults(displayResults, true);
+
+        if (SearchEngineUI._allResults.length === 0) {
+            statusSpan.textContent = "No results found.";
+        } else {
+            statusSpan.textContent = `Showing ${SearchEngineUI._allResults.length} results.`;
         }
     }
 
@@ -363,82 +371,114 @@ class SearchEngineUI {
         return url;
     }
 
+    static _allResults = [];
+    static _displayedCount = 0;
+    static RESULTS_PER_PAGE = 10;
+
     /**
      * Render results as modern cards using the defined search.css classes.
+     * Implements pagination:
+     *   - If local results are available, show them.
+     *   - If not enough local results but _nextIndex exists, fetch more from source.
      */
-    static renderResults(results) {
+    static renderResults(results, append = false) {
         const container = document.getElementById("searchEngineResultsTable");
         if (!container) return;
-        container.innerHTML = "";
-        if (results.length === 0) return;
 
-        const fragment = document.createDocumentFragment();
-
-        for (const res of results) {
-            const card = document.createElement("div");
-            card.className = "searchResultItem";
-
-            const row = document.createElement("div");
-            row.style.display = "flex";
-            row.style.justifyContent = "space-between";
-            row.style.alignItems = "center";
-            row.style.padding = "28px";
-            row.style.gap = "24px";
-
-            // Info Section
-            const info = document.createElement("div");
-            info.className = "result-info";
-
-            const titleWrap = document.createElement("div");
-            titleWrap.style.display = "flex";
-            titleWrap.style.alignItems = "center";
-            titleWrap.style.gap = "10px";
-            titleWrap.style.marginBottom = "4px";
-
-            const titleLink = document.createElement("a");
-            titleLink.href = res.url;
-            titleLink.target = "_blank";
-            titleLink.textContent = res.title;
-            titleWrap.appendChild(titleLink);
-
-            if (res.source) {
-                const badge = document.createElement("span");
-                badge.className = "source-badge";
-                badge.textContent = res.source;
-                titleWrap.appendChild(badge);
-            }
-            info.appendChild(titleWrap);
-
-            const urlText = document.createElement("span");
-            urlText.className = "searchResultUrl";
-            urlText.textContent = res.url;
-            info.appendChild(urlText);
-
-            if (res.snippet) {
-                const snippet = document.createElement("div");
-                snippet.className = "searchResultSnippet";
-                snippet.textContent = res.snippet;
-                info.appendChild(snippet);
-            }
-
-            // Action Section
-            const action = document.createElement("div");
-            const importBtn = document.createElement("button");
-            importBtn.className = "import-btn";
-            importBtn.textContent = "Import to WebToEpub";
-            importBtn.onclick = () => {
-                const manualUrl = "plugin/popup.html?mode=manual&url=" + encodeURIComponent(res.url);
-                window.location.href = manualUrl;
-            };
-            action.appendChild(importBtn);
-
-            row.appendChild(info);
-            row.appendChild(action);
-            card.appendChild(row);
-            fragment.appendChild(card);
+        if (!append) {
+            container.innerHTML = "";
+            SearchEngineUI._allResults = results || [];
+            SearchEngineUI._displayedCount = 0;
+        } else {
+            if (results) SearchEngineUI._allResults = SearchEngineUI._allResults.concat(results);
         }
 
-        container.appendChild(fragment);
+        // Batch to show now
+        const nextBatch = SearchEngineUI._allResults.slice(
+            SearchEngineUI._displayedCount,
+            SearchEngineUI._displayedCount + SearchEngineUI.RESULTS_PER_PAGE
+        );
+
+        // Remove existing "Show More" button if it exists
+        const existingShowMore = document.getElementById("showMoreResultsBtn");
+        if (existingShowMore) existingShowMore.remove();
+
+        if (nextBatch.length > 0) {
+            const fragment = document.createDocumentFragment();
+            for (const res of nextBatch) {
+                const card = document.createElement("div");
+                card.className = "searchResultItem";
+                const row = document.createElement("div");
+                row.className = "result-row";
+                const info = document.createElement("div");
+                info.className = "result-info";
+                const titleWrap = document.createElement("div");
+                titleWrap.className = "result-title-wrap";
+                const titleLink = document.createElement("a");
+                titleLink.href = res.url;
+                titleLink.target = "_blank";
+                titleLink.textContent = res.title;
+                titleWrap.appendChild(titleLink);
+                if (res.source) {
+                    const badge = document.createElement("span");
+                    badge.className = "source-badge";
+                    badge.textContent = res.source;
+                    titleWrap.appendChild(badge);
+                }
+                info.appendChild(titleWrap);
+                const urlText = document.createElement("span");
+                urlText.className = "searchResultUrl";
+                urlText.textContent = res.url;
+                info.appendChild(urlText);
+                if (res.snippet) {
+                    const snippet = document.createElement("div");
+                    snippet.className = "searchResultSnippet";
+                    snippet.textContent = res.snippet;
+                    info.appendChild(snippet);
+                }
+                const action = document.createElement("div");
+                action.className = "result-actions";
+                const importBtn = document.createElement("button");
+                importBtn.className = "import-btn";
+                importBtn.textContent = "Import to WebToEpub";
+                importBtn.onclick = () => {
+                    if (document.getElementById("inputSection")) {
+                        SearchEngineUI.startImport(res.url);
+                    } else {
+                        // Standalone search page (index.html), navigate to popup
+                        window.location.href = "plugin/popup.html?mode=manual&url=" + encodeURIComponent(res.url);
+                    }
+                };
+                action.appendChild(importBtn);
+                row.appendChild(info);
+                row.appendChild(action);
+                card.appendChild(row);
+                fragment.appendChild(card);
+            }
+            SearchEngineUI._displayedCount += nextBatch.length;
+            container.appendChild(fragment);
+        }
+
+        // Decide if we show the "Show More" button
+        const hasMoreLocal = SearchEngineUI._displayedCount < SearchEngineUI._allResults.length;
+        const hasMoreRemote = SearchEngineUI._nextIndex !== -1;
+
+        if (hasMoreLocal || hasMoreRemote) {
+            const showMoreBtn = document.createElement("button");
+            showMoreBtn.id = "showMoreResultsBtn";
+            showMoreBtn.className = "show-more-btn";
+            showMoreBtn.textContent = hasMoreLocal ? "Show More" : "Search More Sites...";
+            showMoreBtn.onclick = () => {
+                showMoreBtn.disabled = true;
+                showMoreBtn.textContent = "Loading...";
+                if (hasMoreLocal) {
+                    SearchEngineUI.renderResults(null, true);
+                } else {
+                    SearchEngineUI.fetchNextBatch();
+                }
+            };
+            container.appendChild(showMoreBtn);
+        }
     }
 
     static startImport(url) {

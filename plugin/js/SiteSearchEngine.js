@@ -615,53 +615,62 @@ class SiteSearchEngine {
     // ─── Search Orchestrator ─────────────────────────────────────────────
 
     /**
-     * Search all sites in parallel with progressive rendering.
+     * Search sites incrementally until targetResultCount is reached or all sites are exhausted.
      *
      * @param {string} query
-     * @param {function} onProgress - (siteName, status) => void
+     * @param {number} startIndex - Index in the sites array to start from.
+     * @param {number} targetResultCount - Number of NEW results to find before stopping.
      * @param {boolean} includeSecondary
-     * @param {function} onResults  - (resultsSoFar, completed, total) => void
-     * @returns {Promise<Array>}
+     * @param {function} onProgress - (siteName, status) => void
+     * @returns {Promise<{results: Array, nextIndex: number}>}
      */
-    static async search(query, onProgress, includeSecondary = false, onResults) {
+    static async search(query, startIndex = 0, targetResultCount = 10, includeSecondary = false, onProgress) {
         let sites = [...SiteSearchEngine.PRIMARY_SITES];
         if (includeSecondary) {
             sites = sites.concat(SiteSearchEngine.SECONDARY_SITES);
         }
 
-        if (onProgress) onProgress("Starting", `Searching ${sites.length} sites...`);
-
-        let merged = [];
-        let seenUrls = new Set();
-        let completedCount = 0;
-
-        let mergeResults = (siteResults) => {
-            for (let r of siteResults) {
-                let key = SiteSearchEngine.normalizeUrl(r.url);
-                if (!seenUrls.has(key)) {
-                    seenUrls.add(key);
-                    merged.push(r);
-                }
-            }
-        };
-
-        // BATCHING: To prevent overwhelming proxies and browser connection limits
-        const BATCH_SIZE = 10;
-        for (let i = 0; i < sites.length; i += BATCH_SIZE) {
-            let batch = sites.slice(i, i + BATCH_SIZE);
-            let promises = batch.map(async (site) => {
-                if (onProgress) onProgress(site.name, "searching");
-                let results = await SiteSearchEngine.fetchSiteResults(site, query);
-                completedCount++;
-                mergeResults(results);
-                if (onProgress) onProgress(site.name, `done (${results.length})`);
-                if (onResults) onResults([...merged], completedCount, sites.length);
-                return results;
-            });
-            await Promise.all(promises);
+        if (onProgress && startIndex === 0) {
+            onProgress("Starting", `Searching ${sites.length} sites...`);
         }
 
-        return merged;
+        let results = [];
+        let seenUrls = new Set();
+        let currentIndex = startIndex;
+
+        // Search one by one (or in very small batches) until we hit the target count
+        // Using small batches (3) to balance speed vs. "don't over-load" requirement
+        const BATCH_SIZE = 3;
+
+        while (currentIndex < sites.length && results.length < targetResultCount) {
+            let batch = sites.slice(currentIndex, currentIndex + BATCH_SIZE);
+            let promises = batch.map(async (site) => {
+                if (onProgress) onProgress(site.name, "searching");
+                let siteResults = await SiteSearchEngine.fetchSiteResults(site, query);
+                if (onProgress) onProgress(site.name, `found ${siteResults.length}`);
+                return siteResults;
+            });
+
+            let batchResults = await Promise.all(promises);
+            for (let siteResults of batchResults) {
+                for (let r of siteResults) {
+                    let key = SiteSearchEngine.normalizeUrl(r.url);
+                    if (!seenUrls.has(key)) {
+                        seenUrls.add(key);
+                        results.push(r);
+                    }
+                }
+            }
+            currentIndex += batch.length;
+
+            // Short-circuit if we have enough
+            if (results.length >= targetResultCount) break;
+        }
+
+        return {
+            results: results.slice(0, targetResultCount),
+            nextIndex: currentIndex < sites.length ? currentIndex : -1
+        };
     }
 
     // ─── Utilities ───────────────────────────────────────────────────────
