@@ -275,15 +275,18 @@ progress::-moz-progress-bar {
     }
 
     #coverUrlSection {
-        position: relative;
+        /* Remove position relative from tr as it is unreliable for absolute children */
     }
 
     #coverUrlSection #sampleCoverImg {
         position: absolute !important;
-        right: 40px !important;
-        top: 40px !important;
+        right: 50px !important;
+        top: 50px !important;
+        left: auto !important;
+        bottom: auto !important;
         z-index: 100 !important;
         margin: 0 !important;
+        width: 300px !important;
     }
 
     /* Style the cell that contains the image so it doesn't take space but doesn't hide it */
