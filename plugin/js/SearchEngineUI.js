@@ -241,6 +241,7 @@ class SearchEngineUI {
         SearchEngineUI._nextIndex = 0;
         SearchEngineUI._allResults = [];
         SearchEngineUI._displayedCount = 0;
+        SearchEngineUI._renderedUrls = new Set();
 
         // Always enable proxy for cross-domain
         if (typeof HttpClient !== "undefined") HttpClient.enableCorsProxy = true;
@@ -363,6 +364,7 @@ class SearchEngineUI {
 
     static _allResults = [];
     static _displayedCount = 0;
+    static _renderedUrls = new Set();
     static RESULTS_PER_PAGE = 10;
 
     /**
@@ -379,8 +381,21 @@ class SearchEngineUI {
             container.innerHTML = "";
             SearchEngineUI._allResults = results || [];
             SearchEngineUI._displayedCount = 0;
+            SearchEngineUI._renderedUrls = new Set();
+            if (results) {
+                results.forEach(r => SearchEngineUI._renderedUrls.add(typeof SiteSearchEngine !== "undefined" ? SiteSearchEngine.normalizeUrl(r.url) : r.url));
+            }
         } else {
-            if (results) SearchEngineUI._allResults = SearchEngineUI._allResults.concat(results);
+            if (results) {
+                // Deduplicate incoming results against what's already rendered
+                let uniqueNew = results.filter(r => {
+                    let key = typeof SiteSearchEngine !== "undefined" ? SiteSearchEngine.normalizeUrl(r.url) : r.url;
+                    if (SearchEngineUI._renderedUrls.has(key)) return false;
+                    SearchEngineUI._renderedUrls.add(key);
+                    return true;
+                });
+                SearchEngineUI._allResults = SearchEngineUI._allResults.concat(uniqueNew);
+            }
         }
 
         // Batch to show now
