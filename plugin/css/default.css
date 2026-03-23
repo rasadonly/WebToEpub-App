@@ -16,10 +16,7 @@
 #progressString {
     width: 36px;
     display: inline-block;
-    position: absolute;
-    left: 46%;
     color: white;
-    z-index: 1000;
     font-weight: bolder;
     margin-top: 7px;
 }
@@ -41,23 +38,23 @@ progress {
     margin-right: 4px;
 }
 
-    progress::-webkit-progress-bar {
-        border: 0;
-        height: 31px;
-        border-radius: 5px;
-    }
+progress::-webkit-progress-bar {
+    border: 0;
+    height: 31px;
+    border-radius: 5px;
+}
 
-    progress::-webkit-progress-value {
-        border: 0;
-        height: 31px;
-        border-radius: 8px;
-    }
+progress::-webkit-progress-value {
+    border: 0;
+    height: 31px;
+    border-radius: 8px;
+}
 
-    progress::-moz-progress-bar {
-        border: 0;
-        height: 31px;
-        border-radius: 5px;
-    }
+progress::-moz-progress-bar {
+    border: 0;
+    height: 31px;
+    border-radius: 5px;
+}
 
 [hidden] {
     display: none;
@@ -95,11 +92,15 @@ button:disabled {
     padding: 10px;
     margin: auto;
     border-radius: 5px;
-    position:relative;
+    position: relative;
 }
 
 
-input[type=text], input[type=url], textarea, select, #manualDelayPerChapterTag {
+input[type=text],
+input[type=url],
+textarea,
+select,
+#manualDelayPerChapterTag {
     padding: 4px;
     border: 1px #CCC solid;
     border-radius: 3px;
@@ -107,7 +108,9 @@ input[type=text], input[type=url], textarea, select, #manualDelayPerChapterTag {
     min-width: 356px;
 }
 
-#advancedOptionsSection textarea, #advancedOptionsSection select, #manualDelayPerChapterTag {
+#advancedOptionsSection textarea,
+#advancedOptionsSection select,
+#manualDelayPerChapterTag {
     min-width: inherit !important;
 }
 
@@ -122,62 +125,64 @@ textarea.allSpace {
     width: 69%;
 }
 
-#inputSection table, #chapterUrlsTable {
+#inputSection table,
+#chapterUrlsTable {
     width: 100%;
 }
 
-    #chapterUrlsTable input[type=checkbox],
-    #chapterUrlsTable img,
-    #chapterUrlsTable .tooltip {
-        float: left;
-    }
+#chapterUrlsTable input[type=checkbox],
+#chapterUrlsTable img,
+#chapterUrlsTable .tooltip {
+    float: left;
+}
 
-    img.downloadState {
-        height: 1em;
-        margin-top: 3px;
-    }
+img.downloadState {
+    height: 1em;
+    margin-top: 3px;
+}
 
-    .downloadStateDiv {
-        position: relative;
-        display: inline-block;
-    }
+.downloadStateDiv {
+    position: relative;
+    display: inline-block;
+}
 
-    .downloadStateDiv .tooltipText {
-        visibility: hidden;
-        width: 120px;
-        background-color: #808080;
-        color: white;
-        text-align: center;
-        padding: 5px;
-        border-radius: 5px;
-        position: absolute;
-        z-index: 1;
-        top: -5px;
-        left: 105%;
-    }
+.downloadStateDiv .tooltipText {
+    visibility: hidden;
+    width: 120px;
+    background-color: #808080;
+    color: white;
+    text-align: center;
+    padding: 5px;
+    border-radius: 5px;
+    position: absolute;
+    z-index: 1;
+    top: -5px;
+    left: 105%;
+}
 
-    .downloadStateDiv:hover .tooltipText {
-        visibility: visible;
-    }
+.downloadStateDiv:hover .tooltipText {
+    visibility: visible;
+}
 
-    #chapterUrlsTable input[type=text] {
-        width: 101.5%;
-        position: relative;
-        left: -16px;
-        max-width: 580px;
-    }
+#chapterUrlsTable input[type=text] {
+    width: 101.5%;
+    position: relative;
+    left: -16px;
+    max-width: 580px;
+}
 
-    #chapterUrlsTable tbody > tr > th {
-        text-align: center;
-        border-bottom: 1px #CCC solid;
-        padding: 0;
-    }
+#chapterUrlsTable tbody>tr>th {
+    text-align: center;
+    border-bottom: 1px #CCC solid;
+    padding: 0;
+}
 
-#inputSection tbody > tr > td:first-child {
+#inputSection tbody>tr>td:first-child {
     width: 75px;
 }
 
-#chapterUrlsTable > tr > td:first-child, #chapterUrlsTable > tbody > tr > td:nth-child(2) {
+#chapterUrlsTable>tr>td:first-child,
+#chapterUrlsTable>tbody>tr>td:nth-child(2) {
     width: 3px;
 }
 
@@ -197,15 +202,15 @@ button {
     max-height: 30px;
 }
 
-    button:hover {
-        background: linear-gradient(to bottom, #f6f6f6 5%, #ffffff 100%);
-        background-color: #f6f6f6;
-    }
+button:hover {
+    background: linear-gradient(to bottom, #f6f6f6 5%, #ffffff 100%);
+    background-color: #f6f6f6;
+}
 
-    button:active {
-        position: relative;
-        top: 1px;
-    }
+button:active {
+    position: relative;
+    top: 1px;
+}
 
 .progressSection {
     width: 94%;
@@ -244,14 +249,14 @@ button {
 .HiddenButtonSection {
     position: relative;
     display: flex;
-  justify-content: center;
+    justify-content: center;
     border-radius: 8px;
 }
 
 .sidebar {
-    background-color:rgba(40, 40, 40, 0.85);
-    float:left;
-    margin-right:5px;
+    background-color: rgba(40, 40, 40, 0.85);
+    float: left;
+    margin-right: 5px;
     height: 100%;
     width: 0px;
     position: fixed;
@@ -262,55 +267,67 @@ button {
     box-sizing: border-box;
     margin: 0 auto;
     transition: 0.25s;
-  }
+}
 
-    .sidebar.sidebarOpen {
-        width: 30%;
-        min-width: 300px;
-    }
-    
-    .sidebar .closebtn {
-        width: calc(100% - 10px);
-        padding-top: 5px;
-        padding-bottom: 5px;
-        border: 2px;
-        border-color: #dcdcdc75;
-        border-style: solid;
-        border-radius: 10px;
-        text-align: center;
-    }
-    .sidebar .closebtn:hover {
-        background-color: #cccccc75;
-    }
+.sidebar.sidebarOpen {
+    width: 30%;
+    min-width: 300px;
+}
 
-    .sidebar th {
-        text-align: center;
-    }
-    
-    .sidebar input.exclude {
-        accent-color: #bb0000;
-    }
-    .sidebar input[type=text], .sidebar input[type=url], .sidebar textarea, .sidebar select {
-        padding: 4px;
-        border: 1px #CCC solid;
-        border-radius: 3px;
-        max-width: 100%;
-        min-width: 100px;
-    }
-    .sidebar label {
-        display: block;
-        width: 100%;
-        font-size: 16px;
-        padding-bottom: 5px;
-        user-select: none;
-    }
-    .sidebar tr label:hover {
-        background-color:rgba(40, 40, 40);
-    }
-    #sbFilters {
-        max-height: calc(50% - 30px);
-        overflow-y: scroll;
-    }
-    #sbFilters input[type=text], #sbFilters input[type=url], #sbFilters textarea, #sbFilters select {
-        width: calc(100% - 15px);
-    }
+.sidebar .closebtn {
+    width: calc(100% - 10px);
+    padding-top: 5px;
+    padding-bottom: 5px;
+    border: 2px;
+    border-color: #dcdcdc75;
+    border-style: solid;
+    border-radius: 10px;
+    text-align: center;
+}
+
+.sidebar .closebtn:hover {
+    background-color: #cccccc75;
+}
+
+.sidebar th {
+    text-align: center;
+}
+
+.sidebar input.exclude {
+    accent-color: #bb0000;
+}
+
+.sidebar input[type=text],
+.sidebar input[type=url],
+.sidebar textarea,
+.sidebar select {
+    padding: 4px;
+    border: 1px #CCC solid;
+    border-radius: 3px;
+    max-width: 100%;
+    min-width: 100px;
+}
+
+.sidebar label {
+    display: block;
+    width: 100%;
+    font-size: 16px;
+    padding-bottom: 5px;
+    user-select: none;
+}
+
+.sidebar tr label:hover {
+    background-color: rgba(40, 40, 40);
+}
+
+#sbFilters {
+    max-height: calc(50% - 30px);
+    overflow-y: scroll;
+}
+
+#sbFilters input[type=text],
+#sbFilters input[type=url],
+#sbFilters textarea,
+#sbFilters select {
+    width: calc(100% - 15px);
+}

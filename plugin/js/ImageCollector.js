@@ -385,7 +385,7 @@ class ImageCollector {
             this.urlIndex.set(initialUrl, imageInfo.index);
             let fetchOptions = {
                 errorHandler: new FetchImageErrorHandler(parentPageUrl),
-                bypassProxy: true
+                bypassProxy: false
             };
             let xhr = await HttpClient.wrapFetch(initialUrl, fetchOptions);
             xhr = await this.findImageFileUrl(xhr, imageInfo, imageInfo.dataOrigFileUrl, fetchOptions);
