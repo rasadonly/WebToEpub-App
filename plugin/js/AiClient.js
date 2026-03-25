@@ -69,4 +69,60 @@ ${simplifiedHtml}
             return [];
         }
     }
+
+    /**
+     * Use AI to identify CSS selectors for chapter content, title, and removal list.
+     * @param {string} html 
+     * @param {string} url
+     * @returns {Promise<Object>}
+     */
+    static async fetchAiSelectors(html, url) {
+        const apiKey = typeof Secrets !== "undefined" ? Secrets.POLLINATIONS_API_KEY : null;
+        if (!apiKey) return null;
+
+        const simplifiedHtml = html.substring(0, 15000);
+
+        const prompt = `
+Analyze the following HTML from ${url} and identify the CSS selectors for a web novel chapter.
+1. "content": The main element containing the story text.
+2. "title": The element containing the chapter title.
+3. "remove": A comma-separated list of selectors for elements to remove (ads, social buttons, nav).
+
+Return ONLY a JSON object with keys "content", "title", and "remove".
+
+HTML Snippet:
+${simplifiedHtml}
+`;
+
+        try {
+            const response = await fetch("https://gen.pollinations.ai/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    model: AiClient.MODEL,
+                    messages: [
+                        { role: "system", content: "You are a web scraping expert focusing on web novels. Output ONLY valid JSON." },
+                        { role: "user", content: prompt }
+                    ],
+                    stream: false
+                })
+            });
+
+            if (!response.ok) throw new Error(`AI API error: ${response.status}`);
+
+            const data = await response.json();
+            const aiText = data.choices[0]?.message?.content || "{}";
+            const jsonMatch = aiText.match(/\{[\s\S]*\}/);
+            const results = JSON.parse(jsonMatch ? jsonMatch[0] : aiText);
+
+            console.log(`[AiClient] Successfully predicted selectors via AI:`, results);
+            return results;
+        } catch (e) {
+            console.error("[AiClient] Failed to predict selectors:", e);
+            return null;
+        }
+    }
 }

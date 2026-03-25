@@ -28,12 +28,12 @@ class DefaultParserSiteSettings {
     saveSiteConfig(hostname, contentCss, titleCss, removeCss, testUrl) {
         if (this.isConfigChanged(hostname, contentCss, titleCss, removeCss, testUrl)) {
             this.configs.set(
-                hostname, { 
-                    contentCss: contentCss, 
-                    titleCss: titleCss, 
-                    removeCss: removeCss,
-                    testUrl: testUrl 
-                }
+                hostname, {
+                contentCss: contentCss,
+                titleCss: titleCss,
+                removeCss: removeCss,
+                testUrl: testUrl
+            }
             );
             let serialized = JSON.stringify(Array.from(this.configs.entries()));
             window.localStorage.setItem(DefaultParserSiteSettings.storageName, serialized);
@@ -43,9 +43,9 @@ class DefaultParserSiteSettings {
     /** @private */
     isConfigChanged(hostname, contentCss, titleCss, removeCss, testUrl) {
         let config = this.configs.get(hostname);
-        return (config === undefined) || 
+        return (config === undefined) ||
             (contentCss !== config.contentCss) ||
-            (titleCss !== config.titleCss) || 
+            (titleCss !== config.titleCss) ||
             (removeCss !== config.removeCss) ||
             (testUrl !== config.testUrl);
     }
@@ -63,12 +63,10 @@ class DefaultParserSiteSettings {
         let config = this.getConfigForSite(hostname);
         if (config != null) {
             logic.findContent = dom => dom.querySelector(config.contentCss);
-            if (!util.isNullOrEmpty(config.titleCss))
-            {
+            if (!util.isNullOrEmpty(config.titleCss)) {
                 logic.findChapterTitle = dom => dom.querySelector(config.titleCss);
             }
-            if (!util.isNullOrEmpty(config.removeCss))
-            {
+            if (!util.isNullOrEmpty(config.removeCss)) {
                 logic.removeUnwanted = (element) => {
                     for (let e of element.querySelectorAll(config.removeCss)) {
                         e.remove();
@@ -91,7 +89,41 @@ class DefaultParserUI { // eslint-disable-line no-unused-vars
         DefaultParserUI.setDefaultParserUiVisibility(true);
         DefaultParserUI.populateDefaultParserUI(hostname, parser);
         document.getElementById("testDefaultParserButton").onclick = DefaultParserUI.testDefaultParser.bind(null, parser);
+        document.getElementById("autocompleteWithAiButton").onclick = DefaultParserUI.autocompleteWithAi.bind(null, parser);
         document.getElementById("finisheddefaultParserButton").onclick = DefaultParserUI.onFinishedClicked.bind(null, parser);
+    }
+
+    static async autocompleteWithAi(parser) {
+        let testUrl = DefaultParserUI.getTestChapterUrlInput().value.trim();
+        if (util.isNullOrEmpty(testUrl)) {
+            alert(UIText.Warning.warningNoChapterUrl);
+            return;
+        }
+
+        try {
+            document.getElementById("autocompleteWithAiButton").disabled = true;
+            document.getElementById("autocompleteWithAiButton").textContent = "...";
+
+            let xhr = await HttpClient.wrapFetch(testUrl);
+            let html = xhr.responseText;
+
+            let selectors = await AiClient.fetchAiSelectors(html, testUrl);
+            if (selectors) {
+                if (selectors.content) DefaultParserUI.getContentCssInput().value = selectors.content;
+                if (selectors.title) DefaultParserUI.getChapterTitleCssInput().value = selectors.title;
+                if (selectors.remove) DefaultParserUI.getUnwantedElementsCssInput().value = selectors.remove;
+
+                // Immediately test to show result
+                await DefaultParserUI.testDefaultParser(parser);
+            } else {
+                alert("AI failed to predict selectors for this page.");
+            }
+        } catch (err) {
+            ErrorLog.showErrorMessage(err);
+        } finally {
+            document.getElementById("autocompleteWithAiButton").disabled = false;
+            document.getElementById("autocompleteWithAiButton").textContent = chrome.i18n.getMessage("button_autocomplete_with_ai");
+        }
     }
 
     static onFinishedClicked(parser) {
@@ -141,8 +173,7 @@ class DefaultParserUI { // eslint-disable-line no-unused-vars
         DefaultParserUI.AddConfiguration(parser);
         let hostname = DefaultParserUI.getDefaultParserHostnameInput().value;
         let config = parser.siteConfigs.getConfigForSite(hostname);
-        if (util.isNullOrEmpty(config.testUrl))
-        {
+        if (util.isNullOrEmpty(config.testUrl)) {
             alert(UIText.Warning.warningNoChapterUrl);
             return;
         }

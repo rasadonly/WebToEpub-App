@@ -1,0 +1,18 @@
+{
+  "pass": [
+    "novelfull.com",
+    "freewebnovel.com",
+    "novelhall.com",
+    "scribblehub.com",
+    "archiveofourown.org",
+    "wtr-lab.com"
+  ],
+  "fail": [
+    "royalroad.com",
+    "novelfire.net",
+    "wuxiaworld.com",
+    "novelgo.id"
+  ],
+  "error": [],
+  "structural": []
+}
