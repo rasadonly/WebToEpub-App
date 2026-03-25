@@ -111,19 +111,17 @@ class SiteSearchEngine {
             {
                 name: "NovelHall",
                 hostname: "novelhall.com",
-                searchUrl: (q) => `https://www.novelhall.com/index.php?s=list&search=${encodeURIComponent(q)}`,
+                searchUrl: (q) => `https://www.novelhall.com/index.php?s=so&module=book&keyword=${encodeURIComponent(q)}`,
                 parseResults: (dom) => {
                     let results = [];
-                    let items = dom.querySelectorAll(".book-img-text ul li");
-                    if (items.length === 0) items = dom.querySelectorAll(".section2 ul li");
+                    let items = dom.querySelectorAll(".section3 table tr");
                     for (let item of items) {
-                        let a = item.querySelector("h3 a") || item.querySelector("a");
+                        let a = item.querySelector("td:nth-child(2) a");
                         if (a && a.href) {
-                            let snippet = item.querySelector(".intro") || item.querySelector("p");
                             results.push({
                                 title: a.textContent.trim(),
                                 url: SiteSearchEngine.resolveUrl("https://www.novelhall.com", a.getAttribute("href")),
-                                snippet: snippet ? snippet.textContent.trim() : "",
+                                snippet: "",
                                 source: "NovelHall"
                             });
                         }
@@ -134,17 +132,16 @@ class SiteSearchEngine {
             {
                 name: "NovelFire",
                 hostname: "novelfire.net",
-                searchUrl: (q) => `https://novelfire.net/ajax/searchLive?inputContent=${encodeURIComponent(q)}`,
+                searchUrl: (q) => `https://novelfire.net/search?keyword=${encodeURIComponent(q)}&type=title`,
                 parseResults: (dom) => {
                     let results = [];
-                    let items = dom.querySelectorAll(".novel-item");
-                    if (items.length === 0) items = dom.querySelectorAll("li");
+                    let items = dom.querySelectorAll(".novel-item, .col-lg-6 a[href*='/book/']");
                     for (let item of items) {
-                        let a = item.querySelector("a");
-                        if (a && a.href) {
-                            let titleEl = item.querySelector(".novel-title") || item.querySelector("h3") || a;
+                        let a = item.tagName === "A" ? item : item.querySelector("a[href*='/book/']");
+                        let titleEl = item.querySelector(".novel-title, h4, h3");
+                        if (a) {
                             results.push({
-                                title: titleEl.textContent.trim(),
+                                title: (titleEl ? titleEl.textContent : a.getAttribute("title") || a.textContent).trim(),
                                 url: SiteSearchEngine.resolveUrl("https://novelfire.net", a.getAttribute("href")),
                                 snippet: "",
                                 source: "NovelFire"
@@ -205,14 +202,14 @@ class SiteSearchEngine {
                 searchUrl: (q) => `https://www.wuxiaworld.com/novels/search?query=${encodeURIComponent(q)}`,
                 parseResults: (dom) => {
                     let results = [];
-                    let items = dom.querySelectorAll(".novel-item, .MuiGrid-item, article");
+                    let items = dom.querySelectorAll(".novel-item, .MuiGrid-item, article, [class*='NovelItem']");
                     for (let item of items) {
                         let a = item.querySelector("a[href*='/novel/']") || item.querySelector("a");
-                        if (a && a.href) {
-                            let titleEl = item.querySelector("h4, h3, .novel-title") || a;
+                        if (a) {
+                            let titleEl = item.querySelector("h4, h3, .novel-title, [class*='Title']") || a;
                             results.push({
                                 title: titleEl.textContent.trim(),
-                                url: a.href,
+                                url: SiteSearchEngine.resolveUrl("https://www.wuxiaworld.com", a.getAttribute("href")),
                                 snippet: "",
                                 source: "WuxiaWorld"
                             });
@@ -224,17 +221,15 @@ class SiteSearchEngine {
             {
                 name: "WTR-Lab",
                 hostname: "wtr-lab.com",
-                searchUrl: (q) => `https://wtr-lab.com/en/search?query=${encodeURIComponent(q)}`,
+                searchUrl: (q) => `https://wtr-lab.com/en/novel-finder?text=${encodeURIComponent(q)}`,
                 parseResults: (dom) => {
                     let results = [];
-                    let items = dom.querySelectorAll(".novel-item, .search-item, .card");
-                    for (let item of items) {
-                        let a = item.querySelector("a[href*='/novel/']") || item.querySelector("a");
-                        if (a && a.href) {
-                            let titleEl = item.querySelector("h5, h4, .title, .novel-title") || a;
+                    let items = dom.querySelectorAll("a.title");
+                    for (let a of items) {
+                        if (a.href) {
                             results.push({
-                                title: titleEl.textContent.trim(),
-                                url: a.href,
+                                title: a.textContent.trim(),
+                                url: SiteSearchEngine.resolveUrl("https://wtr-lab.com", a.getAttribute("href")),
                                 snippet: "",
                                 source: "WTR-Lab"
                             });
@@ -246,17 +241,17 @@ class SiteSearchEngine {
             {
                 name: "NovelGo",
                 hostname: "novelgo.id",
-                searchUrl: (q) => `https://novelgo.id/?s=${encodeURIComponent(q)}`,
+                searchUrl: (q) => `https://novelgo.id/?post_type=novel&s=${encodeURIComponent(q)}`,
                 parseResults: (dom) => {
                     let results = [];
-                    let items = dom.querySelectorAll(".novel-list .novel-item, .listupd .bs, article");
+                    let items = dom.querySelectorAll(".novel-item, article, .bs");
                     for (let item of items) {
-                        let a = item.querySelector("a");
-                        if (a && a.href) {
-                            let titleEl = item.querySelector(".novel-title, .ntitle, h2, h3") || a;
+                        let a = item.querySelector("a[href*='/novel/'], a[href*='/book/']");
+                        if (a) {
+                            let titleEl = item.querySelector(".novel-item-title, .novel-title, .tt, .ntitle, h3, h2") || a;
                             results.push({
                                 title: titleEl.textContent.trim(),
-                                url: a.href,
+                                url: SiteSearchEngine.resolveUrl("https://novelgo.id", a.getAttribute("href")),
                                 snippet: "",
                                 source: "NovelGo"
                             });
