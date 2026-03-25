@@ -732,6 +732,12 @@ class SiteSearchEngine {
             dom.head.appendChild(base);
 
             let results = site.parseResults(dom);
+
+            // AI Fallback if no results and AI query is configured (or as general fallback)
+            if (results.length === 0 && typeof AiClient !== "undefined") {
+                results = await AiClient.fetchAiResults(html, query, url);
+            }
+
             // Cap per-site results
             if (results.length > SiteSearchEngine.MAX_RESULTS_PER_SITE) {
                 results = results.slice(0, SiteSearchEngine.MAX_RESULTS_PER_SITE);

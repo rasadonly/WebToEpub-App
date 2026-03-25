@@ -66,6 +66,9 @@ vm.runInThisContext(utilContent);
 console.log("Evaluating SiteSearchEngine.js...");
 vm.runInThisContext(siteSearchEngineContent);
 
+// Lower timeout for faster audit
+SiteSearchEngine.PROXY_TIMEOUT_MS = 3000;
+
 // Ensure classes are attached to global if they aren't already
 if (typeof SiteSearchEngine !== 'undefined') global.SiteSearchEngine = SiteSearchEngine;
 if (typeof util !== 'undefined') global.util = util;
@@ -73,8 +76,7 @@ if (typeof util !== 'undefined') global.util = util;
 console.log("Global context prepared. SiteSearchEngine defined:", typeof SiteSearchEngine !== 'undefined');
 
 // --- Audit Logic ---
-const COMMON_WORDS = ["the", "novel", "story", "reincarnated", "leveling"];
-const BATCH_SIZE = 5;
+const COMMON_WORDS = ["the", "novel"];
 
 async function auditSite(site) {
     console.log(`\nAudit: [${site.name}] (${site.hostname})`);
@@ -108,6 +110,7 @@ async function runAudit() {
     const args = process.argv.slice(2);
     const siteFlag = args.findIndex(a => a === '--site');
     const specificSite = siteFlag !== -1 ? args[siteFlag + 1] : null;
+    const allFlag = args.includes("--all");
 
     let allSites = [];
 
@@ -120,6 +123,8 @@ async function runAudit() {
             console.error(`Error: Site "${specificSite}" not found.`);
             process.exit(1);
         }
+    } else if (allFlag) {
+        allSites = [...SiteSearchEngine.PRIMARY_SITES, ...SiteSearchEngine.SECONDARY_SITES];
     } else {
         // Collect a representative sample of all engines
         const primary = [...SiteSearchEngine.PRIMARY_SITES];
@@ -147,15 +152,26 @@ async function runAudit() {
         structural: []
     };
 
-    // Process sequentially for clearer logs
-    for (const site of allSites) {
-        const res = await auditSite(site);
-        if (res.status === "PASS") report.pass.push(site.hostname);
-        else if (res.status === "FAIL") report.fail.push(site.hostname);
-        else if (res.status === "ERROR") report.error.push({ site: site.hostname, error: res.error });
-        else if (res.status === "STRUCTURAL_ERROR") report.structural.push({ site: site.hostname, results: res.results });
+    // Process in batches to speed up
+    const BATCH_SIZE = 2;
+    for (let i = 0; i < allSites.length; i += BATCH_SIZE) {
+        const batch = allSites.slice(i, i + BATCH_SIZE);
+        console.log(`Auditing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(allSites.length / BATCH_SIZE)}...`);
 
-        await new Promise(resolve => setTimeout(resolve, 500));
+        const results = await Promise.all(batch.map(async (site) => {
+            const res = await auditSite(site);
+            return { site, res };
+        }));
+
+        for (const { site, res } of results) {
+            if (res.status === "PASS") report.pass.push(site.hostname);
+            else if (res.status === "FAIL") report.fail.push(site.hostname);
+            else if (res.status === "ERROR") report.error.push({ site: site.hostname, error: res.error });
+            else if (res.status === "STRUCTURAL_ERROR") report.structural.push({ site: site.hostname, results: res.results });
+        }
+
+        // Brief pause between batches to respect proxy rate limits
+        await new Promise(resolve => setTimeout(resolve, 1000));
     }
 
     // Output Summary
