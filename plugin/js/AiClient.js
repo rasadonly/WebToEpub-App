@@ -71,7 +71,7 @@ ${simplifiedHtml}
     }
 
     /**
-     * Use AI to identify CSS selectors for chapter content, title, and removal list.
+     * Identify CSS selectors for chapter content, title, and removal list using AI.
      * @param {string} html 
      * @param {string} url
      * @returns {Promise<Object>}
@@ -80,17 +80,21 @@ ${simplifiedHtml}
         const apiKey = typeof Secrets !== "undefined" ? Secrets.POLLINATIONS_API_KEY : null;
         if (!apiKey) return null;
 
-        const simplifiedHtml = html.substring(0, 15000);
+        // Simplify HTML to fit as much structure as possible
+        const simplifiedHtml = AiClient.simplifyHtml(html).substring(0, 30000);
 
         const prompt = `
-Analyze the following HTML from ${url} and identify the CSS selectors for a web novel chapter.
-1. "content": The main element containing the story text.
-2. "title": The element containing the chapter title.
-3. "remove": A comma-separated list of selectors for elements to remove (ads, social buttons, nav).
+You are helping a user autocomplete the "Default Parser" settings for WebToEpub.
+URL: ${url}
 
-Return ONLY a JSON object with keys "content", "title", and "remove".
+Identify the best CSS selectors for:
+1. "content": The main element holding the story text (e.g., ".chapter-inner", "#vortex-content").
+2. "title": The element holding the chapter title (e.g., "h1.entry-title", ".chapter-header h2").
+3. "remove": A comma-separated string of selectors for elements to EXCLUDE (social sharing, ads, "next chapter" buttons, comments).
 
-HTML Snippet:
+Return ONLY a JSON object: {"content": "...", "title": "...", "remove": "..."}
+
+HTML Structure:
 ${simplifiedHtml}
 `;
 
@@ -104,7 +108,7 @@ ${simplifiedHtml}
                 body: JSON.stringify({
                     model: AiClient.MODEL,
                     messages: [
-                        { role: "system", content: "You are a web scraping expert focusing on web novels. Output ONLY valid JSON." },
+                        { role: "system", content: "You are a web parsing expert. Output ONLY valid JSON." },
                         { role: "user", content: prompt }
                     ],
                     stream: false
@@ -118,11 +122,25 @@ ${simplifiedHtml}
             const jsonMatch = aiText.match(/\{[\s\S]*\}/);
             const results = JSON.parse(jsonMatch ? jsonMatch[0] : aiText);
 
-            console.log(`[AiClient] Successfully predicted selectors via AI:`, results);
+            console.log(`[AiClient] Autocomplete selectors found:`, results);
             return results;
         } catch (e) {
-            console.error("[AiClient] Failed to predict selectors:", e);
+            console.error("[AiClient] Failed to autocomplete selectors:", e);
             return null;
         }
+    }
+
+    /**
+     * Strips scripts, styles, and other noise to maximize structural content for AI.
+     */
+    static simplifyHtml(html) {
+        if (!html) return "";
+        return html
+            .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+            .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
+            .replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, "")
+            .replace(/<!--[\s\S]*?-->/g, "")
+            .replace(/\s+/g, " ")
+            .trim();
     }
 }
