@@ -130,7 +130,7 @@ class UserPreferences { // eslint-disable-line no-unused-vars
         this.disableWebpImageFormatError = this.addPreference("disableWebpImageFormatError", "disableWebpImageFormatErrorCheckbox", false);
 
         // CORS Proxy Preferences (Website Mode)
-        this.enableCorsProxy = this.addPreference("enableCorsProxy", "enableCorsProxyCheckbox", false);
+        this.enableCorsProxy = this.addPreference("enableCorsProxy", "enableCorsProxyCheckbox", true);
         this.corsProxyUrl = this.addPreference("corsProxyUrl", "corsProxyInput", HttpClient.corsProxyUrl);
 
         document.getElementById("themeColorTag").addEventListener("change", UserPreferences.SetTheme);

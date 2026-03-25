@@ -257,6 +257,7 @@ class HttpClient {
                 try {
 
                     let fetchUrl = proxyUrl + encodeURIComponent(url.trim());
+                    console.log(`[WebToEpub] Attempting proxy fetch: ${proxyUrl} -> ${url}`);
 
                     let fetchOptions = Object.assign({}, wrapOptions.fetchOptions, {
                         credentials: "omit"
@@ -267,7 +268,7 @@ class HttpClient {
                     try {
                         response = await fetch(fetchUrl, fetchOptions);
                     } catch (networkError) {
-                        console.warn(`[WebToEpub] Proxy ${proxyUrl} network failure`);
+                        console.warn(`[WebToEpub] Proxy ${proxyUrl} network failure:`, networkError);
                         continue;
                     }
 
@@ -300,6 +301,7 @@ class HttpClient {
 
                     // Success! This proxy is working, so "stick" to it for future requests
                     if (HttpClient.corsProxyUrl !== proxyUrl) {
+                        console.log(`[WebToEpub] Switching to working proxy: ${proxyUrl}`);
                         HttpClient.corsProxyUrl = proxyUrl;
                         HttpClient.updateCorsProxyUi();
                     }
@@ -310,7 +312,7 @@ class HttpClient {
                     if (e.isUserCancel) {
                         throw e;
                     }
-                    console.warn(`[WebToEpub] Proxy ${proxyUrl} failed. Blacklisting...`);
+                    console.warn(`[WebToEpub] Proxy ${proxyUrl} failed: ${e.message}. Blacklisting...`);
                     HttpClient.BLACKLISTED_PROXIES.add(proxyUrl);
                 }
             }
@@ -526,6 +528,7 @@ class FetchResponseHandler {
             let html = new DOMParser().parseFromString(data, "text/html");
             util.setBaseTag(HttpClient.unproxyUrl(this.response.url), html);
             this.responseXML = html;
+            this.responseText = data;
             return this;
         }.bind(this));
     }

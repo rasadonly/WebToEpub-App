@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * AiClient - Interacts with Pollinations AI for search fallbacks.
+ * AiClient - Interacts with Pollinations AI for search fallbacks and parser autocompletion.
  */
 class AiClient {
     static MODEL = "nova-fast"; // Cost-efficient and fast
@@ -20,8 +20,7 @@ class AiClient {
             return [];
         }
 
-        // Limit HTML size to save tokens/pollen
-        const simplifiedHtml = html.substring(0, 10000);
+        const simplifiedHtml = AiClient.simplifyHtml(html).substring(0, 10000);
 
         const prompt = `
 Extract search results for the novel search query "${query}" from the following HTML snippet.
@@ -51,14 +50,10 @@ ${simplifiedHtml}
                 })
             });
 
-            if (!response.ok) {
-                throw new Error(`AI API error: ${response.status}`);
-            }
+            if (!response.ok) throw new Error(`AI API error: ${response.status}`);
 
             const data = await response.json();
             const aiText = data.choices[0]?.message?.content || "[]";
-
-            // Extract JSON from possible markdown wrapping
             const jsonMatch = aiText.match(/\[\s*\{[\s\S]*\}\s*\]/);
             const results = JSON.parse(jsonMatch ? jsonMatch[0] : aiText);
 
@@ -80,9 +75,7 @@ ${simplifiedHtml}
         const apiKey = typeof Secrets !== "undefined" ? Secrets.POLLINATIONS_API_KEY : null;
         if (!apiKey) return null;
 
-        // Simplify HTML to fit as much structure as possible
         const simplifiedHtml = AiClient.simplifyHtml(html).substring(0, 30000);
-
         const prompt = `
 You are helping a user autocomplete the "Default Parser" settings for WebToEpub.
 URL: ${url}
@@ -116,7 +109,6 @@ ${simplifiedHtml}
             });
 
             if (!response.ok) throw new Error(`AI API error: ${response.status}`);
-
             const data = await response.json();
             const aiText = data.choices[0]?.message?.content || "{}";
             const jsonMatch = aiText.match(/\{[\s\S]*\}/);
@@ -131,12 +123,67 @@ ${simplifiedHtml}
     }
 
     /**
+     * Detect the first chapter URL and site-level selectors from a TOC page.
+     * @param {string} html 
+     * @param {string} baseUrl 
+     * @returns {Promise<Object>} {firstChapterUrl, novelTitle, author}
+     */
+    static async fetchAiFirstChapter(html, baseUrl) {
+        const apiKey = typeof Secrets !== "undefined" ? Secrets.POLLINATIONS_API_KEY : null;
+        if (!apiKey) return null;
+
+        const simplifiedHtml = AiClient.simplifyHtml(html).substring(0, 20000);
+        const prompt = `
+You are helping identify the first chapter link of a novel from its Table of Contents (TOC) page.
+Base URL: ${baseUrl}
+
+Identify:
+1. "firstChapterUrl": The absolute URL of the very first chapter (e.g., Chapter 1).
+2. "novelTitle": The title of the novel if clearly visible.
+3. "author": The author name if clearly visible.
+
+Return ONLY a JSON object: {"firstChapterUrl": "...", "novelTitle": "...", "author": "..."}
+
+HTML Snippet:
+${simplifiedHtml}
+`;
+
+        try {
+            const response = await fetch("https://gen.pollinations.ai/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    model: AiClient.MODEL,
+                    messages: [
+                        { role: "system", content: "You are a novel site expert. Output ONLY valid JSON." },
+                        { role: "user", content: prompt }
+                    ],
+                    stream: false
+                })
+            });
+
+            if (!response.ok) throw new Error(`AI API error: ${response.status}`);
+            const data = await response.json();
+            const aiText = data.choices[0]?.message?.content || "{}";
+            const jsonMatch = aiText.match(/\{[\s\S]*\}/);
+            return JSON.parse(jsonMatch ? jsonMatch[0] : aiText);
+        } catch (e) {
+            console.error("[AiClient] Failed to detect first chapter:", e);
+            return null;
+        }
+    }
+
+    /**
      * Strips scripts, styles, and other noise to maximize structural content for AI.
      */
     static simplifyHtml(html) {
         if (!html) return "";
         return html
-            .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+            // Remove scripts except those likely to contain data
+            .replace(/<script\b(?![^>]*\btype=['"]?(?:application\/ld\+json|__NUXT__)['"]?)[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
             .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
             .replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, "")
             .replace(/<!--[\s\S]*?-->/g, "")

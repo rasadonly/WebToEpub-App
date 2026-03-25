@@ -94,21 +94,65 @@ class DefaultParserUI { // eslint-disable-line no-unused-vars
     }
 
     static async autocompleteWithAi(parser) {
-        let testUrl = DefaultParserUI.getTestChapterUrlInput().value.trim();
-        if (util.isNullOrEmpty(testUrl)) {
-            alert(UIText.Warning.warningNoChapterUrl);
-            return;
-        }
+        let testUrlInput = DefaultParserUI.getTestChapterUrlInput();
+        let startingUrlInput = document.getElementById("startingUrlInput");
+        let testUrl = testUrlInput.value.trim();
+        let startingUrl = startingUrlInput ? startingUrlInput.value.trim() : "";
 
         try {
             document.getElementById("autocompleteWithAiButton").disabled = true;
             document.getElementById("autocompleteWithAiButton").textContent = "...";
 
+            // Force proxy for manual configuration if not in a standard extension context
+            if (typeof chrome === "undefined" || !chrome.runtime?.id || window.location.protocol === "file:") {
+                HttpClient.enableCorsProxy = true;
+                HttpClient.updateCorsProxyUi();
+            }
+
+            // Phase 1: If Test Chapter URL is missing, detect it from TOC (Starting URL)
+            if (util.isNullOrEmpty(testUrl)) {
+                if (util.isNullOrEmpty(startingUrl)) {
+                    alert("Please provide a 'Starting URL' or a 'Test Chapter URL' so AI can investigate.");
+                    return;
+                }
+                console.log(`[DefaultParserUI] Phase 1: Searching TOC for first chapter: ${startingUrl}`);
+                let xhr = await HttpClient.wrapFetch(startingUrl);
+                let tocHtml = xhr.responseText || (xhr.responseXML ? xhr.responseXML.documentElement.outerHTML : "");
+
+                if (util.isNullOrEmpty(tocHtml)) {
+                    throw new Error("Failed to fetch TOC page. Check your connection or proxy.");
+                }
+
+                let tocInfo = await AiClient.fetchAiFirstChapter(tocHtml, startingUrl);
+                if (tocInfo && tocInfo.firstChapterUrl) {
+                    testUrl = tocInfo.firstChapterUrl;
+                    testUrlInput.value = testUrl;
+                    console.log(`[DefaultParserUI] Phase 1 Success. First chapter detected: ${testUrl}`);
+
+                    // Autofill Novel Title / Author if available
+                    if (tocInfo.novelTitle && !document.getElementById("titleInput").value) {
+                        document.getElementById("titleInput").value = tocInfo.novelTitle;
+                    }
+                    if (tocInfo.author && !document.getElementById("authorInput").value) {
+                        document.getElementById("authorInput").value = tocInfo.author;
+                    }
+                } else {
+                    throw new Error("AI could not find the first chapter link from the TOC. Please input it manually.");
+                }
+            }
+
+            // Phase 2: Analyze the chapter page for content selectors
+            console.log(`[DefaultParserUI] Phase 2: Analyzing chapter page: ${testUrl}`);
             let xhr = await HttpClient.wrapFetch(testUrl);
-            let html = xhr.responseText;
+            let html = xhr.responseText || (xhr.responseXML ? xhr.responseXML.documentElement.outerHTML : "");
+
+            if (util.isNullOrEmpty(html) || html.length < 100) {
+                throw new Error(`Failed to fetch chapter HTML. Please check your proxy settings and URL.`);
+            }
 
             let selectors = await AiClient.fetchAiSelectors(html, testUrl);
             if (selectors) {
+                console.log(`[DefaultParserUI] AI predicted selectors:`, selectors);
                 if (selectors.content) DefaultParserUI.getContentCssInput().value = selectors.content;
                 if (selectors.title) DefaultParserUI.getChapterTitleCssInput().value = selectors.title;
                 if (selectors.remove) DefaultParserUI.getUnwantedElementsCssInput().value = selectors.remove;
@@ -116,13 +160,16 @@ class DefaultParserUI { // eslint-disable-line no-unused-vars
                 // Immediately test to show result
                 await DefaultParserUI.testDefaultParser(parser);
             } else {
-                alert("AI failed to predict selectors for this page.");
+                alert("AI failed to predict selectors for this chapter page.");
             }
         } catch (err) {
+            console.error("[DefaultParserUI] Autocomplete failed:", err);
             ErrorLog.showErrorMessage(err);
         } finally {
             document.getElementById("autocompleteWithAiButton").disabled = false;
-            document.getElementById("autocompleteWithAiButton").textContent = chrome.i18n.getMessage("button_autocomplete_with_ai");
+            let label = "Autocomplete with AI";
+            try { label = chrome.i18n.getMessage("button_autocomplete_with_ai") || label; } catch (e) { /* fallback */ }
+            document.getElementById("autocompleteWithAiButton").textContent = label;
         }
     }
 
@@ -178,10 +225,36 @@ class DefaultParserUI { // eslint-disable-line no-unused-vars
             return;
         }
         try {
+            // Force proxy for manual configuration if not in a standard extension context
+            if (typeof chrome === "undefined" || !chrome.runtime?.id || window.location.protocol === "file:") {
+                HttpClient.enableCorsProxy = true;
+                HttpClient.updateCorsProxyUi();
+            }
+
             let xhr = await HttpClient.wrapFetch(config.testUrl);
-            let webPage = { rawDom: util.sanitize(xhr.responseXML.querySelector("*")) };
+            if (!xhr.responseXML) {
+                // If XML is not available, try to parse the text
+                let html = xhr.responseText || "";
+                if (html) {
+                    xhr.responseXML = new DOMParser().parseFromString(html, "text/html");
+                }
+            }
+
+            if (!xhr.responseXML) {
+                throw new Error("Failed to parse the test page. The response may be empty or invalid.");
+            }
+
+            let dom = xhr.responseXML;
+            if (!dom || !dom.documentElement) {
+                dom = new DOMParser().parseFromString(xhr.responseText || "", "text/html");
+            }
+
+            let webPage = { rawDom: dom };
             let content = parser.findContent(webPage.rawDom);
             if (content === null) {
+                console.error("[DefaultParserUI] Content not found for selector:", config.contentCss);
+                console.error("[DefaultParserUI] HTML length:", webPage.rawDom.documentElement.outerHTML.length);
+                console.error("[DefaultParserUI] HTML Snapshot (first 3000 chars):", webPage.rawDom.documentElement.outerHTML.substring(0, 3000));
                 let errorMsg = UIText.Error.errorContentNotFound(config.testUrl);
                 throw new Error(errorMsg);
             }
