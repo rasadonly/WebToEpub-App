@@ -16,7 +16,13 @@ class NovelhallParser extends Parser {
     }
 
     findContent(dom) {
-        return dom.querySelector("article div.entry-content");
+        return dom.querySelector("article div.entry-content") ||
+            dom.querySelector("div.entry-content") ||
+            dom.querySelector("div.read-content") ||
+            dom.querySelector("div.chapter-content") ||
+            dom.querySelector("div.content") ||
+            dom.querySelector("div#htmlContent") ||
+            dom.querySelector("article");
     }
 
     extractTitleImpl(dom) {
@@ -32,7 +38,9 @@ class NovelhallParser extends Parser {
     }
 
     findChapterTitle(dom) {
-        return dom.querySelector("article div.single-header h1");
+        return dom.querySelector("article div.single-header h1") ||
+            dom.querySelector("div.single-header h1") ||
+            dom.querySelector("h1.single-header");
     }
 
     findCoverImageUrl(dom) {
