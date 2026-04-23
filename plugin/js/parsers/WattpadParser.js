@@ -37,14 +37,36 @@ class WattpadParser extends Parser {
 
     async fetchChapterList(dom) {
         let storyId = WattpadParser.extractIdFromUrl(dom.baseURI);
+        if (!storyId) {
+            throw new Error(`Could not extract Wattpad story ID from URL: ${dom.baseURI}\nExpected a URL like wattpad.com/story/12345-story-name`);
+        }
         let chaptersUrl = `https://www.wattpad.com/api/v3/stories/${storyId}`;
         let json = (await HttpClient.fetchJson(chaptersUrl)).json;
         return json.parts.map(p => ({sourceUrl: p.url, title: p.title}));
     }
 
     static extractIdFromUrl(url) {
-        let path = new URL(url).pathname;
-        return path.split("/").filter(s => s.includes("-"))[0].split("-")[0];
+        let path;
+        try {
+            path = new URL(url).pathname;
+        } catch (e) {
+            path = url; // fallback if URL is malformed
+        }
+        let segments = path.split("/").filter(s => s.length > 0);
+
+        // Priority 1: segment in "12345-story-name" format (most common Wattpad URL)
+        let slugSeg = segments.find(s => /^\d+-/.test(s));
+        if (slugSeg) return slugSeg.split("-")[0];
+
+        // Priority 2: segment that is purely numeric (ID-only URL, e.g. /story/12345)
+        let pureSeg = segments.find(s => /^\d+$/.test(s));
+        if (pureSeg) return pureSeg;
+
+        // Priority 3: any segment containing numbers followed by a dash (less strict)
+        let anySeg = segments.find(s => s.includes("-") && /\d/.test(s));
+        if (anySeg) return anySeg.split("-")[0];
+
+        return null; // caller handles this
     }
 
     async fetchChapter(url) {

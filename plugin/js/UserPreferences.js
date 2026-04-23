@@ -132,6 +132,7 @@ class UserPreferences { // eslint-disable-line no-unused-vars
         // CORS Proxy Preferences (Website Mode)
         this.enableCorsProxy = this.addPreference("enableCorsProxy", "enableCorsProxyCheckbox", true);
         this.corsProxyUrl = this.addPreference("corsProxyUrl", "corsProxyInput", HttpClient.corsProxyUrl);
+        this.wtrLabCookieImport = this.addPreference("wtrLabCookieImport", "wtrLabCookieInput", "");
 
         document.getElementById("themeColorTag").addEventListener("change", UserPreferences.SetTheme);
     }
@@ -177,6 +178,9 @@ class UserPreferences { // eslint-disable-line no-unused-vars
         }
 
         this.writeToLocalStorage();
+        if (typeof HttpClient !== "undefined" && this.wtrLabCookieImport) {
+            HttpClient.setWtrLabCookiesFromUserInput(this.wtrLabCookieImport.value);
+        }
         this.notifyObserversOfChange();
     }
 

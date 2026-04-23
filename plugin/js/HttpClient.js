@@ -168,6 +168,75 @@ class HttpClient {
         return { credentials: "include" };
     }
 
+    /**
+     * Optional session cookies for wtr-lab.com (paste Netscape export or "Cookie:" header in Advanced options).
+     * Sent on requests to wtr-lab.com and *.wtr-lab.com. Public CORS proxies may still strip headers.
+     */
+    static setWtrLabCookiesFromUserInput(raw) {
+        HttpClient.wtrLabCookieHeader = HttpClient.parseNetscapeOrCookieHeader(raw || "");
+    }
+
+    static parseNetscapeOrCookieHeader(text) {
+        text = (text || "").trim();
+        if (!text) {
+            return "";
+        }
+        if (text.includes("\t")) {
+            let parts = [];
+            for (let rawLine of text.split(/\r?\n/)) {
+                let line = rawLine.trim();
+                if (!line) {
+                    continue;
+                }
+                if (line.startsWith("#HttpOnly_")) {
+                    line = line.replace(/^#HttpOnly_/, "");
+                } else if (line.startsWith("#")) {
+                    continue;
+                }
+                let cols = line.split("\t");
+                if (cols.length >= 7) {
+                    let name = cols[5];
+                    let value = cols.slice(6).join("\t");
+                    if (name) {
+                        parts.push(name + "=" + value);
+                    }
+                }
+            }
+            if (parts.length > 0) {
+                return parts.join("; ");
+            }
+        }
+        if (/^cookie\s*:/i.test(text)) {
+            text = text.replace(/^cookie\s*:/i, "").trim();
+        }
+        return text.replace(/\s*;\s*/g, "; ").trim();
+    }
+
+    static applyWtrLabCookieHeaderIfNeeded(fetchOptions, targetUrl) {
+        let cookie = HttpClient.wtrLabCookieHeader;
+        if (!cookie || !String(cookie).trim()) {
+            return;
+        }
+        let host = "";
+        try {
+            host = new URL(targetUrl).hostname;
+        } catch (e) {
+            return;
+        }
+        if (host !== "wtr-lab.com" && !host.endsWith(".wtr-lab.com")) {
+            return;
+        }
+        if (!fetchOptions.headers) {
+            fetchOptions.headers = { Cookie: cookie };
+            return;
+        }
+        if (typeof fetchOptions.headers.set === "function") {
+            fetchOptions.headers.set("Cookie", cookie);
+            return;
+        }
+        fetchOptions.headers = Object.assign({}, fetchOptions.headers, { Cookie: cookie });
+    }
+
     static wrapFetch(url, wrapOptions) {
         if (wrapOptions == null) {
             wrapOptions = {
@@ -220,6 +289,7 @@ class HttpClient {
         if (wrapOptions.fetchOptions == null) {
             wrapOptions.fetchOptions = HttpClient.makeOptions();
         }
+        HttpClient.applyWtrLabCookieHeaderIfNeeded(wrapOptions.fetchOptions, url);
 
         if (wrapOptions.errorHandler == null) {
             wrapOptions.errorHandler = new FetchErrorHandler();
@@ -230,98 +300,98 @@ class HttpClient {
         if (useProxy) {
 
             let proxiesToTry = [HttpClient.corsProxyUrl];
-
             for (let p of HttpClient.CORS_PROXIES) {
-                if (p.url !== HttpClient.corsProxyUrl) {
-                    proxiesToTry.push(p.url);
-                }
+                if (p.url !== HttpClient.corsProxyUrl) proxiesToTry.push(p.url);
             }
 
             // Filter out blacklisted proxies for this attempt
-            proxiesToTry = proxiesToTry.filter(url => !HttpClient.BLACKLISTED_PROXIES.has(url));
+            proxiesToTry = proxiesToTry.filter(u => !HttpClient.BLACKLISTED_PROXIES.has(u));
 
-            // If everything is blacklisted, clear it to allow an honest retry
+            // If everything is blacklisted, clear and try again
             if (proxiesToTry.length === 0) {
                 HttpClient.BLACKLISTED_PROXIES.clear();
-                proxiesToTry = [HttpClient.corsProxyUrl].concat(HttpClient.CORS_PROXIES.map(p => p.url).filter(u => u !== HttpClient.corsProxyUrl));
+                proxiesToTry = [HttpClient.corsProxyUrl].concat(
+                    HttpClient.CORS_PROXIES.map(p => p.url).filter(u => u !== HttpClient.corsProxyUrl)
+                );
             }
 
-            for (let i = 0; i < proxiesToTry.length; i++) {
-                let proxyUrl = proxiesToTry[i];
-                let isFinalProxyAttempt = (i === proxiesToTry.length - 1);
+            // ── Race all proxies simultaneously ─────────────────────────────
+            // Launch all proxies at once and use whichever responds first.
+            // Reduces worst-case wait from (N × timeout) to just one timeout.
+            const PROXY_TIMEOUT_MS = 8000;
 
+            // Map proxyUrl → AbortController so we can abort ONLY the losers.
+            // CRITICAL: never abort the winner's controller — doing so cancels the
+            // response body stream and causes arrayBuffer() to throw an AbortError.
+            const controllerMap = new Map();
+
+            const racePromises = proxiesToTry.map((proxyUrl) => {
                 if (BlockedHostNames.has(new URL(proxyUrl).hostname)) {
-                    continue;
+                    return Promise.reject(new Error(`blocked: ${proxyUrl}`));
+                }
+                const ctrl = new AbortController();
+                controllerMap.set(proxyUrl, ctrl);
+                const tid = setTimeout(() => ctrl.abort(), PROXY_TIMEOUT_MS);
+                const fetchUrl = proxyUrl + encodeURIComponent(url.trim());
+                const fetchOpts = Object.assign({}, wrapOptions.fetchOptions, {
+                    credentials: "omit",
+                    signal: ctrl.signal
+                });
+                return fetch(fetchUrl, fetchOpts)
+                    .then(response => {
+                        clearTimeout(tid);
+                        if (!response.ok) throw new Error(`${response.status}`);
+                        return { response, proxyUrl };
+                    })
+                    .catch(err => { clearTimeout(tid); throw err; });
+            });
+
+            try {
+                const { response, proxyUrl: winnerUrl } = await Promise.any(racePromises);
+
+                // Abort LOSING requests only — the winner's controller must stay alive
+                // until we finish reading the response body below.
+                for (const [pUrl, ctrl] of controllerMap) {
+                    if (pUrl !== winnerUrl) {
+                        try { ctrl.abort(); } catch (_) { /* ignore */ }
+                    }
                 }
 
-                try {
+                let proxyWrapOptions = Object.assign({}, wrapOptions, {
+                    isProxyAttempt: true,
+                    isFinalProxyAttempt: true
+                });
 
-                    let fetchUrl = proxyUrl + encodeURIComponent(url.trim());
-                    console.log(`[WebToEpub] Attempting proxy fetch: ${proxyUrl} -> ${url}`);
+                let ret = await HttpClient.checkResponseAndGetData(url, proxyWrapOptions, response);
 
-                    let fetchOptions = Object.assign({}, wrapOptions.fetchOptions, {
-                        credentials: "omit"
-                    });
+                // Response body fully read — safe to abort winner's controller now
+                try { controllerMap.get(winnerUrl)?.abort(); } catch (_) { /* ignore */ }
 
-                    let response;
-
-                    try {
-                        response = await fetch(fetchUrl, fetchOptions);
-                    } catch (networkError) {
-                        console.warn(`[WebToEpub] Proxy ${proxyUrl} network failure:`, networkError);
-                        continue;
-                    }
-
-                    if (!response.ok) {
-                        if (isFinalProxyAttempt) {
-                            return wrapOptions.errorHandler.onResponseError(url, wrapOptions, response);
-                        }
-                        console.warn(`[WebToEpub] Proxy ${proxyUrl} failed with status ${response.status}. Trying next...`);
-                        continue;
-                    }
-
-                    let proxyWrapOptions = Object.assign({}, wrapOptions, {
-                        isProxyAttempt: true,
-                        isFinalProxyAttempt: isFinalProxyAttempt
-                    });
-
-                    let ret = await HttpClient.checkResponseAndGetData(url, proxyWrapOptions, response);
-
-                    if (proxyWrapOptions.parser?.isCustomError(ret)) {
-
-                        let CustomErrorResponse = proxyWrapOptions.parser.setCustomErrorResponse(url, proxyWrapOptions, ret);
-
-                        return proxyWrapOptions.errorHandler.onResponseError(
-                            CustomErrorResponse.url,
-                            CustomErrorResponse.wrapOptions,
-                            CustomErrorResponse.response,
-                            CustomErrorResponse.errorMessage
-                        );
-                    }
-
-                    // Success! This proxy is working, so "stick" to it for future requests
-                    if (HttpClient.corsProxyUrl !== proxyUrl) {
-                        console.log(`[WebToEpub] Switching to working proxy: ${proxyUrl}`);
-                        HttpClient.corsProxyUrl = proxyUrl;
-                        HttpClient.updateCorsProxyUi();
-                    }
-
-                    return ret;
-
-                } catch (e) {
-                    if (e.isUserCancel) {
-                        throw e;
-                    }
-                    console.warn(`[WebToEpub] Proxy ${proxyUrl} failed: ${e.message}. Blacklisting...`);
-                    HttpClient.BLACKLISTED_PROXIES.add(proxyUrl);
+                if (proxyWrapOptions.parser?.isCustomError(ret)) {
+                    let CustomErrorResponse = proxyWrapOptions.parser.setCustomErrorResponse(url, proxyWrapOptions, ret);
+                    return proxyWrapOptions.errorHandler.onResponseError(
+                        CustomErrorResponse.url,
+                        CustomErrorResponse.wrapOptions,
+                        CustomErrorResponse.response,
+                        CustomErrorResponse.errorMessage
+                    );
                 }
+
+                // Stick to the winning proxy for future requests
+                if (HttpClient.corsProxyUrl !== winnerUrl) {
+                    console.log(`[WebToEpub] Switching to winning proxy: ${winnerUrl}`);
+                    HttpClient.corsProxyUrl = winnerUrl;
+                    HttpClient.updateCorsProxyUi();
+                }
+
+                return ret;
+
+            } catch (aggErr) {
+                // AggregateError — every proxy failed or timed out
+                console.warn("[WebToEpub] All proxies failed. Falling back to direct fetch:", url);
+                let newOptions = Object.assign({}, wrapOptions, { bypassProxy: true });
+                return HttpClient.wrapFetchImpl(url, newOptions);
             }
-
-            console.warn("[WebToEpub] All proxies failed. Retrying direct:", url);
-
-            let newOptions = Object.assign({}, wrapOptions, { bypassProxy: true });
-
-            return HttpClient.wrapFetchImpl(url, newOptions);
         }
 
         try {
@@ -384,7 +454,7 @@ class HttpClient {
             return wrapOptions.errorHandler.onResponseError(url, wrapOptions, response);
         } else {
             let handler = wrapOptions.responseHandler;
-            handler.setResponse(response);
+            handler.setResponse(response, url);
             return handler.extractContentFromResponse(response);
         }
     }
@@ -495,7 +565,7 @@ HttpClient.CORS_PROXIES = [
     { name: "Workers Proxy", url: "https://nexuspage-extractor.prasadghanwat123.workers.dev/?url=" },
     { name: "AllOrigins (Raw)", url: "https://api.allorigins.win/raw?url=" },
     { name: "corsproxy.io", url: "https://corsproxy.io/?url=" },
-    { name: "CodeTabs Proxy", url: "https://api.codetabs.com/v1/proxy/?url=" },
+    { name: "CodeTabs Proxy", url: "https://api.codetabs.com/v1/proxy?quest=" },
     { name: "Nexuspage Proxy", url: "https://nexuspage-extractor.vercel.app/?url=" },
     { name: "corsproxy.io (with key)", url: "https://corsproxy.io/?key=ab3170e1&url=" },
     { name: "CORS.lol", url: "https://api.cors.lol/?url=" }
@@ -503,18 +573,29 @@ HttpClient.CORS_PROXIES = [
 HttpClient.BLACKLISTED_PROXIES = new Set();
 HttpClient.corsProxyUrl = HttpClient.CORS_PROXIES[0].url;
 HttpClient.enableCorsProxy = true;
+HttpClient.wtrLabCookieHeader = "";
 
 class FetchResponseHandler {
     isHtml() {
-        return this.contentType.startsWith("text/html");
+        // Guard against null — response.headers.get("content-type") returns null
+        // when the CORS proxy doesn't forward the header.
+        if (!this.contentType) return true; // default to HTML (all fetches here are web pages)
+        let type = this.contentType.split(";")[0].trim().toLowerCase();
+        // Some CORS proxies (corsproxy.io, CORS.lol) return text/plain for HTML content
+        return type === "text/html" || type === "text/plain";
     }
 
-    setResponse(response) {
+    setResponse(response, originalUrl = null) {
         this.response = response;
         this.contentType = response.headers.get("content-type");
+        // Store the TRUE target URL so responseToHtml never has to reverse-engineer
+        // the proxy prefix from response.url (which changes when proxies redirect).
+        this.originalUrl = originalUrl || HttpClient.unproxyUrl(response.url);
     }
 
     extractContentFromResponse(response) {
+        // Default to HTML when content-type is absent or looks like text —
+        // this tool almost exclusively fetches web pages.
         if (this.isHtml()) {
             return this.responseToHtml(response);
         } else {
@@ -526,7 +607,9 @@ class FetchResponseHandler {
         return response.arrayBuffer().then(function (rawBytes) {
             let data = this.makeTextDecoder(response).decode(rawBytes);
             let html = new DOMParser().parseFromString(data, "text/html");
-            util.setBaseTag(HttpClient.unproxyUrl(this.response.url), html);
+            // Use the original target URL stored in setResponse — this is reliable
+            // even when a proxy performs a server-side redirect that mutates response.url.
+            util.setBaseTag(this.originalUrl, html);
             this.responseXML = html;
             this.responseText = data;
             return this;

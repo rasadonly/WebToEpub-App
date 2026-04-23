@@ -145,21 +145,20 @@ header p.subtitle {
 
 .searchResultItem {
     background: var(--card-bg);
-    backdrop-filter: blur(8px);
+    /* backdrop-filter removed: causes GPU repaint on every card hover/scroll */
     border: 1px solid var(--glass-border);
     border-radius: 20px;
-    transition: all var(--transition-normal);
+    transition: border-color var(--transition-normal), box-shadow var(--transition-normal);
     margin-bottom: 20px;
     display: block;
     width: 100%;
-    animation: fadeIn 0.4s ease-out both;
     overflow: hidden;
+    will-change: box-shadow;
 }
 
 .searchResultItem:hover {
-    transform: translateY(-4px);
     border-color: var(--primary);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 4px 24px rgba(0, 245, 255, 0.1), 0 10px 30px rgba(0, 0, 0, 0.3);
     background: rgba(30, 41, 59, 0.8);
 }
 
@@ -373,10 +372,16 @@ header p.subtitle {
     }
 }
 
+@media (prefers-reduced-motion: no-preference) {
+    .searchResultItem {
+        animation: fadeIn 0.25s ease-out both;
+    }
+}
+
 @keyframes fadeIn {
     from {
         opacity: 0;
-        transform: translateY(10px);
+        transform: translateY(8px);
     }
 
     to {

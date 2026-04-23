@@ -36,8 +36,11 @@ class JadeScrollsParser extends Parser {
     }
 
     async loadEpubMetaInfo(dom) {
-        // eslint-disable-next-line
-        let novelSlug = new URL(dom.baseURI).pathname.match(/\/novel\/([^/]+)/)[1];
+        let novelSlugMatch = new URL(dom.baseURI).pathname.match(/\/novel\/([^/]+)/);
+        let novelSlug = novelSlugMatch ? novelSlugMatch[1] : null;
+        if (!novelSlug) {
+            throw new Error(`Could not extract JadeScrolls novel slug from URL: ${dom.baseURI}\nExpected a URL like jadescrolls.com/novel/novel-slug`);
+        }
         let bookinfo = (await HttpClient.fetchJson("https://api.jadescrolls.com/api/novels?slug=" + novelSlug)).json;
         this.title = bookinfo.title;
         this.author = bookinfo.author_name;

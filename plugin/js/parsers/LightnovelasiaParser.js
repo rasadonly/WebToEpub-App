@@ -55,8 +55,11 @@ class LightnovelasiaParser extends Parser {
     }
     
     async loadEpubMetaInfo(dom) {
-        // eslint-disable-next-line
-        let novelSlug = new URL(dom.baseURI).pathname.match(/\/novel\/([^/]+)/)[1];
+        let novelSlugMatch = new URL(dom.baseURI).pathname.match(/\/novel\/([^/]+)/);
+        let novelSlug = novelSlugMatch ? novelSlugMatch[1] : null;
+        if (!novelSlug) {
+            throw new Error(`Could not extract Lightnovelasia novel slug from URL: ${dom.baseURI}\nExpected a URL like lightnovelasia.com/novel/novel-slug`);
+        }
         //magic value
         this.apiKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im91aHdqYmp2Ympjbm1iemxmcmtsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1MTMwNzQsImV4cCI6MjA4NTA4OTA3NH0.6_wyMFLThEyPimrEVmBLF9aYRdN1VaEGFtRHXilR8tg";
         let header = {

@@ -70,6 +70,10 @@ var main = (function () {
         document.getElementById("translatorRow").hidden = true;
         document.getElementById("fileAuthorAsRow").hidden = true;
         document.getElementById("defaultParserSection").hidden = true;
+        let wtrLabCookieRow = document.getElementById("wtrLabCookieRow");
+        if (wtrLabCookieRow) {
+            wtrLabCookieRow.hidden = true;
+        }
     }
 
     function populateMetaInfo(metaInfo) {
@@ -292,6 +296,7 @@ var main = (function () {
         // Sync HttpClient with preferences
         HttpClient.enableCorsProxy = userPreferences.enableCorsProxy.value;
         HttpClient.corsProxyUrl = userPreferences.corsProxyUrl.value;
+        HttpClient.setWtrLabCookiesFromUserInput(userPreferences.wtrLabCookieImport.value);
     }
 
     function isRunningInTabMode() {

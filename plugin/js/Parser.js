@@ -576,6 +576,15 @@ class Parser {
         let pageParser = webPage.parser;
         try {
             let webPageDom = await pageParser.fetchChapter(webPage.sourceUrl);
+            // Guard: some CORS proxies return wrong Content-Type (text/plain, missing header)
+            // causing FetchResponseHandler to skip HTML parsing, leaving responseXML undefined.
+            if (webPageDom == null) {
+                throw new Error(
+                    `Page content could not be parsed from: ${webPage.sourceUrl}\n` +
+                    `The CORS proxy may have returned an unexpected Content-Type. ` +
+                    `Try switching the proxy in the CORS PROXY selector.`
+                );
+            }
             delete webPage.error;
             webPage.rawDom = webPageDom;
             pageParser.preprocessRawDom(webPageDom);
@@ -613,6 +622,7 @@ class Parser {
     }
 
     removeUnusedElementsToReduceMemoryConsumption(webPageDom) {
+        if (webPageDom == null) return; // safety net: guard against undefined DOM
         util.removeElements(webPageDom.querySelectorAll("select, iframe"));
     }
 

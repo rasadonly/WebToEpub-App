@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 
 <head>
@@ -183,6 +183,13 @@
                         <input type="checkbox" id="enableCorsProxyCheckbox"
                             title="Route fetches through the CORS proxy URL (required for website mode)" />
                         <label for="enableCorsProxyCheckbox">Enable</label>
+                    </td>
+                </tr>
+                <tr id="wtrLabCookieRow" hidden="true">
+                    <td>WTR-Lab cookies (optional)</td>
+                    <td colspan="3">
+                        <textarea id="wtrLabCookieInput" rows="3" style="width:95%"
+                            placeholder="Netscape export (Cookie-Editor) or Cookie header. Improves glossary and logged-in API calls; extension mode is more reliable than website + proxy."></textarea>
                     </td>
                 </tr>
             </table>

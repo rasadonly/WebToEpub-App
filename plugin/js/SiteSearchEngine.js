@@ -662,12 +662,19 @@ class SiteSearchEngine {
     // ─── Network Layer ───────────────────────────────────────────────────
 
     /**
-     * Strip <script>, <link>, <style>, <iframe> tags from HTML text
-     * to prevent the browser from loading remote resources when parsed.
+     * Parse HTML into a safe DOM — removes resource-loading elements
+     * (script, link, style, iframe, img) and sets a <base> tag for relative
+     * URL resolution. Faster than running giant regex on raw HTML strings.
      */
-    static sanitizeHtml(html) {
-        return html.replace(/<(script|link|style|iframe)[^>]*>[\s\S]*?<\/\1>/gi, "")
-            .replace(/<(script|link|style|iframe)[^>]*\/?\s*>/gi, "");
+    static parseSafeHtml(html, baseUrl) {
+        let dom = new DOMParser().parseFromString(html, "text/html");
+        for (let el of dom.querySelectorAll("script, link, style, iframe, img")) {
+            el.remove();
+        }
+        let base = dom.createElement("base");
+        base.href = baseUrl;
+        dom.head.appendChild(base);
+        return dom;
     }
 
     /**
@@ -723,13 +730,8 @@ class SiteSearchEngine {
                 return [];
             }
 
-            // Sanitize to prevent resource loading side-effects
-            html = SiteSearchEngine.sanitizeHtml(html);
-
-            let dom = new DOMParser().parseFromString(html, "text/html");
-            let base = dom.createElement("base");
-            base.href = url;
-            dom.head.appendChild(base);
+            // Parse safely: strips resource-loading elements and sets base URL in one pass
+            let dom = SiteSearchEngine.parseSafeHtml(html, url);
 
             let results = site.parseResults(dom);
 
@@ -778,7 +780,7 @@ class SiteSearchEngine {
 
         // Search one by one (or in very small batches) until we hit the target count
         // Using small batches (3) to balance speed vs. "don't over-load" requirement
-        const BATCH_SIZE = 3;
+        const BATCH_SIZE = 6; // increased from 3 — proxy racing handles per-site timeouts
 
         while (currentIndex < sites.length) {
             let batch = sites.slice(currentIndex, currentIndex + BATCH_SIZE);

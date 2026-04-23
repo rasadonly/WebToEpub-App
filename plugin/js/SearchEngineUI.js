@@ -126,13 +126,34 @@ class SearchEngineAPI {
  *   - Separates badge into its own span (not inside the link text)
  */
 class SearchEngineUI {
-    static VERSION = "1.1.0"; // Cache-buster version
-
+    static VERSION = "1.2.0";
 
     /** Minimum time between progressive re-renders (ms) */
-    static RENDER_DEBOUNCE_MS = 300;
+    static RENDER_DEBOUNCE_MS = 100;
     static _lastRenderTime = 0;
     static _pendingRender = null;
+
+    /** Timer for debounced progress status writes */
+    static _statusTimer = null;
+
+    /**
+     * Debounce high-frequency status bar updates (fires on every site during search).
+     * Final/error messages bypass the debounce via direct assignment.
+     */
+    static _setProgressStatus(msg) {
+        clearTimeout(SearchEngineUI._statusTimer);
+        SearchEngineUI._statusTimer = setTimeout(() => {
+            let el = document.getElementById("searchEngineStatus");
+            if (el) el.textContent = msg;
+        }, 50);
+    }
+
+    /**
+     * Returns true when the input looks like a URL the user wants to import directly.
+     */
+    static isUrl(str) {
+        return /^https?:\/\//i.test(str) || /^(?:www\.)[\w.-]+\.[a-z]{2,}/i.test(str);
+    }
 
     static init() {
         SearchEngineUI.bindEvents();
@@ -226,6 +247,8 @@ class SearchEngineUI {
     static _currentQuery = "";
     static _currentEngine = "";
     static _nextIndex = 0;
+    // Guard: prevents concurrent fetchNextBatch calls which race on _displayedCount
+    static _isFetching = false;
 
     static async onSearch() {
         let queryInput = document.getElementById("searchEngineQuery");
@@ -235,8 +258,25 @@ class SearchEngineUI {
 
         if (!queryInput || !engineSelect || !resultsTable || !queryInput.value.trim()) return;
 
+        let rawQuery = queryInput.value.trim();
+
+        // ── URL Detection: send directly to WebToEpub tool ─────────────
+        if (SearchEngineUI.isUrl(rawQuery)) {
+            let url = /^https?:\/\//i.test(rawQuery) ? rawQuery : "https://" + rawQuery;
+            statusSpan.textContent = "Opening URL in WebToEpub...";
+            if (document.getElementById("inputSection")) {
+                // Already inside popup — just import
+                SearchEngineUI.startImport(url);
+            } else {
+                // Standalone search page — navigate to popup with the URL
+                window.location.href = "plugin/popup.html?mode=manual&url=" + encodeURIComponent(url);
+            }
+            return;
+        }
+        // ───────────────────────────────────────────────────────────────
+
         // Reset state
-        SearchEngineUI._currentQuery = queryInput.value.trim();
+        SearchEngineUI._currentQuery = rawQuery;
         SearchEngineUI._currentEngine = engineSelect.value;
         SearchEngineUI._nextIndex = 0;
         SearchEngineUI._allResults = [];
@@ -262,39 +302,80 @@ class SearchEngineUI {
     }
 
     static async fetchNextBatch() {
+        // Prevent concurrent calls: two simultaneous fetches both increment
+        // _displayedCount against the same _allResults array, pushing it ahead
+        // of the array length so every future nextBatch slice is empty.
+        if (SearchEngineUI._isFetching) return;
+        SearchEngineUI._isFetching = true;
+
         let statusSpan = document.getElementById("searchEngineStatus");
         let isCustom = SearchEngineUI._currentEngine === "custom" || SearchEngineUI._currentEngine === "custom_all";
 
-        let onProgress = isCustom ? (siteName, status) => {
-            statusSpan.textContent = `Searching ${siteName}... (${status})`;
-        } : null;
+        // Max batches to auto-search when every batch returns 0 relevancy-filtered results.
+        const MAX_AUTO_CONTINUE = 10;
+        let autoContinueCount = 0;
 
-        let onResults = isCustom ? (newResults) => {
-            let filtered = SearchEngineUI.filterResultsByRelevancy(newResults, SearchEngineUI._currentQuery);
-            if (filtered.length > 0) {
-                SearchEngineUI.renderResults(filtered, true);
+        try {
+            do {
+                const resultsBefore = SearchEngineUI._allResults.length;
+
+                let onProgress = isCustom ? (siteName, status) => {
+                    SearchEngineUI._setProgressStatus(`Searching ${siteName}... (${status})`);
+                } : null;
+
+                let onResults = isCustom ? (newResults) => {
+                    let filtered = SearchEngineUI.filterResultsByRelevancy(newResults, SearchEngineUI._currentQuery);
+                    if (filtered.length > 0) {
+                        SearchEngineUI.renderResults(filtered, true);
+                    }
+                } : null;
+
+                let { results, nextIndex } = await SearchEngineAPI.search(
+                    SearchEngineUI._currentQuery,
+                    SearchEngineUI._currentEngine,
+                    onProgress,
+                    SearchEngineUI._nextIndex,
+                    onResults
+                );
+
+                SearchEngineUI._nextIndex = nextIndex;
+
+                if (!isCustom) {
+                    let displayResults = SearchEngineUI.filterResultsByRelevancy(
+                        SearchEngineUI.filterSupportedResults(results),
+                        SearchEngineUI._currentQuery
+                    );
+                    SearchEngineUI.renderResults(displayResults, true);
+                    break;
+                }
+
+                const resultsAfter = SearchEngineUI._allResults.length;
+                const foundNewResults = resultsAfter > resultsBefore;
+
+                if (foundNewResults || SearchEngineUI._nextIndex === -1) break;
+
+                autoContinueCount++;
+                SearchEngineUI._setProgressStatus(
+                    `No matches yet — searching more sites... (${autoContinueCount}/${MAX_AUTO_CONTINUE})`
+                );
+
+            } while (autoContinueCount < MAX_AUTO_CONTINUE && SearchEngineUI._nextIndex !== -1);
+
+        } finally {
+            SearchEngineUI._isFetching = false;
+            // Always refresh button state — runs even if an exception was thrown
+            SearchEngineUI.renderResults(null, true);
+
+            if (statusSpan) {
+                if (SearchEngineUI._allResults.length === 0) {
+                    statusSpan.textContent = "No results found. Try a different query or engine.";
+                } else {
+                    let shown = SearchEngineUI._displayedCount;
+                    let total = SearchEngineUI._allResults.length;
+                    let more = SearchEngineUI._nextIndex !== -1 ? " — more sites available" : "";
+                    statusSpan.textContent = `Showing ${shown} of ${total} results${more}`;
+                }
             }
-        } : null;
-
-        let { results, nextIndex } = await SearchEngineAPI.search(
-            SearchEngineUI._currentQuery,
-            SearchEngineUI._currentEngine,
-            onProgress,
-            SearchEngineUI._nextIndex,
-            onResults
-        );
-
-        SearchEngineUI._nextIndex = nextIndex;
-
-        if (!isCustom) {
-            let displayResults = SearchEngineUI.filterResultsByRelevancy(SearchEngineUI.filterSupportedResults(results), SearchEngineUI._currentQuery);
-            SearchEngineUI.renderResults(displayResults, true);
-        }
-
-        if (SearchEngineUI._allResults.length === 0) {
-            statusSpan.textContent = "No results found.";
-        } else {
-            statusSpan.textContent = `Showing ${SearchEngineUI._allResults.length} results.`;
         }
     }
 
@@ -465,6 +546,9 @@ class SearchEngineUI {
         }
 
         // Decide if we show the "Show More" button
+        // NOTE: do NOT snapshot hasMoreLocal/hasMoreRemote into closure variables here.
+        // They must be re-evaluated at click time because state changes between
+        // render and click (e.g. onResults fires more batches in the background).
         const hasMoreLocal = SearchEngineUI._displayedCount < SearchEngineUI._allResults.length;
         const hasMoreRemote = SearchEngineUI._nextIndex !== -1;
 
@@ -473,13 +557,26 @@ class SearchEngineUI {
             showMoreBtn.id = "showMoreResultsBtn";
             showMoreBtn.className = "show-more-btn";
             showMoreBtn.textContent = hasMoreLocal ? "Show More" : "Search More Sites...";
-            showMoreBtn.onclick = () => {
+            showMoreBtn.onclick = async () => {
+                // Block concurrent fetches — prevents _displayedCount racing ahead of _allResults
+                if (SearchEngineUI._isFetching) return;
                 showMoreBtn.disabled = true;
                 showMoreBtn.textContent = "Loading...";
-                if (hasMoreLocal) {
+                try {
+                    if (SearchEngineUI._displayedCount < SearchEngineUI._allResults.length) {
+                        // Buffered results exist — page them in immediately (no network needed)
+                        SearchEngineUI.renderResults(null, true);
+                    } else if (SearchEngineUI._nextIndex !== -1) {
+                        // All buffered results shown — fetch next batch from more sites
+                        await SearchEngineUI.fetchNextBatch();
+                    }
+                } catch (err) {
+                    // Ensure the button is always recoverable even if fetchNextBatch throws
+                    console.error("[SearchEngineUI] Load more failed:", err);
+                    const statusSpan = document.getElementById("searchEngineStatus");
+                    if (statusSpan) statusSpan.textContent = "Error loading more: " + err.message;
+                    // Re-render to restore the button so the user can retry
                     SearchEngineUI.renderResults(null, true);
-                } else {
-                    SearchEngineUI.fetchNextBatch();
                 }
             };
             container.appendChild(showMoreBtn);

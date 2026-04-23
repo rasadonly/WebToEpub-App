@@ -10,8 +10,17 @@ class LiteroticaParser extends Parser {
         super();
     }
 
+    static getSection(url) {
+        try {
+            let segments = new URL(url).pathname.split("/").filter(s => s.length > 0);
+            return segments[0] || "";
+        } catch (e) {
+            return "";
+        }
+    }
+
     async getChapterUrls(dom, chapterUrlsUI) {
-        let section = dom.baseURI.split("//")[1].split("/")[1];
+        let section = LiteroticaParser.getSection(dom.baseURI);
         let isChapterpage = (section=="s");
         let isOneChapter = false;
         if (isChapterpage) {
@@ -42,7 +51,7 @@ class LiteroticaParser extends Parser {
     }
 
     async loadEpubMetaInfo(dom) {
-        let section = dom.baseURI.split("//")[1].split("/")[1];
+        let section = LiteroticaParser.getSection(dom.baseURI);
         let isChapterpage = (section=="s");
         if (!isChapterpage) {
             let randomChapter = [...dom.querySelectorAll("a")].filter(a => a.href.includes("https://www.literotica.com/s/"));
@@ -115,7 +124,7 @@ class LiteroticaParser extends Parser {
     }
 
     chaptersFromMemberPage(dom) {
-        const section = dom.baseURI.split("//")[1].split("/")[1];
+        const section = LiteroticaParser.getSection(dom.baseURI);
 
         if (section === "series") {
             let links = [...dom.querySelectorAll("ul.series__works li a.br_rj")];
