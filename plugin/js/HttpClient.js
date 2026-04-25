@@ -561,6 +561,9 @@ let BlockedHostNames = new Set();
 // CORS proxy settings (website mode)
 // These can be updated via the UI CORS proxy controls in popup.html
 HttpClient.CORS_PROXIES = [
+    { name: "Agent Assist (Firefox)", url: "https://chatuser129-agent-browser.hf.space/?url=" },
+    { name: "Agent Assist (Chromium)", url: "https://chatuser129-agent-browser.hf.space/?browser=chromium&url=" },
+    { name: "Agent Assist (Webkit)", url: "https://chatuser129-agent-browser.hf.space/?browser=webkit&url=" },
     { name: "Huggingface Proxy", url: "https://amono5667-versal-scrapper.hf.space/?url=" },
     { name: "Workers Proxy", url: "https://nexuspage-extractor.prasadghanwat123.workers.dev/?url=" },
     { name: "AllOrigins (Raw)", url: "https://api.allorigins.win/raw?url=" },
