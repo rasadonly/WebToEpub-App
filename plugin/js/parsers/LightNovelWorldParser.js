@@ -166,6 +166,12 @@ class NovelfireParser extends FindNovelParser {
         super();
     }
 
+    findContent(dom) {
+        return dom.querySelector("div#chapter-container")
+            || dom.querySelector("div.d-chapter-content")
+            || super.findContent(dom);
+    }
+
     async getChapterUrls(dom, chapterUrlsUI) {
         if (!dom.baseURI.endsWith("/chapters")) {
             dom = (await HttpClient.wrapFetch(dom.baseURI + "/chapters")).responseXML;

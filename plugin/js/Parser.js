@@ -558,6 +558,7 @@ class Parser {
         catch (err)
         {
             ErrorLog.log(err);
+            throw err;
         }
     }
 
