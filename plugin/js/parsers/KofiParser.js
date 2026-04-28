@@ -20,7 +20,8 @@ class KofiParser extends Parser {
      * @returns {Promise<Chapter[]>}
      */
     async getChapterUrls(dom) {
-        const url = new URL(dom.baseURI);
+        const baseUrl = this.state.chapterListUrl || dom.baseURI;
+        const url = new URL(baseUrl);
         
         // If it's a individual post page
         if (url.pathname.includes("/post/")) {
@@ -36,8 +37,8 @@ class KofiParser extends Parser {
             }
             // Otherwise, treat as a single chapter
             return [{
-                sourceUrl: dom.baseURI,
-                title: this.extractTitleImpl(dom)
+                sourceUrl: baseUrl,
+                title: this.extractTitle(dom)
             }];
         }
 
@@ -66,8 +67,8 @@ class KofiParser extends Parser {
 
         // Default: return current page
         return [{
-            sourceUrl: dom.baseURI,
-            title: this.extractTitleImpl(dom)
+            sourceUrl: baseUrl,
+            title: this.extractTitle(dom)
         }];
     }
 
