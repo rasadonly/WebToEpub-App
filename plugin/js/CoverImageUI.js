@@ -155,13 +155,26 @@ class CoverImageUI { // eslint-disable-line no-unused-vars
             inputUrl.onchange = CoverImageUI.showSampleImg;
         }
         inputUrl.value = url;
-        CoverImageUI.getSampleCoverImg().src = url;
+        let sampleImg = CoverImageUI.getSampleCoverImg();
+        if (util.isNullOrEmpty(url)) {
+            sampleImg.src = "";
+            sampleImg.hidden = true;
+        } else {
+            sampleImg.src = url;
+            sampleImg.hidden = false;
+        }
     }
 
     /** @private */
     static showSampleImg() {
         let url = CoverImageUI.getCoverImageUrlInput().value;
         let sampleImg = CoverImageUI.getSampleCoverImg();
-        sampleImg.src = url;
+        if (util.isNullOrEmpty(url)) {
+            sampleImg.src = "";
+            sampleImg.hidden = true;
+        } else {
+            sampleImg.src = url;
+            sampleImg.hidden = false;
+        }
     }
 }
