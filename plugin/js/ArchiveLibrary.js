@@ -242,14 +242,7 @@ class ArchiveLibrary {
                     <div style="font-size: 0.8rem; color: #888; margin-bottom: 12px;">EPUB · ${sizeMB} MB</div>
                 </div>
                 <div style="display: flex; gap: 8px; margin-top: auto;">
-                    <button class="archive-read-btn" style="
-                        flex: 1; padding: 8px 0; border-radius: 20px; border: none; background: #3b82f6; color: #fff; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: opacity 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px;
-                    " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
-                        <svg viewBox="0 0 20 20" fill="currentColor" style="width:14px;height:14px;">
-                            <path d="M6.3 2.841A1.5 1.5 0 004 4.11v11.78a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"/>
-                        </svg>
-                        Read Live
-                    </button>
+                    
                     <a href="${file.url}" target="_blank" download="${file.name}" style="
                         flex: 1; padding: 8px 0; border-radius: 20px; border: 1px solid rgba(255,255,255,0.15); background: transparent; color: #ddd; font-size: 0.85rem; font-weight: 600; cursor: pointer; text-decoration: none; text-align: center; transition: background 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px;
                     " onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
@@ -261,92 +254,7 @@ class ArchiveLibrary {
                 </div>
             `;
 
-            // Read Live click handler
-            const readBtn = card.querySelector('.archive-read-btn');
-            readBtn.addEventListener('click', async () => {
-                if (readBtn.disabled) return;
-                const originalHTML = readBtn.innerHTML;
-                
-                try {
-                    readBtn.innerHTML = "Downloading...";
-                    readBtn.disabled = true;
-
-                    const loader = document.getElementById("libraryLoader");
-                    if (loader) {
-                        loader.innerHTML = `<div class="spinner-ring"></div><div style="color:var(--primary,#3b82f6); font-weight:700; text-align:center;">Downloading Archive EPUB...<br><span style="font-size:0.8rem;color:#aaa;">"${file.name}"</span></div>`;
-                        loader.style.display = "flex";
-                    }
-
-                    const proxies = [
-                        { name: "Direct", prefix: "" },
-                        { name: "Tufive Workers Proxy", prefix: "https://fragrant-frost-f292.tufive.workers.dev/?url=" },
-                        { name: "corsproxy.io", prefix: "https://corsproxy.io/?" },
-                        { name: "CodeTabs", prefix: "https://api.codetabs.com/v1/proxy/?quest=" },
-                        { name: "AllOrigins", prefix: "https://api.allorigins.win/raw?url=" }
-                    ];
-
-                    let response = null;
-                    let lastError = null;
-
-                    for (const proxy of proxies) {
-                        try {
-                            const targetUrl = proxy.prefix ? proxy.prefix + encodeURIComponent(file.url) : file.url;
-                            
-                            // Update loader to indicate which proxy is being tried
-                            if (loader) {
-                                loader.innerHTML = `<div class="spinner-ring"></div><div style="color:var(--primary,#3b82f6); font-weight:700; text-align:center;">Downloading Archive EPUB...<br><span style="font-size:0.8rem;color:#aaa;">"${file.name}"</span><br><span style="font-size:0.7rem;color:#888;">via ${proxy.name}</span></div>`;
-                            }
-
-                            const res = await fetch(targetUrl);
-                            if (res.ok) {
-                                response = res;
-                                break; // Success, exit the loop
-                            }
-                        } catch (err) {
-                            lastError = err;
-                            console.log(`Fetch via ${proxy.name} failed. Trying next proxy...`);
-                        }
-                    }
-
-                    if (!response || !response.ok) {
-                        throw new Error("All proxy methods failed. Last error: " + (lastError ? lastError.message : "Unknown HTTP error"));
-                    }
-                    
-                    const buffer = await response.arrayBuffer();
-                    const blob = new Blob([buffer], { type: "application/epub+zip" });
-                    blob.name = file.name;
-
-                    if (loader) loader.style.display = "none";
-                    readBtn.innerHTML = "Opening...";
-                    readBtn.style.background = "#10b981";
-
-                    await new Promise(r => setTimeout(r, 150));
-
-                    if (window.libraryManager && typeof window.libraryManager.openBookInReader === "function") {
-                        window.libraryManager.openBookInReader(blob);
-                    } else {
-                        alert("Library manager not found. Cannot open EPUB.");
-                    }
-                    
-                    setTimeout(() => {
-                        readBtn.innerHTML = originalHTML;
-                        readBtn.disabled = false;
-                        readBtn.style.background = "#3b82f6";
-                    }, 1000);
-                } catch (e) {
-                    console.error("Read Live failed:", e);
-                    alert("Error loading EPUB: " + e.message + "\n\nIf you see CORS errors, try using the 'Download' button instead and opening the file manually.");
-                    const loader = document.getElementById("libraryLoader");
-                    if (loader) loader.style.display = "none";
-                    readBtn.innerHTML = "Failed";
-                    readBtn.style.background = "#ef4444";
-                    setTimeout(() => { 
-                        readBtn.innerHTML = originalHTML; 
-                        readBtn.disabled = false; 
-                        readBtn.style.background = "#3b82f6";
-                    }, 2000);
-                }
-            });
+            // Removed Read Live click handler logic
 
             grid.appendChild(card);
         });

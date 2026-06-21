@@ -854,9 +854,12 @@ class LibraryUI {
                 }
             }
 
-            card.querySelector(".read-btn-main").addEventListener("click", () => {
-                this.showBookDetailsPage(book, false);
-            });
+            const mainReadBtn = card.querySelector(".read-btn-main");
+            if (mainReadBtn) {
+                mainReadBtn.addEventListener("click", () => {
+                    this.showBookDetailsPage(book, false);
+                });
+            }
 
             card.querySelector(".book-cover-wrap").addEventListener("click", (e) => {
                 if (e.target.classList.contains("book-action-btn")) return;
@@ -1755,9 +1758,15 @@ class LibraryUI {
             if (!title) continue;
             const fullUrl = href.startsWith("http") ? href : `${domain}${href}`;
 
-            // Walk up the DOM to get metadata context
+            // Walk up the DOM to get metadata context, but don't go so high that we include multiple books
             let ctx = lnk;
-            for (let i = 0; i < 6; i++) { if (!ctx.parentElement) break; ctx = ctx.parentElement; }
+            let parent = ctx.parentElement;
+            for (let i = 0; i < 5; i++) { 
+                if (!parent || parent.tagName === 'BODY') break; 
+                if (parent.querySelectorAll("a[href^='/md5/']").length > 1) break;
+                ctx = parent;
+                parent = ctx.parentElement;
+            }
             const allText = ctx.textContent || "";
 
             const fmtMatch  = allText.match(/\b(EPUB|PDF|MOBI|AZW3|TXT|DOC|DOCX)\b/i);
@@ -1862,6 +1871,9 @@ class LibraryUI {
                 if (readBtn.disabled) return;
                 const originalHTML = readBtn.innerHTML;
                 readBtn.disabled = true;
+                
+                let abortDownload = false;
+
                 readBtn.innerHTML = `
                     <svg viewBox="0 0 20 20" fill="currentColor" style="width:13px;height:13px;animation:spin 1s linear infinite;">
                         <path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h2.433a.75.75 0 000-1.5H3.989a.75.75 0 00-.75.75v4.242a.75.75 0 001.5 0v-2.43l.31.31a7 7 0 0011.712-3.138.75.75 0 00-1.449-.39zm1.23-3.723a.75.75 0 00.219-.53V2.929a.75.75 0 00-1.5 0V5.36l-.31-.31A7 7 0 003.239 8.188a.75.75 0 101.448.389A5.5 5.5 0 0113.89 6.11l.311.31h-2.432a.75.75 0 000 1.5h4.243a.75.75 0 00.53-.219z" clip-rule="evenodd"/>
@@ -1879,6 +1891,9 @@ class LibraryUI {
 
                 if (loader) {
                     loader.innerHTML = `
+                        <button id="cancelEpubDownloadBtn" style="position:absolute; top:20px; right:20px; background:rgba(0,0,0,0.5); border-radius:50%; border:none; color:white; cursor:pointer; padding:8px; display:flex; align-items:center; justify-content:center; z-index:10000; transition:background 0.2s;" title="Cancel Download">
+                            <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
                         <div class="spinner-ring"></div>
                         <div style="color:var(--primary,#a78bfa); font-weight:700; font-size:1rem; text-align:center; max-width:300px; line-height:1.5;">
                             Downloading EPUB…<br>
@@ -1887,11 +1902,23 @@ class LibraryUI {
                         <div style="font-size:0.78rem; color:var(--text-muted,#888); margin-top:4px;">Large files may take a moment</div>
                     `;
                     loader.style.display = "flex";
+                    
+                    const cancelBtn = document.getElementById("cancelEpubDownloadBtn");
+                    if (cancelBtn) {
+                        cancelBtn.onmouseenter = () => cancelBtn.style.background = "rgba(255,255,255,0.2)";
+                        cancelBtn.onmouseleave = () => cancelBtn.style.background = "rgba(0,0,0,0.5)";
+                        cancelBtn.onclick = () => {
+                            abortDownload = true;
+                            loader.style.display = "none";
+                            resetBtn();
+                        };
+                    }
                 }
 
                 try {
                     let targetUrl = book.url;
                     const bookRes  = await HttpClient.wrapFetch(book.url);
+                    if (abortDownload) return;
                     const bookHtml = bookRes?.responseText || "";
                     const bookDom  = new DOMParser().parseFromString(bookHtml, "text/html");
                     
@@ -1905,6 +1932,7 @@ class LibraryUI {
                     }
                     if (adsUrl) {
                         const adsRes  = await HttpClient.wrapFetch(adsUrl);
+                        if (abortDownload) return;
                         const adsHtml = adsRes?.responseText || "";
                         const adsDom  = new DOMParser().parseFromString(adsHtml, "text/html");
                         for (let a of adsDom.querySelectorAll("a[href]")) {
@@ -1933,6 +1961,7 @@ class LibraryUI {
 
                     // Try to download the actual epub file arrayBuffer
                     const fileRes = await HttpClient.wrapFetch(targetUrl, { bypassDirectFetchFallback: true });
+                    if (abortDownload) return;
                     if (!fileRes || (!fileRes.arrayBuffer && !fileRes.responseBlob)) {
                         throw new Error("Could not extract binary data from response.");
                     }
@@ -1981,8 +2010,22 @@ class LibraryUI {
                 }
             };
 
+            let hideReadBtn = false;
+            if (book.size) {
+                const s = book.size.toUpperCase();
+                if (s.includes("GB")) hideReadBtn = true;
+                else if (s.includes("MB")) {
+                    const num = parseFloat(s);
+                    if (!isNaN(num) && num > 2.0) {
+                        hideReadBtn = true;
+                    }
+                }
+            }
+
             actions.appendChild(dlBtn);
-            actions.appendChild(readBtn);
+            if (!hideReadBtn) {
+                actions.appendChild(readBtn);
+            }
             row.appendChild(info);
             row.appendChild(actions);
             grid.appendChild(row);
