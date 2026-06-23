@@ -1,7 +1,7 @@
 "use strict";
 
 parserFactory.register("listnovel.com", () => new MadaraParser());
-parserFactory.register("novelnice.com", () => new MadaraParser());
+parserFactory.register("novelnice.com", () => new NovelniceParser());
 //dead url
 parserFactory.register("readwebnovel.xyz", () => new MadaraParser());
 parserFactory.register("wuxiaworld.site", () => new MadaraParser());
@@ -143,5 +143,50 @@ class MadaraVariantParser extends MadaraParser {
 class KdtnovelsParser extends MadaraParser {
     findChapterTitle(dom) {
         return dom.querySelector("h3.chapter-name");
+    }
+}
+
+class NovelniceParser extends MadaraParser {
+    constructor() {
+        super();
+    }
+
+    findContent(dom) {
+        let content = dom.querySelector(".reading-content");
+        if (content != null && content.textContent.trim().length > 0) {
+            return content;
+        }
+        
+        let textLeft = dom.querySelector(".text-left");
+        if (textLeft != null && textLeft.textContent.trim().length > 0) {
+            return textLeft;
+        }
+
+        let chapterContent = dom.querySelector(".chapter-content");
+        if (chapterContent != null && chapterContent.textContent.trim().length > 0) {
+            return chapterContent;
+        }
+
+        let entryContent = dom.querySelector(".entry-content");
+        if (entryContent != null && entryContent.textContent.trim().length > 0) {
+            return entryContent;
+        }
+        
+        let chaContent = dom.querySelector(".cha-content");
+        if (chaContent != null && chaContent.textContent.trim().length > 0) {
+            return chaContent;
+        }
+
+        let idChapterContent = dom.querySelector("#chapter-content");
+        if (idChapterContent != null && idChapterContent.textContent.trim().length > 0) {
+            return idChapterContent;
+        }
+
+        let cBlogPost = dom.querySelector(".c-blog-post");
+        if (cBlogPost != null && cBlogPost.textContent.trim().length > 0) {
+            return cBlogPost;
+        }
+
+        return super.findContent(dom);
     }
 }
