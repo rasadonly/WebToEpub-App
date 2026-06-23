@@ -1,6 +1,7 @@
 "use strict";
 
 parserFactory.register("listnovel.com", () => new MadaraParser());
+parserFactory.register("novelnice.com", () => new MadaraParser());
 //dead url
 parserFactory.register("readwebnovel.xyz", () => new MadaraParser());
 parserFactory.register("wuxiaworld.site", () => new MadaraParser());
