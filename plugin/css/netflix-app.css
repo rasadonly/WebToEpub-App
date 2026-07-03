@@ -10,7 +10,7 @@
     flex-direction: column;
     justify-content: flex-start;
     align-items: center;
-    background: radial-gradient(circle at 50% 50%, #151b22 0%, #090b0e 100%);
+    background: radial-gradient(circle at 50% 50%, #1a1714 0%, #0f0d0b 100%);
     position: fixed;
     top: 0;
     left: 0;
@@ -82,7 +82,7 @@
 
 /* Customized profile background gradients for that Netflix-profile look */
 .profile-card:nth-child(1) .profile-avatar {
-    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+    background: linear-gradient(135deg, #c26746 0%, #8a4a2f 100%);
 }
 .profile-card:nth-child(2) .profile-avatar {
     background: linear-gradient(135deg, #e52d27 0%, #b31217 100%);
@@ -195,8 +195,8 @@
 .top-novels-tab:hover,
 .top-novels-tab.active {
     color: #fff;
-    border-color: rgba(0, 245, 255, 0.45);
-    background: rgba(0, 245, 255, 0.1);
+    border-color: rgba(194, 103, 70, 0.45);
+    background: rgba(194, 103, 70, 0.1);
 }
 
 .top-novels-scroll-wrap {
@@ -225,8 +225,8 @@
 }
 
 .top-novels-scroll-btn:hover {
-    background: rgba(0, 245, 255, 0.2);
-    border-color: rgba(0, 245, 255, 0.45);
+    background: rgba(194, 103, 70, 0.2);
+    border-color: rgba(194, 103, 70, 0.45);
 }
 
 .top-novels-scroll-btn.prev { left: -6px; }
@@ -270,7 +270,7 @@
 
 .top-novel-card:hover {
     transform: translateY(-4px);
-    border-color: rgba(0, 245, 255, 0.35);
+    border-color: rgba(194, 103, 70, 0.35);
 }
 
 .top-novel-cover {
@@ -291,7 +291,7 @@
     top: 6px;
     left: 6px;
     background: rgba(0, 0, 0, 0.7);
-    color: #00f5ff;
+    color: #d5805f;
     font-size: 0.65rem;
     font-weight: 800;
     padding: 2px 6px;
@@ -324,7 +324,7 @@
 
 .top-novel-badge {
     font-size: 0.62rem;
-    color: #00f5ff;
+    color: #d5805f;
     margin-top: 4px;
     font-weight: 600;
 }
@@ -511,7 +511,7 @@
 .library-book-card:hover {
     border-color: var(--primary);
     transform: translateY(-6px);
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5), 0 0 15px rgba(0, 245, 255, 0.1);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
 }
 
 .book-cover-wrap {
@@ -665,7 +665,7 @@
 .spinner-ring {
     width: 48px;
     height: 48px;
-    border: 4px solid rgba(0, 245, 255, 0.1);
+    border: 4px solid rgba(194, 103, 70, 0.1);
     border-top: 4px solid var(--primary);
     border-radius: 50%;
     animation: spin 1s linear infinite;
@@ -1007,7 +1007,7 @@
 
 .source-item-row:hover {
     background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(0, 245, 255, 0.2);
+    border-color: rgba(194, 103, 70, 0.2);
 }
 
 .source-item-name {

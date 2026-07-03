@@ -354,7 +354,7 @@ header p.subtitle {
 }
 
 .show-more-btn:hover {
-    background: rgba(0, 245, 255, 0.1) !important;
+    background: rgba(194, 103, 70, 0.1) !important;
     border-color: var(--primary) !important;
     transform: translateY(-2px);
     box-shadow: 0 10px 30px var(--primary-glow);
@@ -378,7 +378,7 @@ header p.subtitle {
 
 .launch-btn:hover {
     border-color: var(--primary);
-    background: rgba(0, 245, 255, 0.1);
+    background: rgba(194, 103, 70, 0.1);
     transform: translateY(-2px);
 }
 
@@ -484,22 +484,22 @@ header p.subtitle {
 }
 
 .read-now-btn {
-    background: rgba(0, 245, 255, 0.12) !important;
-    color: var(--primary, #00f5ff) !important;
-    border: 1px solid var(--primary, #00f5ff) !important;
+    background: rgba(194, 103, 70, 0.12) !important;
+    color: var(--primary, #d5805f) !important;
+    border: 1px solid var(--primary, #d5805f) !important;
     padding: 12px 24px !important;
     border-radius: 12px !important;
     font-weight: 700 !important;
     cursor: pointer !important;
     transition: all var(--transition-fast, 0.2s) !important;
-    box-shadow: 0 0 10px rgba(0, 245, 255, 0.2) !important;
+    box-shadow: 0 0 10px rgba(194, 103, 70, 0.2) !important;
     font-family: inherit !important;
     white-space: nowrap;
     margin-left: 12px !important;
 }
 
 .read-now-btn:hover {
-    background: var(--primary, #00f5ff) !important;
+    background: var(--primary, #d5805f) !important;
     color: #000 !important;
     transform: translateY(-2px) !important;
     box-shadow: 0 6px 20px var(--primary-glow) !important;

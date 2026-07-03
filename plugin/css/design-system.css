@@ -1,13 +1,14 @@
 :root {
-    /* Colors (Bing Dark Theme) */
-    --primary: #0078d4;
-    --primary-hover: #005a9e;
-    --primary-glow: rgba(0, 120, 212, 0.15);
-    --bg: #1b1a19;
-    --bg-gradient: radial-gradient(circle at 50% -20%, #2c2b2a 0%, #1b1a19 80%);
-    --card-bg: rgba(36, 36, 36, 0.85);
-    --text: #f3f2f1;
-    --text-muted: #a19f9d;
+    /* Colors (Warm Clay Theme) */
+    --primary: #c26746;
+    --primary-hover: #a9542f;
+    --primary-light: #d5805f;
+    --primary-glow: rgba(194, 103, 70, 0.15);
+    --bg: #1a1714;
+    --bg-gradient: radial-gradient(circle at 50% -20%, #241f1b 0%, #1a1714 80%);
+    --card-bg: rgba(38, 33, 29, 0.85);
+    --text: #f4f1ec;
+    --text-muted: #b0a89f;
 
     /* Glassmorphism */
     --glass: rgba(255, 255, 255, 0.05);
@@ -23,7 +24,7 @@
     --transition-normal: 0.3s ease;
 
     /* Premium Glows */
-    --primary-glow-strong: rgba(0, 120, 212, 0.3);
+    --primary-glow-strong: rgba(194, 103, 70, 0.3);
     --glass-pulse: glassPulse 4s infinite ease-in-out;
 
     /* Responsive Tokens */
@@ -40,8 +41,8 @@
     }
 
     50% {
-        border-color: rgba(0, 245, 255, 0.4);
-        box-shadow: 0 0 15px rgba(0, 245, 255, 0.1);
+        border-color: rgba(194, 103, 70, 0.35);
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
     }
 
     100% {

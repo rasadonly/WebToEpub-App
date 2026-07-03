@@ -7,3 +7,11 @@ node_modules
 package-lock.json
 .idea
 .vscode
+
+# Cloudflare Worker local build cache
+workers/.wrangler/
+
+# Ad-hoc scratch experiments (not the QUnit suite in unitTest/)
+scratch/
+/test_*.js
+/test_*.html

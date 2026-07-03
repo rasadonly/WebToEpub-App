@@ -219,7 +219,71 @@ class LibraryUI {
         return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
     }
 
+    /**
+     * Hide the full-screen library loader overlay and its Cancel button, and
+     * clear any pending watchdog timers. Safe to call at any time — this is the
+     * single "get me out of a stuck load" escape hatch.
+     */
+    hideLibraryLoader() {
+        const loader = document.getElementById("libraryLoader");
+        if (loader) loader.style.display = "none";
+        const cancelBtn = document.getElementById("cancelLibraryLoadBtn");
+        if (cancelBtn) cancelBtn.style.display = "none";
+        if (this._loaderRevealTimer) { clearTimeout(this._loaderRevealTimer); this._loaderRevealTimer = null; }
+        if (this._loaderForceTimer) { clearTimeout(this._loaderForceTimer); this._loaderForceTimer = null; }
+        this._loaderArmed = false;
+    }
+
+    /**
+     * Make the loader overlay always escapable so a hung network load can never
+     * freeze the whole app. Works no matter which call site shows the loader:
+     *   - Cancel button and Escape key dismiss it immediately.
+     *   - A watchdog (armed via MutationObserver when the overlay becomes
+     *     visible) reveals Cancel after 4s and force-hides after 30s.
+     */
+    _setupLoaderSafety() {
+        const loader = document.getElementById("libraryLoader");
+        if (!loader || this._loaderSafetyInstalled) return;
+        this._loaderSafetyInstalled = true;
+
+        const cancelBtn = document.getElementById("cancelLibraryLoadBtn");
+        if (cancelBtn) {
+            cancelBtn.addEventListener("click", () => this.hideLibraryLoader());
+        }
+
+        // Escape always dismisses a visible loader.
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape" && loader.style.display !== "none" && loader.style.display !== "") {
+                this.hideLibraryLoader();
+            }
+        });
+
+        // Arm safety timers whenever ANY code makes the overlay visible.
+        const observer = new MutationObserver(() => {
+            const visible = loader.style.display !== "none" && loader.style.display !== "";
+            if (visible && !this._loaderArmed) {
+                this._loaderArmed = true;
+                if (this._loaderRevealTimer) clearTimeout(this._loaderRevealTimer);
+                if (this._loaderForceTimer) clearTimeout(this._loaderForceTimer);
+                // Reveal Cancel after a short wait so slow loads are escapable.
+                this._loaderRevealTimer = setTimeout(() => {
+                    const btn = document.getElementById("cancelLibraryLoadBtn");
+                    if (btn && loader.style.display !== "none") btn.style.display = "inline-block";
+                }, 4000);
+                // Hard stop: never let the overlay block the app indefinitely.
+                this._loaderForceTimer = setTimeout(() => {
+                    if (loader.style.display !== "none") this.hideLibraryLoader();
+                }, 30000);
+            } else if (!visible) {
+                this._loaderArmed = false;
+            }
+        });
+        observer.observe(loader, { attributes: true, attributeFilter: ["style"] });
+    }
+
     bindEvents() {
+        this._setupLoaderSafety();
+
         // Drop-upload or select file to import
         const uploader = document.getElementById("libraryImportInput");
         if (uploader) {
@@ -259,6 +323,10 @@ class LibraryUI {
         }
 
         const setActiveTab = (tabId) => {
+            // Switching tabs is also the user's way out of a stuck load: always
+            // clear any leftover loader overlay before showing the new view.
+            this.hideLibraryLoader();
+
             this.activeLibraryTab = tabId;
             [tabPersonal, tabPublic, tabTelegram, tabMega, tabArchive, tabAnna, tabAudioBook].forEach(tab => {
                 if (tab) tab.classList.remove("active");
@@ -278,6 +346,7 @@ class LibraryUI {
                 if (el) el.style.display = "none";
             });
 
+          try {
             if (tabId === "personal") {
                 document.getElementById("personalLibraryGrid").style.display = "grid";
                 if (uploadSection) uploadSection.style.display = "block";
@@ -287,7 +356,8 @@ class LibraryUI {
                 if (uploadSection) uploadSection.style.display = "none";
                 
                 if (window.megaLibrary && !window.megaLibrary.currentFolder) {
-                    window.megaLibrary.loadFolder("https://mega.nz/folder/Ci4ETASB#KIFVuPI99P1Ytg0dxmtYlw");
+                    Promise.resolve(window.megaLibrary.loadFolder("https://mega.nz/folder/Ci4ETASB#KIFVuPI99P1Ytg0dxmtYlw"))
+                        .catch(err => { console.error("[LibraryUI] Mega load failed:", err); this.hideLibraryLoader(); });
                 }
             } else if (tabId === "archive") {
                 const archiveView = document.getElementById("archiveLibraryView");
@@ -295,7 +365,8 @@ class LibraryUI {
                 if (uploadSection) uploadSection.style.display = "none";
 
                 if (window.archiveLibrary && !window.archiveLibrary.isLoaded) {
-                    window.archiveLibrary.loadRoot();
+                    Promise.resolve(window.archiveLibrary.loadRoot())
+                        .catch(err => { console.error("[LibraryUI] Archive load failed:", err); this.hideLibraryLoader(); });
                 }
             } else if (tabId === "anna") {
                 const annaView = document.getElementById("annaLibraryView");
@@ -315,9 +386,14 @@ class LibraryUI {
                 this.publicSearchQuery = "";
                 this.publicCurrentPage = 1;
                 if (clearPublicSearch) clearPublicSearch.style.display = "none";
-                
+
                 this.renderPublicLibrary();
             }
+          } catch (err) {
+              // A throwing render must never wedge the tabs or leave the loader up.
+              console.error("[LibraryUI] Failed to switch to tab:", tabId, err);
+              this.hideLibraryLoader();
+          }
         };
 
         if (tabPersonal) tabPersonal.addEventListener("click", () => setActiveTab("personal"));

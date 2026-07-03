@@ -191,7 +191,7 @@ class TopNovelsUI { // eslint-disable-line no-unused-vars
                 });
             }
             card.addEventListener("click", () => {
-                TopNovelsUI._openNovel(entry).catch(err => {
+                TopNovelsUI._openNovel(entry, mode).catch(err => {
                     console.warn("[TopNovels] Open failed:", err);
                 });
             });
@@ -227,10 +227,17 @@ class TopNovelsUI { // eslint-disable-line no-unused-vars
         return mgr.openFromStatsEntry(entry);
     }
 
-    static async _openNovel(entry) {
+    static async _openNovel(entry, tabMode = "all") {
         const url = entry.url || "";
-        const openMode = entry.openMode
-            || (typeof HFStatsLibrary !== "undefined" ? HFStatsLibrary.getPrimaryMode(entry) : "live");
+        // The active tab decides how to open the novel. "all" defers to the
+        // entry's own primary mode; "live"/"manual"/"library" force that mode.
+        let openMode;
+        if (tabMode === "live" || tabMode === "manual" || tabMode === "library") {
+            openMode = tabMode;
+        } else {
+            openMode = entry.openMode
+                || (typeof HFStatsLibrary !== "undefined" ? HFStatsLibrary.getPrimaryMode(entry) : "live");
+        }
         const inPlugin = window.location.pathname.includes("/plugin/")
             || window.location.protocol === "chrome-extension:";
 
