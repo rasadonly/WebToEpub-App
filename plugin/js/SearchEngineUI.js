@@ -28,7 +28,12 @@ class SearchEngineAPI {
             throw new Error("Unknown search engine: " + engine);
         }
         
-        SearchEngineAPI._cache.set(cacheKey, result);
+        // Only cache successful, non-empty results. Caching empty/failed searches
+        // (e.g. a transient proxy failure) would make a retry keep returning
+        // "No results" until the page is reloaded.
+        if (result && Array.isArray(result.results) && result.results.length > 0) {
+            SearchEngineAPI._cache.set(cacheKey, result);
+        }
         return result;
     }
 
@@ -320,6 +325,12 @@ class SearchEngineUI {
         }
         // ───────────────────────────────────────────────────────────────
 
+        // Guard against noise queries that just waste network + AI-fallback calls.
+        if (rawQuery.length < 2) {
+            statusSpan.textContent = "Enter at least 2 characters to search.";
+            return;
+        }
+
         // Reset state
         SearchEngineUI._currentQuery = rawQuery;
         SearchEngineUI._currentEngine = (engineSelect.value || "").trim().toLowerCase();
@@ -446,19 +457,79 @@ class SearchEngineUI {
         SearchEngineUI.renderResults(results);
     }
 
+    /** Common words ignored when deciding whether a title is relevant. */
+    static STOPWORDS = new Set(["the", "a", "an", "of", "and", "to", "in", "is", "for", "on", "with"]);
+
     /**
-     * Filters results to only those containing all keywords of the query in their title.
+     * Lowercase, strip punctuation, and split into word tokens.
+     * @param {string} str
+     * @returns {string[]}
+     */
+    static tokenize(str) {
+        if (!str) return [];
+        return str.toLowerCase().replace(/[^\w\s]/g, " ").split(/\s+/).filter(t => t.length > 0);
+    }
+
+    /**
+     * Score a result title against the query tokens. Higher is more relevant.
+     * Returns -1 when nothing meaningful matches (caller drops it).
+     *
+     * @param {string} title
+     * @param {string[]} queryTokens   All query tokens (already tokenized)
+     * @param {string[]} meaningful    Query tokens minus stopwords
+     * @param {string} normalizedQuery Lowercased, punctuation-stripped, single-spaced query
+     * @returns {number}
+     */
+    static scoreResult(title, queryTokens, meaningful, normalizedQuery) {
+        let titleTokens = SearchEngineUI.tokenize(title);
+        if (titleTokens.length === 0) return -1;
+        let titleSet = new Set(titleTokens);
+        let normalizedTitle = titleTokens.join(" ");
+
+        let matched = meaningful.filter(t => titleSet.has(t)).length;
+        if (matched === 0) return -1;
+
+        let score = 0;
+        // Coverage: fraction of meaningful query words present in the title.
+        let coverage = matched / meaningful.length;
+        score += coverage * 100;
+        // Reward having ALL meaningful words, not just some.
+        if (matched === meaningful.length) score += 50;
+        // Exact normalized title match is the strongest signal.
+        if (normalizedTitle === normalizedQuery) score += 200;
+        // Title that starts with the query reads as a better match.
+        else if (normalizedTitle.startsWith(normalizedQuery)) score += 40;
+        // Small tie-breaker: prefer shorter, tighter titles.
+        score += Math.max(0, 20 - titleTokens.length);
+        return score;
+    }
+
+    /**
+     * Rank results by relevancy to the query (best first) and drop clearly
+     * unrelated ones. Unlike a strict "must contain every word" filter, this
+     * keeps near-matches (e.g. a title missing only a stopword) but orders the
+     * strongest matches to the top.
+     *
      * @param {Array} results Array of result objects
      * @param {string} query The search query
-     * @returns {Array} Filtered results
+     * @returns {Array} Ranked results
      */
     static filterResultsByRelevancy(results, query) {
-        if (!query || !query.trim()) return results;
-        let keywords = query.toLowerCase().split(/\s+/).filter(k => k.length > 0);
-        return results.filter(res => {
-            let title = res.title.toLowerCase();
-            return keywords.every(kw => title.includes(kw));
-        });
+        if (!query || !query.trim() || !results || results.length === 0) return results;
+
+        let queryTokens = SearchEngineUI.tokenize(query);
+        let meaningful = queryTokens.filter(t => !SearchEngineUI.STOPWORDS.has(t));
+        // If the query is nothing but stopwords (e.g. "the"), fall back to all tokens.
+        if (meaningful.length === 0) meaningful = queryTokens;
+        if (meaningful.length === 0) return results;
+
+        let normalizedQuery = queryTokens.join(" ");
+
+        return results
+            .map(res => ({ res, score: SearchEngineUI.scoreResult(res.title || "", queryTokens, meaningful, normalizedQuery) }))
+            .filter(entry => entry.score >= 0)
+            .sort((a, b) => b.score - a.score)
+            .map(entry => entry.res);
     }
 
     static filterSupportedResults(results) {

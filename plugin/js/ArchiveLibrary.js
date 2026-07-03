@@ -23,7 +23,15 @@ class ArchiveLibrary {
         if (loader) loader.style.display = "flex";
 
         try {
-            const response = await fetch(this.XML_URL);
+            // Time-box the fetch so a dead network can't leave the loader up forever.
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 20000);
+            let response;
+            try {
+                response = await fetch(this.XML_URL, { signal: controller.signal });
+            } finally {
+                clearTimeout(timeoutId);
+            }
             if (!response.ok) throw new Error("Network response was not ok: " + response.statusText);
             
             const xmlText = await response.text();

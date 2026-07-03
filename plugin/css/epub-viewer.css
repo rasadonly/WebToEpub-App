@@ -129,7 +129,7 @@
 .toc-item.active {
     background: var(--reader-active-item);
     font-weight: 700;
-    border-left: 3px solid var(--primary, #00f5ff);
+    border-left: 3px solid var(--primary, #d5805f);
 }
 
 /* Content Panel Styling */
@@ -249,7 +249,7 @@
 .theme-btn.bw { background: #000000; color: #ffffff; border-color: #333; }
 
 .theme-btn.active {
-    border-color: var(--primary, #00f5ff);
+    border-color: var(--primary, #d5805f);
 }
 
 .layout-options {
@@ -272,7 +272,7 @@
 
 .layout-btn.active {
     background: var(--reader-active-item);
-    border-color: var(--primary, #00f5ff);
+    border-color: var(--primary, #d5805f);
     font-weight: 700;
 }
 
@@ -301,7 +301,7 @@
 .slider-row input[type="range"] {
     flex: 1;
     margin-left: 12px;
-    accent-color: var(--primary, #00f5ff);
+    accent-color: var(--primary, #d5805f);
 }
 
 .tts-buttons {
@@ -427,8 +427,8 @@
 
 /* Custom visual reading enhancements */
 .tts-active-paragraph {
-    background: rgba(0, 245, 255, 0.12);
-    border-left: 4px solid var(--primary, #00f5ff);
+    background: rgba(194, 103, 70, 0.12);
+    border-left: 4px solid var(--primary, #d5805f);
     padding-left: 12px;
     margin-left: -16px !important;
     border-radius: 0 4px 4px 0;
@@ -552,7 +552,7 @@
 .chapter-scroll-divider span {
     background: var(--reader-bg);
     padding: 8px 24px;
-    color: var(--primary, #00f5ff);
+    color: var(--primary, #d5805f);
     font-size: 0.95rem;
     font-weight: 700;
     letter-spacing: 0.08em;
@@ -783,6 +783,6 @@
 .tts-mode-active h4:hover,
 .tts-mode-active li:hover,
 .tts-mode-active blockquote:hover {
-    background-color: rgba(0, 245, 255, 0.05);
+    background-color: rgba(194, 103, 70, 0.05);
 }
 

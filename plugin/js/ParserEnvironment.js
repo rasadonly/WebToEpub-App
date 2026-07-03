@@ -22,15 +22,18 @@ class ParserEnvironment { // eslint-disable-line no-unused-vars
         let matches = [...html.matchAll(/<script\s+src="([^"]+)"/g)].map(match => match[1]);
         let scripts = matches
             .filter(ParserEnvironment.shouldLoadScript)
-            .map(src => ParserEnvironment.toIndexPath(src));
+            .map(src => ParserEnvironment.toIndexPath(src))
+            .filter(src => !ParserEnvironment.loadedScripts.has(src));
 
-        for (let scriptSrc of scripts) {
-            if (ParserEnvironment.loadedScripts.has(scriptSrc)) {
-                continue;
-            }
-            await ParserEnvironment.injectScript(scriptSrc);
+        // Inject every script up front so the browser downloads them in parallel.
+        // Each <script> has async=false, so execution order still follows insertion
+        // order (base classes before their subclasses) even though they load concurrently.
+        // This replaces ~385 serial round-trips (the first-parse "freeze") with one batch.
+        let loads = scripts.map(scriptSrc => {
             ParserEnvironment.loadedScripts.add(scriptSrc);
-        }
+            return ParserEnvironment.injectScript(scriptSrc);
+        });
+        await Promise.all(loads);
     }
 
     static shouldLoadScript(src) {

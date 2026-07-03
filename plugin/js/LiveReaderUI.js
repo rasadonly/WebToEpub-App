@@ -1239,49 +1239,12 @@ class LiveReaderUI {
         const rate = parseFloat(document.getElementById("lrTtsRate")?.value || 1);
         const pitch = parseFloat(document.getElementById("lrTtsPitch")?.value || 1);
 
-        this.speechUtterance = new SpeechSynthesisUtterance(this._normalizeTTSText(p.textContent));
-        
-        // Prevent Chrome garbage collection by keeping reference on window
-        window._activeUtterances = window._activeUtterances || [];
-        window._activeUtterances.push(this.speechUtterance);
-        
-        const cleanupUtterance = (utt) => {
-            if (window._activeUtterances) {
-                window._activeUtterances = window._activeUtterances.filter(u => u !== utt);
-            }
-        };
-
-        this.speechUtterance.rate = rate;
-        this.speechUtterance.pitch = pitch;
-        if (this.selectedVoiceURI) {
-            const voice = this.voices.find(v => v.voiceURI === this.selectedVoiceURI);
-            if (voice) this.speechUtterance.voice = voice;
-        }
-        this.speechUtterance.onend = () => {
-            cleanupUtterance(this.speechUtterance);
-            if (!this.ttsActive) return;
-            this._prepareTTSParagraphs();
-            const currentIdx = this.ttsParagraphs.indexOf(this.currentTtsElement);
-            if (currentIdx !== -1) {
-                this.ttsCurrentIndex = currentIdx + 1;
-            } else {
-                let targetIdx = 0;
-                for (let i = 0; i < this.ttsParagraphs.length; i++) {
-                    const rect = this.ttsParagraphs[i].getBoundingClientRect();
-                    if (rect.bottom > 0) {
-                        targetIdx = i;
-                        break;
-                    }
-                }
-                this.ttsCurrentIndex = targetIdx;
-            }
-            this._speakParagraph(this.ttsCurrentIndex);
-        };
-        this.speechUtterance.onerror = (e) => {
-            cleanupUtterance(this.speechUtterance);
-            console.error("Speech Synthesis Error:", e);
-            if (this.ttsActive) this._stopTTS();
-        };
+        // Speak the paragraph as sentence/clause chunks. A small JS-timed gap is
+        // inserted between chunks; because that gap is wall-clock time (not part of
+        // the utterance) it does NOT shrink when the rate is raised — so words keep
+        // human breathing room even at high speed, instead of slurring together.
+        const chunks = this._splitIntoSpeechChunks(this._normalizeTTSText(p.textContent));
+        this._speakChunks(chunks, 0, rate, pitch);
 
         // Start heartbeat watchdog to prevent Chrome's 15s timeout
         if (!this.ttsHeartbeatInterval) {
@@ -1292,8 +1255,106 @@ class LiveReaderUI {
                 }
             }, 10000);
         }
+    }
 
-        setTimeout(() => window.speechSynthesis.speak(this.speechUtterance), 50);
+    /**
+     * Split normalized text into natural speech units (sentences, then clauses)
+     * so a rate-independent pause can be inserted between them. Very short
+     * fragments are merged into the previous chunk to avoid choppy, single-word
+     * utterances whose intonation would reset unnaturally.
+     */
+    _splitIntoSpeechChunks(text) {
+        if (!text) return [];
+        const parts = text.match(/[^.!?;:,]+[.!?;:,]*\s*/g) || [text];
+        const chunks = [];
+        for (const part of parts) {
+            const trimmed = part.trim();
+            if (!trimmed) continue;
+            if (chunks.length && trimmed.replace(/[.!?;:,]/g, "").trim().split(/\s+/).length < 2) {
+                chunks[chunks.length - 1] += " " + trimmed;
+            } else {
+                chunks.push(trimmed);
+            }
+        }
+        return chunks.length ? chunks : [text];
+    }
+
+    /**
+     * Milliseconds of silence to insert AFTER a chunk before speaking the next.
+     * Near-zero at normal speed (let the engine's own pauses do the work) and
+     * grows with the rate so faster playback keeps clear, human gaps. Sentence
+     * endings pause longer than clause commas.
+     */
+    _interChunkGap(rate, chunk) {
+        const over = Math.max(0, rate - 1); // 0 at rate<=1, up to ~1 at rate 2
+        if (over === 0) return 0;
+        const endsSentence = /[.!?]\s*$/.test(chunk);
+        const endsClause = /[;:,]\s*$/.test(chunk);
+        const base = endsSentence ? 240 : (endsClause ? 130 : 70);
+        return Math.round(base * over);
+    }
+
+    /** Speak chunks[i..] sequentially, inserting a rate-scaled gap between them. */
+    _speakChunks(chunks, i, rate, pitch) {
+        if (!this.ttsActive) return;
+        if (i >= chunks.length) { this._advanceTTSParagraph(); return; }
+
+        const utt = new SpeechSynthesisUtterance(chunks[i]);
+        // Prevent Chrome garbage collection by keeping reference on window
+        window._activeUtterances = window._activeUtterances || [];
+        window._activeUtterances.push(utt);
+        const cleanupUtterance = (u) => {
+            if (window._activeUtterances) {
+                window._activeUtterances = window._activeUtterances.filter(x => x !== u);
+            }
+        };
+
+        utt.rate = rate;
+        utt.pitch = pitch;
+        if (this.selectedVoiceURI) {
+            const voice = this.voices.find(v => v.voiceURI === this.selectedVoiceURI);
+            if (voice) utt.voice = voice;
+        }
+        this.speechUtterance = utt;
+
+        utt.onend = () => {
+            cleanupUtterance(utt);
+            if (!this.ttsActive) return;
+            const gap = this._interChunkGap(rate, chunks[i]);
+            if (this._ttsChunkTimer) { clearTimeout(this._ttsChunkTimer); }
+            this._ttsChunkTimer = setTimeout(() => {
+                this._ttsChunkTimer = null;
+                this._speakChunks(chunks, i + 1, rate, pitch);
+            }, gap);
+        };
+        utt.onerror = (e) => {
+            cleanupUtterance(utt);
+            console.error("Speech Synthesis Error:", e);
+            if (this.ttsActive) this._stopTTS();
+        };
+
+        setTimeout(() => window.speechSynthesis.speak(utt), i === 0 ? 50 : 0);
+    }
+
+    /** Advance to the next paragraph after all of the current one's chunks finish. */
+    _advanceTTSParagraph() {
+        if (!this.ttsActive) return;
+        this._prepareTTSParagraphs();
+        const currentIdx = this.ttsParagraphs.indexOf(this.currentTtsElement);
+        if (currentIdx !== -1) {
+            this.ttsCurrentIndex = currentIdx + 1;
+        } else {
+            let targetIdx = 0;
+            for (let i = 0; i < this.ttsParagraphs.length; i++) {
+                const rect = this.ttsParagraphs[i].getBoundingClientRect();
+                if (rect.bottom > 0) {
+                    targetIdx = i;
+                    break;
+                }
+            }
+            this.ttsCurrentIndex = targetIdx;
+        }
+        this._speakParagraph(this.ttsCurrentIndex);
     }
 
     _playTTS() {
@@ -1368,7 +1429,11 @@ class LiveReaderUI {
     }
 
     _pauseTTS() {
-        if (window.speechSynthesis.speaking) {
+        // A pause can land mid-utterance OR during the silent gap between chunks
+        // (when nothing is "speaking"). Treat both as an active session so the
+        // pause always takes effect and the UI never gets stuck on "Pause".
+        const inGap = !!this._ttsChunkTimer;
+        if (window.speechSynthesis.speaking || inGap) {
             window.speechSynthesis.pause();
             const playBtn = document.getElementById("lrTtsPlayBtn");
             const pauseBtn = document.getElementById("lrTtsPauseBtn");
@@ -1380,11 +1445,13 @@ class LiveReaderUI {
             clearInterval(this.ttsHeartbeatInterval);
             this.ttsHeartbeatInterval = null;
         }
+        if (this._ttsChunkTimer) { clearTimeout(this._ttsChunkTimer); this._ttsChunkTimer = null; }
     }
 
     _stopTTS() {
         this.ttsActive = false;
         window.speechSynthesis.cancel();
+        if (this._ttsChunkTimer) { clearTimeout(this._ttsChunkTimer); this._ttsChunkTimer = null; }
         if (this.ttsHeartbeatInterval) {
             clearInterval(this.ttsHeartbeatInterval);
             this.ttsHeartbeatInterval = null;
