@@ -34,6 +34,9 @@ jobs:
           mkdir -p _site
           cp index.html _site/
           cp -r plugin _site/plugin
+          # data/ holds the Archive.org catalog (offtllnls_files.xml) fetched
+          # same-origin by ArchiveLibrary.js — must be deployed too.
+          cp -r data _site/data
           touch _site/.nojekyll
 
       - name: Upload site artifact
