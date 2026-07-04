@@ -144,33 +144,67 @@ async function handleEvent(request, env) {
     return json({ ok: true });
 }
 
+// Cap how many entries we read per request to stay within the Worker
+// subrequest budget (~1000) and a fast response time.
+const TOP_MAX_SCAN = 900;
+const TOP_READ_BATCH = 50;
+const TOP_CACHE_TTL_S = 120;
+
 async function handleTop(url, env) {
     if (!env.STATS_KV) return json({ entries: [] }, 503);
 
     const limit = Math.min(parseInt(url.searchParams.get("limit") || "20", 10), 50);
     const mode = url.searchParams.get("mode") || "all";
 
+    // Serve a short-lived cached ranking so this endpoint stays fast and cheap
+    // even as the index grows (the previous sequential scan timed out).
+    const cacheKey = `topcache:${mode}`;
+    try {
+        const cachedRaw = await env.STATS_KV.get(cacheKey);
+        if (cachedRaw) {
+            const cached = JSON.parse(cachedRaw);
+            return json({ version: 1, cached: true, updatedAt: cached.updatedAt, entries: (cached.entries || []).slice(0, limit) });
+        }
+    } catch { /* fall through and recompute */ }
+
     const indexRaw = await env.STATS_KV.get("index") || "[]";
     let index = [];
     try { index = JSON.parse(indexRaw); } catch { index = []; }
 
+    // If the index is enormous, prefer the most recently active entries.
+    const scan = index.length > TOP_MAX_SCAN ? index.slice(-TOP_MAX_SCAN) : index;
+
+    // Read entries in parallel batches instead of one-at-a-time (the hang).
     const entries = [];
-    for (const normalized of index) {
-        const raw = await env.STATS_KV.get(`entry:${normalized}`);
-        if (!raw) continue;
-        try {
-            const entry = JSON.parse(raw);
-            entry.totalScore = scoreEntry(entry, mode);
-            entries.push(entry);
-        } catch { /* skip */ }
+    for (let i = 0; i < scan.length; i += TOP_READ_BATCH) {
+        const slice = scan.slice(i, i + TOP_READ_BATCH);
+        const raws = await Promise.all(slice.map(n => env.STATS_KV.get(`entry:${n}`)));
+        for (const raw of raws) {
+            if (!raw) continue;
+            try {
+                const entry = JSON.parse(raw);
+                entry.totalScore = scoreEntry(entry, mode);
+                entries.push(entry);
+            } catch { /* skip */ }
+        }
     }
 
     entries.sort((a, b) => scoreEntry(b, mode) - scoreEntry(a, mode));
-    return json({ version: 1, updatedAt: new Date().toISOString(), entries: entries.slice(0, limit) });
+    const top = entries.slice(0, 50); // cache a few extra for varying limits
+
+    // Don't cache an empty ranking — that would hide freshly-recorded events
+    // for the whole TTL on a cold/empty dataset.
+    if (top.length > 0) {
+        try {
+            await env.STATS_KV.put(cacheKey, JSON.stringify({ updatedAt: new Date().toISOString(), entries: top }), { expirationTtl: TOP_CACHE_TTL_S });
+        } catch { /* ignore cache write failures */ }
+    }
+
+    return json({ version: 1, updatedAt: new Date().toISOString(), entries: top.slice(0, limit) });
 }
 
-async function handleCatalog(env) {
-    const top = await handleTop(new URL("https://x/stats/top?limit=500"), env);
+async function handleCatalog(url, env) {
+    const top = await handleTop(new URL("https://x/stats/top?limit=50"), env);
     const data = await top.json();
     return json({
         version: 1,
