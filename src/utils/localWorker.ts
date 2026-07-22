@@ -12,8 +12,16 @@ const DEFAULT_HEADERS: Record<string, string> = {
   "Accept-Language": "en-US,en;q=0.9",
 };
 
+// Public CORS proxy — many novel sites don't send CORS headers, so browser
+// fetch would be blocked without this hop.
+const CORS_PROXY = "https://corsproxy.io/?url=";
+
+function proxied(url: string): string {
+  return CORS_PROXY + encodeURIComponent(url);
+}
+
 async function httpGet(url: string, extra: Record<string, string> = {}): Promise<Response> {
-  return fetch(url, { headers: { ...DEFAULT_HEADERS, ...extra } });
+  return fetch(proxied(url), { headers: { ...DEFAULT_HEADERS, ...extra } });
 }
 
 async function getText(url: string): Promise<string> {
