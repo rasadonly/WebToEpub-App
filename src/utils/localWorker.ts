@@ -348,6 +348,7 @@ export async function fetchChapterContent(
 
   const attempt = async (): Promise<string> => {
     switch (key) {
+      case "novelhall":    return bodyNovelhall(chapterUrl);
       case "freewebnovel": return bodyFreeWebNovel(chapterUrl);
       case "novelfire":    return bodyNovelFire(chapterUrl);
       case "novgo":        return bodyNovGo(chapterUrl);
