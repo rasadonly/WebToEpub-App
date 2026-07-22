@@ -313,6 +313,7 @@ export async function fetchChapterLinks(tocUrl: string, linkSelector: string): P
   const key = siteKey(hostname);
   try {
     switch (key) {
+      case "novelhall":    return await tocNovelhall(tocUrl);
       case "freewebnovel": return await tocFreeWebNovel(tocUrl);
       case "novelfire":    return await tocNovelFire(tocUrl);
       case "novgo":        return await tocNovGo(tocUrl);
