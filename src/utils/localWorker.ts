@@ -281,6 +281,7 @@ async function bodyGeneric(url: string, selector: string): Promise<string> {
 // ---------- Dispatch ----------
 
 function siteKey(hostname: string): string {
+  if (hostname.includes("novelhall.com")) return "novelhall";
   if (hostname.includes("freewebnovel.com")) return "freewebnovel";
   if (hostname.includes("novelfire.")) return "novelfire";
   if (hostname.includes("novgo.")) return "novgo";
@@ -290,6 +291,21 @@ function siteKey(hostname: string): string {
   if (hostname.includes("novelbin") || hostname.includes("novlove")) return "novelbin";
   if (hostname.includes("wtr-lab.com")) return "wtrlab";
   return "generic";
+}
+
+async function tocNovelhall(url: string): Promise<string[]> {
+  const doc = parseHtml(await getText(url));
+  const out: string[] = [];
+  doc.querySelectorAll("#morelist a, .book-catalog a").forEach((a) => {
+    const href = a.getAttribute("href");
+    if (href) out.push(absoluteUrl(url, href));
+  });
+  return out;
+}
+
+async function bodyNovelhall(url: string): Promise<string> {
+  const doc = parseHtml(await getText(url));
+  return extractWithSelector(doc, "#htmlContent, .entry-content, .content");
 }
 
 export async function fetchChapterLinks(tocUrl: string, linkSelector: string): Promise<string[]> {
