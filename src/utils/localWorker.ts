@@ -12,8 +12,16 @@ const DEFAULT_HEADERS: Record<string, string> = {
   "Accept-Language": "en-US,en;q=0.9",
 };
 
+// Public CORS proxy — many novel sites don't send CORS headers, so browser
+// fetch would be blocked without this hop.
+const CORS_PROXY = "https://corsproxy.io/?url=";
+
+function proxied(url: string): string {
+  return CORS_PROXY + encodeURIComponent(url);
+}
+
 async function httpGet(url: string, extra: Record<string, string> = {}): Promise<Response> {
-  return fetch(url, { headers: { ...DEFAULT_HEADERS, ...extra } });
+  return fetch(proxied(url), { headers: { ...DEFAULT_HEADERS, ...extra } });
 }
 
 async function getText(url: string): Promise<string> {
@@ -273,6 +281,7 @@ async function bodyGeneric(url: string, selector: string): Promise<string> {
 // ---------- Dispatch ----------
 
 function siteKey(hostname: string): string {
+  if (hostname.includes("novelhall.com")) return "novelhall";
   if (hostname.includes("freewebnovel.com")) return "freewebnovel";
   if (hostname.includes("novelfire.")) return "novelfire";
   if (hostname.includes("novgo.")) return "novgo";
@@ -284,11 +293,27 @@ function siteKey(hostname: string): string {
   return "generic";
 }
 
+async function tocNovelhall(url: string): Promise<string[]> {
+  const doc = parseHtml(await getText(url));
+  const out: string[] = [];
+  doc.querySelectorAll("#morelist a, .book-catalog a").forEach((a) => {
+    const href = a.getAttribute("href");
+    if (href) out.push(absoluteUrl(url, href));
+  });
+  return out;
+}
+
+async function bodyNovelhall(url: string): Promise<string> {
+  const doc = parseHtml(await getText(url));
+  return extractWithSelector(doc, "#htmlContent, .entry-content, .content");
+}
+
 export async function fetchChapterLinks(tocUrl: string, linkSelector: string): Promise<string[]> {
   const hostname = new URL(tocUrl).hostname;
   const key = siteKey(hostname);
   try {
     switch (key) {
+      case "novelhall":    return await tocNovelhall(tocUrl);
       case "freewebnovel": return await tocFreeWebNovel(tocUrl);
       case "novelfire":    return await tocNovelFire(tocUrl);
       case "novgo":        return await tocNovGo(tocUrl);
@@ -323,6 +348,7 @@ export async function fetchChapterContent(
 
   const attempt = async (): Promise<string> => {
     switch (key) {
+      case "novelhall":    return bodyNovelhall(chapterUrl);
       case "freewebnovel": return bodyFreeWebNovel(chapterUrl);
       case "novelfire":    return bodyNovelFire(chapterUrl);
       case "novgo":        return bodyNovGo(chapterUrl);

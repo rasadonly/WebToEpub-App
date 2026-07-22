@@ -20,8 +20,8 @@ const Index = () => {
               Link to EPUB
             </h1>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Transform web novels from popular sites into beautiful EPUB files. 
-              Supports Novelhall, Novelfull, Royalroad, and many more.
+              Transform web novels from popular sites into beautiful EPUB files.
+              Supports Novelhall, Novelfull, NovelBin, FreeWebNovel, NovelFire, NovGo, NovelBuddy, NovelArrow, and WTR-LAB.
             </p>
           </div>
         </div>
@@ -64,8 +64,8 @@ const Index = () => {
           </div>
           <div className="text-xs text-muted-foreground">
             <p>
-              Supports Novelhall, Novelfull, Royalroad, Webnovel, Wuxiaworld, 
-              Scribble Hub, Novel Updates and more
+              Supports Novelhall, Novelfull, NovelBin, FreeWebNovel, NovelFire,
+              NovGo, NovelBuddy, NovelArrow, and WTR-LAB
             </p>
             <p className="mt-1">
               Your settings are automatically saved per domain for convenience
