@@ -13,9 +13,14 @@ const DEFAULT_HEADERS: Record<string, string> = {
 };
 
 // Public CORS proxies — many novel sites don't send CORS headers, so browser
-// fetch would be blocked without a hop. corsproxy.io started returning 403
-// broadly, so we try a chain and fall back on failure.
+// fetch would be blocked without a hop. Primary is the project's own
+// Cloudflare Worker; others are fallbacks in case it is down or rate-limited.
 const CORS_PROXIES: Array<(url: string) => string> = [
+  (url) => `https://fragrant-frost-f292.tufive.workers.dev/?url=${encodeURIComponent(url)}`,
+  (url) => `https://cors.eu.org/${url}`,
+  (url) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+  (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+];
   (url) => `https://cors.eu.org/${url}`,
   (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
   (url) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
