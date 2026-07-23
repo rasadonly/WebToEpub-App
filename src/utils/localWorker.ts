@@ -21,11 +21,6 @@ const CORS_PROXIES: Array<(url: string) => string> = [
   (url) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
   (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
 ];
-  (url) => `https://cors.eu.org/${url}`,
-  (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-  (url) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
-  (url) => `https://proxy.cors.sh/${url}`,
-];
 
 async function httpGet(url: string, extra: Record<string, string> = {}): Promise<Response> {
   let lastErr: unknown = null;
