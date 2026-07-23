@@ -81,18 +81,8 @@ export function useEpubConverter() {
       const siteConfig = getSiteConfig(data.tocUrl);
       const removeSelectors = siteConfig?.removeSelectors || [];
 
-      // Fetch and process chapters
-      const chapters: ChapterData[] = [];
-      
-      for (let i = 0; i < uniqueLinks.length; i++) {
-        const chapterUrl = uniqueLinks[i];
-        updateProgress({
-          currentChapter: i + 1,
-          message: `Processing chapter ${i + 1} of ${uniqueLinks.length}...`
-        });
-        addLog(`Fetching chapter ${i + 1}: ${getChapterTitle(chapterUrl)}`);
 
-        try {
+
       // Fetch and process chapters
       const chapters: ChapterData[] = [];
 
