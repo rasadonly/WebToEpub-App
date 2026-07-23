@@ -93,34 +93,44 @@ export function useEpubConverter() {
         addLog(`Fetching chapter ${i + 1}: ${getChapterTitle(chapterUrl)}`);
 
         try {
+      // Fetch and process chapters
+      const chapters: ChapterData[] = [];
+
+      for (let i = 0; i < workingLinks.length; i++) {
+        const chapterUrl = workingLinks[i];
+        const displayIndex = indexOffset + i + 1;
+        updateProgress({
+          currentChapter: i + 1,
+          message: `Processing chapter ${i + 1} of ${workingLinks.length}...`
+        });
+        addLog(`Fetching chapter ${displayIndex}: ${getChapterTitle(chapterUrl)}`);
+
+        try {
           const rawContent = await fetchChapterContent(chapterUrl, data.contentSelector);
-          
+
           if (!rawContent.trim()) {
-            addLog(`Warning: Chapter ${i + 1} appears to be empty`);
+            addLog(`Warning: Chapter ${displayIndex} appears to be empty`);
             continue;
           }
 
           const cleanContent = cleanHtmlContent(rawContent, removeSelectors);
-          const title = extractChapterTitle(rawContent, chapterUrl, i + 1);
+          const title = extractChapterTitle(rawContent, chapterUrl, displayIndex);
 
           chapters.push({
             title,
             content: cleanContent,
             url: chapterUrl,
-            index: i
+            index: displayIndex - 1
           });
 
-          addLog(`Successfully processed chapter ${i + 1}: ${title}`);
+          addLog(`Successfully processed chapter ${displayIndex}: ${title}`);
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-          addLog(`Error processing chapter ${i + 1}: ${errorMessage}`);
-          
-          // Continue with other chapters instead of failing completely
+          addLog(`Error processing chapter ${displayIndex}: ${errorMessage}`);
           continue;
         }
 
-        // Much faster delay for local processing
-        if (i < uniqueLinks.length - 1) {
+        if (i < workingLinks.length - 1) {
           await new Promise(resolve => setTimeout(resolve, 200));
         }
       }
@@ -136,15 +146,7 @@ export function useEpubConverter() {
       });
       addLog('Generating EPUB file...');
 
-      // Filter chapters based on range
-      let finalChapters = chapters;
-      if (!data.chapterRange.useAll) {
-        const startIndex = Math.max(0, data.chapterRange.start - 1);
-        const endIndex = Math.min(chapters.length, data.chapterRange.end);
-        finalChapters = chapters.slice(startIndex, endIndex);
-        
-        addLog(`Filtered chapters ${data.chapterRange.start}-${Math.min(data.chapterRange.end, chapters.length)} (${finalChapters.length} chapters)`);
-      }
+      const finalChapters = chapters;
 
       // Generate EPUB
       await generateEpub(finalChapters, data.metadata, {
@@ -152,6 +154,7 @@ export function useEpubConverter() {
         includeIndex: data.includeIndex,
         chapterRange: data.chapterRange
       });
+
 
       updateProgress({
         status: 'complete',
