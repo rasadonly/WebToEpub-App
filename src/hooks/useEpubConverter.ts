@@ -58,11 +58,24 @@ export function useEpubConverter() {
       });
 
       addLog(`Found ${uniqueLinks.length} chapter links`);
+
+      // Apply chapter range BEFORE fetching so we don't download the whole book
+      let workingLinks = uniqueLinks;
+      let indexOffset = 0;
+      if (!data.chapterRange.useAll) {
+        const startIndex = Math.max(0, data.chapterRange.start - 1);
+        const endIndex = Math.min(uniqueLinks.length, data.chapterRange.end);
+        workingLinks = uniqueLinks.slice(startIndex, endIndex);
+        indexOffset = startIndex;
+        addLog(`Range selected: chapters ${startIndex + 1}-${endIndex} (${workingLinks.length} chapters)`);
+      }
+
       updateProgress({
         status: 'processing-chapters',
-        totalChapters: uniqueLinks.length,
+        totalChapters: workingLinks.length,
         message: 'Processing chapters...'
       });
+
 
       // Get site config for cleanup rules
       const siteConfig = getSiteConfig(data.tocUrl);
