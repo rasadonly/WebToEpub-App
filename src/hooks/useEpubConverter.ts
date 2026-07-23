@@ -7,6 +7,12 @@ import { generateEpub } from '@/utils/epubGenerator';
 import { resolveUrl, getSiteConfig } from '@/utils/siteConfigs';
 import { useToast } from '@/hooks/use-toast';
 
+export interface ChapterItem {
+  id: string;
+  url: string;
+  title: string;
+}
+
 export function useEpubConverter() {
   const { toast } = useToast();
   const [progress, setProgress] = useState<ConversionProgress>({
@@ -16,6 +22,8 @@ export function useEpubConverter() {
     message: 'Ready to convert'
   });
   const [logs, setLogs] = useState<string[]>([]);
+  const [chapterList, setChapterList] = useState<ChapterItem[] | null>(null);
+  const [pendingData, setPendingData] = useState<ConversionFormData | null>(null);
 
   const addLog = useCallback((message: string) => {
     setLogs(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`]);
@@ -25,9 +33,11 @@ export function useEpubConverter() {
     setProgress(prev => ({ ...prev, ...update }));
   }, []);
 
-  const convertToEpub = useCallback(async (data: ConversionFormData) => {
+  const fetchChapters = useCallback(async (data: ConversionFormData) => {
     try {
       setLogs([]);
+      setChapterList(null);
+      setPendingData(data);
       updateProgress({
         status: 'fetching-toc',
         currentChapter: 0,
@@ -37,17 +47,13 @@ export function useEpubConverter() {
       addLog('Starting conversion process');
       addLog(`Fetching TOC from: ${data.tocUrl}`);
 
-      // Fetch chapter links
       const chapterLinks = await fetchChapterLinks(data.tocUrl, data.tocSelector);
-      
+
       if (chapterLinks.length === 0) {
         throw new Error('No chapter links found. Please check your TOC selector.');
       }
 
-      // Resolve relative URLs
       const resolvedLinks = chapterLinks.map(link => resolveUrl(data.tocUrl, link));
-      
-      // Remove duplicates and filter valid URLs
       const uniqueLinks = Array.from(new Set(resolvedLinks)).filter(link => {
         try {
           new URL(link);
@@ -59,7 +65,7 @@ export function useEpubConverter() {
 
       addLog(`Found ${uniqueLinks.length} chapter links`);
 
-      // Apply chapter range BEFORE fetching so we don't download the whole book
+      // Apply the form's initial range as a pre-filter
       let workingLinks = uniqueLinks;
       let indexOffset = 0;
       if (!data.chapterRange.useAll) {
@@ -67,60 +73,80 @@ export function useEpubConverter() {
         const endIndex = Math.min(uniqueLinks.length, data.chapterRange.end);
         workingLinks = uniqueLinks.slice(startIndex, endIndex);
         indexOffset = startIndex;
-        addLog(`Range selected: chapters ${startIndex + 1}-${endIndex} (${workingLinks.length} chapters)`);
+        addLog(`Pre-filtered to chapters ${startIndex + 1}-${endIndex}`);
+      }
+
+      const items: ChapterItem[] = workingLinks.map((url, i) => ({
+        id: `${indexOffset + i}-${url}`,
+        url,
+        title: getChapterTitle(url) || `Chapter ${indexOffset + i + 1}`
+      }));
+
+      setChapterList(items);
+      updateProgress({
+        status: 'idle',
+        totalChapters: items.length,
+        message: `Fetched ${items.length} chapters. Review and adjust below.`
+      });
+      addLog(`Ready: ${items.length} chapters loaded. Edit the list, then click Generate EPUB.`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+      updateProgress({ status: 'error', message: `Error: ${errorMessage}` });
+      addLog(`Fetch failed: ${errorMessage}`);
+      toast({
+        title: 'Fetch Failed',
+        description: errorMessage,
+        variant: 'destructive',
+        duration: 8000
+      });
+    }
+  }, [addLog, updateProgress, toast]);
+
+  const generateFromChapters = useCallback(async (orderedChapters: ChapterItem[]) => {
+    if (!pendingData) return;
+    const data = pendingData;
+    try {
+      if (orderedChapters.length === 0) {
+        throw new Error('No chapters selected.');
       }
 
       updateProgress({
         status: 'processing-chapters',
-        totalChapters: workingLinks.length,
+        currentChapter: 0,
+        totalChapters: orderedChapters.length,
         message: 'Processing chapters...'
       });
 
-
-      // Get site config for cleanup rules
       const siteConfig = getSiteConfig(data.tocUrl);
       const removeSelectors = siteConfig?.removeSelectors || [];
 
-
-
-      // Fetch and process chapters
       const chapters: ChapterData[] = [];
 
-      for (let i = 0; i < workingLinks.length; i++) {
-        const chapterUrl = workingLinks[i];
-        const displayIndex = indexOffset + i + 1;
+      for (let i = 0; i < orderedChapters.length; i++) {
+        const item = orderedChapters[i];
         updateProgress({
           currentChapter: i + 1,
-          message: `Processing chapter ${i + 1} of ${workingLinks.length}...`
+          message: `Processing chapter ${i + 1} of ${orderedChapters.length}...`
         });
-        addLog(`Fetching chapter ${displayIndex}: ${getChapterTitle(chapterUrl)}`);
+        addLog(`Fetching chapter ${i + 1}: ${item.title}`);
 
         try {
-          const rawContent = await fetchChapterContent(chapterUrl, data.contentSelector);
-
+          const rawContent = await fetchChapterContent(item.url, data.contentSelector);
           if (!rawContent.trim()) {
-            addLog(`Warning: Chapter ${displayIndex} appears to be empty`);
+            addLog(`Warning: Chapter ${i + 1} appears to be empty`);
             continue;
           }
-
           const cleanContent = cleanHtmlContent(rawContent, removeSelectors);
-          const title = extractChapterTitle(rawContent, chapterUrl, displayIndex);
-
-          chapters.push({
-            title,
-            content: cleanContent,
-            url: chapterUrl,
-            index: displayIndex - 1
-          });
-
-          addLog(`Successfully processed chapter ${displayIndex}: ${title}`);
+          const title = extractChapterTitle(rawContent, item.url, i + 1) || item.title;
+          chapters.push({ title, content: cleanContent, url: item.url, index: i });
+          addLog(`Successfully processed chapter ${i + 1}: ${title}`);
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-          addLog(`Error processing chapter ${displayIndex}: ${errorMessage}`);
+          addLog(`Error processing chapter ${i + 1}: ${errorMessage}`);
           continue;
         }
 
-        if (i < workingLinks.length - 1) {
+        if (i < orderedChapters.length - 1) {
           await new Promise(resolve => setTimeout(resolve, 200));
         }
       }
@@ -129,52 +155,35 @@ export function useEpubConverter() {
         throw new Error('No chapters could be processed. Please check your content selector.');
       }
 
-      addLog(`Successfully processed ${chapters.length} chapters`);
-      updateProgress({
-        status: 'generating-epub',
-        message: 'Generating EPUB file...'
-      });
+      updateProgress({ status: 'generating-epub', message: 'Generating EPUB file...' });
       addLog('Generating EPUB file...');
 
-      const finalChapters = chapters;
-
-      // Generate EPUB
-      await generateEpub(finalChapters, data.metadata, {
+      await generateEpub(chapters, data.metadata, {
         fontFamily: data.fontFamily,
         includeIndex: data.includeIndex,
         chapterRange: data.chapterRange
       });
 
-
-      updateProgress({
-        status: 'complete',
-        message: 'Conversion completed successfully!'
-      });
+      updateProgress({ status: 'complete', message: 'Conversion completed successfully!' });
       addLog(`EPUB file generated: ${data.metadata.title}.epub`);
-      addLog('Download should start automatically');
 
       toast({
-        title: "Success!",
+        title: 'Success!',
         description: `Successfully converted ${chapters.length} chapters to EPUB format.`,
         duration: 5000
       });
-
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-      updateProgress({
-        status: 'error',
-        message: `Error: ${errorMessage}`
-      });
+      updateProgress({ status: 'error', message: `Error: ${errorMessage}` });
       addLog(`Conversion failed: ${errorMessage}`);
-
       toast({
-        title: "Conversion Failed",
+        title: 'Conversion Failed',
         description: errorMessage,
-        variant: "destructive",
+        variant: 'destructive',
         duration: 10000
       });
     }
-  }, [addLog, updateProgress, toast]);
+  }, [pendingData, addLog, updateProgress, toast]);
 
   const resetConverter = useCallback(() => {
     setProgress({
@@ -184,14 +193,25 @@ export function useEpubConverter() {
       message: 'Ready to convert'
     });
     setLogs([]);
+    setChapterList(null);
+    setPendingData(null);
   }, []);
+
+  const isFetchingToc = progress.status === 'fetching-toc';
+  const isGenerating =
+    progress.status === 'processing-chapters' || progress.status === 'generating-epub';
 
   return {
     progress,
     logs,
-    convertToEpub,
+    chapterList,
+    setChapterList,
+    fetchChapters,
+    generateFromChapters,
     resetConverter,
-    isConverting: progress.status !== 'idle' && progress.status !== 'complete' && progress.status !== 'error'
+    isFetchingToc,
+    isGenerating,
+    isConverting: isFetchingToc || isGenerating
   };
 }
 
@@ -199,28 +219,27 @@ function getChapterTitle(url: string): string {
   try {
     const pathname = new URL(url).pathname;
     const segments = pathname.split('/').filter(Boolean);
-    return segments[segments.length - 1] || 'Unknown Chapter';
+    const last = segments[segments.length - 1] || '';
+    return last
+      .replace(/\.(html?|xhtml)$/i, '')
+      .replace(/[-_]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
   } catch {
-    return 'Unknown Chapter';
+    return '';
   }
 }
 
 function extractChapterTitle(content: string, url: string, index: number): string {
-  // Try to extract title from content
   const parser = new DOMParser();
   const doc = parser.parseFromString(content, 'text/html');
-  
-  // Look for common title selectors
   const titleSelectors = ['h1', '.chapter-title', '.title', 'h2'];
-  
   for (const selector of titleSelectors) {
     const element = doc.querySelector(selector);
     if (element?.textContent?.trim()) {
       return element.textContent.trim();
     }
   }
-  
-  // Fallback to URL-based title
   const urlTitle = getChapterTitle(url);
-  return urlTitle !== 'Unknown Chapter' ? urlTitle : `Chapter ${index}`;
+  return urlTitle || `Chapter ${index}`;
 }

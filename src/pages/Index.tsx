@@ -1,11 +1,22 @@
 import ConversionForm from '@/components/ConversionForm';
 import ProgressLog from '@/components/ProgressLog';
+import ChapterManager from '@/components/ChapterManager';
 import { useEpubConverter } from '@/hooks/useEpubConverter';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, Github, Heart } from 'lucide-react';
 
 const Index = () => {
-  const { progress, logs, convertToEpub, resetConverter, isConverting } = useEpubConverter();
+  const {
+    progress,
+    logs,
+    chapterList,
+    setChapterList,
+    fetchChapters,
+    generateFromChapters,
+    resetConverter,
+    isConverting,
+    isGenerating
+  } = useEpubConverter();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
@@ -28,7 +39,15 @@ const Index = () => {
 
         {/* Main Content */}
         <div className="space-y-6">
-          <ConversionForm onSubmit={convertToEpub} isConverting={isConverting} />
+          <ConversionForm onSubmit={fetchChapters} isConverting={isConverting} />
+          {chapterList && chapterList.length > 0 && (
+            <ChapterManager
+              chapters={chapterList}
+              onChange={setChapterList}
+              onGenerate={generateFromChapters}
+              isGenerating={isGenerating}
+            />
+          )}
           <ProgressLog progress={progress} logs={logs} />
         </div>
 
