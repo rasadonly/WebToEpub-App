@@ -12,16 +12,28 @@ const DEFAULT_HEADERS: Record<string, string> = {
   "Accept-Language": "en-US,en;q=0.9",
 };
 
-// Public CORS proxy — many novel sites don't send CORS headers, so browser
-// fetch would be blocked without this hop.
-const CORS_PROXY = "https://corsproxy.io/?url=";
-
-function proxied(url: string): string {
-  return CORS_PROXY + encodeURIComponent(url);
-}
+// Public CORS proxies — many novel sites don't send CORS headers, so browser
+// fetch would be blocked without a hop. corsproxy.io started returning 403
+// broadly, so we try a chain and fall back on failure.
+const CORS_PROXIES: Array<(url: string) => string> = [
+  (url) => `https://cors.eu.org/${url}`,
+  (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  (url) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+  (url) => `https://proxy.cors.sh/${url}`,
+];
 
 async function httpGet(url: string, extra: Record<string, string> = {}): Promise<Response> {
-  return fetch(proxied(url), { headers: { ...DEFAULT_HEADERS, ...extra } });
+  let lastErr: unknown = null;
+  for (const build of CORS_PROXIES) {
+    try {
+      const r = await fetch(build(url), { headers: { ...DEFAULT_HEADERS, ...extra } });
+      if (r.ok) return r;
+      lastErr = new Error(`HTTP ${r.status}`);
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error("All CORS proxies failed");
 }
 
 async function getText(url: string): Promise<string> {
