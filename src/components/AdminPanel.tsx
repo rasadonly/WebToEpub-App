@@ -10,7 +10,7 @@ import { NovelSite } from '@/types';
 import { SUPPORTED_SITES } from '@/utils/siteConfigs';
 import { useToast } from '@/hooks/use-toast';
 
-export function AdminPanel() {
+export function AdminPanel({ open, onOpenChange, hideTrigger }: { open?: boolean; onOpenChange?: (o: boolean) => void; hideTrigger?: boolean } = {}) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
   const [sites, setSites] = useState<NovelSite[]>(SUPPORTED_SITES);
