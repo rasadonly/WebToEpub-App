@@ -3,7 +3,7 @@ import ProgressLog from '@/components/ProgressLog';
 import ChapterManager from '@/components/ChapterManager';
 import { useEpubConverter } from '@/hooks/useEpubConverter';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Github, Heart } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 
 const Index = () => {
   const {
@@ -54,32 +54,6 @@ const Index = () => {
           </div>
         )}
 
-        {/* Footer */}
-        <footer className="text-center space-y-4 pt-12 border-t border-border/50">
-          <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground">
-            <a
-              href="https://github.com/dteviot/WebToEpub"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 hover:text-primary transition-smooth"
-            >
-              <Github className="w-4 h-4" />
-              Inspired by WebToEpub
-            </a>
-            <span className="flex items-center gap-1">
-              Made with <Heart className="w-4 h-4 text-red-500" /> for novel readers
-            </span>
-          </div>
-          <div className="text-xs text-muted-foreground">
-            <p>
-              Supports Novelhall, Novelfull, NovelBin, FreeWebNovel, NovelFire,
-              NovGo, NovelBuddy, NovelArrow, and WTR-LAB
-            </p>
-            <p className="mt-1">
-              Your settings are automatically saved per domain for convenience
-            </p>
-          </div>
-        </footer>
       </div>
     </div>
   );
