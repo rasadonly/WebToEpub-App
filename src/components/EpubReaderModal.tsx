@@ -120,6 +120,10 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
         const nav = await book.loaded.navigation;
         setToc(nav?.toc || []);
 
+        // Wait a tick in case the viewer div is still mounting
+        for (let i = 0; i < 20 && !viewerRef.current; i++) {
+          await new Promise((r) => setTimeout(r, 25));
+        }
         if (!viewerRef.current) throw new Error('Viewer not ready');
         viewerRef.current.innerHTML = '';
         const rendition = book.renderTo(viewerRef.current, {
@@ -296,50 +300,56 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
           </aside>
         )}
 
-        {!bookLoaded ? (
-          <div className="flex-1 flex items-center justify-center p-6">
-            {loading ? (
-              <p className="text-sm text-muted-foreground">Opening EPUB…</p>
-            ) : (
-              <div className="text-center max-w-md space-y-4">
-                <div className="text-5xl">📚</div>
-                <h2 className="text-2xl font-display font-bold">EPUB Reader</h2>
-                <p className="text-sm text-muted-foreground">
-                  Open an EPUB file to read it in-browser with themes, fonts and a table of contents.
-                </p>
-                <Button onClick={() => fileInputRef.current?.click()} className="gap-2">
-                  <Upload className="w-4 h-4" /> Choose EPUB file
-                </Button>
-                <p className="text-xs text-muted-foreground">…or drop a .epub anywhere on this window</p>
-                {error && <p className="text-sm text-destructive">{error}</p>}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="flex-1 relative">
-            <div ref={viewerRef} className="absolute inset-0" />
-            {/* Prev / Next tap zones */}
-            <button
-              aria-label="Previous page"
-              onClick={() => renditionRef.current?.prev()}
-              className="absolute inset-y-0 left-0 w-1/6 flex items-center justify-start pl-2 opacity-0 hover:opacity-100 transition"
-            >
-              <ChevronLeft className="w-6 h-6 text-foreground/70" />
-            </button>
-            <button
-              aria-label="Next page"
-              onClick={() => renditionRef.current?.next()}
-              className="absolute inset-y-0 right-0 w-1/6 flex items-center justify-end pr-2 opacity-0 hover:opacity-100 transition"
-            >
-              <ChevronRight className="w-6 h-6 text-foreground/70" />
-            </button>
-            {error && (
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-destructive bg-card border border-border rounded px-3 py-1">
-                {error}
-              </div>
-            )}
-          </div>
-        )}
+        <div className="flex-1 relative">
+          {/* Viewer is always mounted so epub.js has a container even before a book is opened */}
+          <div ref={viewerRef} className="absolute inset-0" />
+
+          {bookLoaded && (
+            <>
+              <button
+                aria-label="Previous page"
+                onClick={() => renditionRef.current?.prev()}
+                className="absolute inset-y-0 left-0 w-1/6 flex items-center justify-start pl-2 opacity-0 hover:opacity-100 transition"
+              >
+                <ChevronLeft className="w-6 h-6 text-foreground/70" />
+              </button>
+              <button
+                aria-label="Next page"
+                onClick={() => renditionRef.current?.next()}
+                className="absolute inset-y-0 right-0 w-1/6 flex items-center justify-end pr-2 opacity-0 hover:opacity-100 transition"
+              >
+                <ChevronRight className="w-6 h-6 text-foreground/70" />
+              </button>
+            </>
+          )}
+
+          {!bookLoaded && (
+            <div className="absolute inset-0 flex items-center justify-center p-6 bg-background">
+              {loading ? (
+                <p className="text-sm text-muted-foreground">Opening EPUB…</p>
+              ) : (
+                <div className="text-center max-w-md space-y-4">
+                  <div className="text-5xl">📚</div>
+                  <h2 className="text-2xl font-display font-bold">EPUB Reader</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Open an EPUB file to read it in-browser with themes, fonts and a table of contents.
+                  </p>
+                  <Button onClick={() => fileInputRef.current?.click()} className="gap-2">
+                    <Upload className="w-4 h-4" /> Choose EPUB file
+                  </Button>
+                  <p className="text-xs text-muted-foreground">…or drop a .epub anywhere on this window</p>
+                  {error && <p className="text-sm text-destructive">{error}</p>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {bookLoaded && error && (
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-destructive bg-card border border-border rounded px-3 py-1">
+              {error}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
