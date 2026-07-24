@@ -1,5 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { X, ArrowLeft, ChevronLeft, ChevronRight, BookOpen, Loader2, List, Type as TypeIcon } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  X,
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  BookOpen,
+  Loader2,
+  List,
+  Volume2,
+  Play,
+  Pause,
+  Square,
+  SkipForward,
+  SkipBack,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -18,11 +32,42 @@ interface LiveReaderModalProps {
 
 type View = 'url' | 'loading' | 'details' | 'reader';
 
-/**
- * Native, in-app Live Reader. Uses the WebToEpub engine (via bridge) for
- * TOC discovery, proxy chain, and per-parser content extraction, but the
- * entire UI is React so it lives inside our site.
- */
+interface Paragraph {
+  html: string;
+  text: string;
+}
+
+/** Split chapter HTML into speakable paragraphs, preserving inline formatting. */
+function extractParagraphs(html: string): Paragraph[] {
+  if (!html) return [];
+  const doc = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html');
+  const root = doc.body.firstElementChild;
+  if (!root) return [];
+  const blocks: Paragraph[] = [];
+  const pick = (el: Element) => {
+    const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+    if (!text) return;
+    blocks.push({ html: (el as HTMLElement).outerHTML, text });
+  };
+  const children = Array.from(root.children);
+  if (children.length === 0) {
+    const text = (root.textContent || '').trim();
+    if (text) blocks.push({ html: `<p>${text}</p>`, text });
+    return blocks;
+  }
+  for (const child of children) {
+    const tag = child.tagName.toLowerCase();
+    if (tag === 'div' || tag === 'section' || tag === 'article') {
+      const inner = extractParagraphs(child.innerHTML);
+      if (inner.length) blocks.push(...inner);
+      else pick(child);
+    } else {
+      pick(child);
+    }
+  }
+  return blocks;
+}
+
 export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
   const [view, setView] = useState<View>('url');
   const [inputUrl, setInputUrl] = useState('');
@@ -37,6 +82,52 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
   const [fontSize, setFontSize] = useState(18);
   const [showToc, setShowToc] = useState(false);
   const viewportRef = useRef<HTMLDivElement>(null);
+
+  // TTS state
+  const supportsTTS = typeof window !== 'undefined' && 'speechSynthesis' in window;
+  const [ttsOpen, setTtsOpen] = useState(false);
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [voiceURI, setVoiceURI] = useState<string>('');
+  const [rate, setRate] = useState(1);
+  const [pitch, setPitch] = useState(1);
+  const [ttsPlaying, setTtsPlaying] = useState(false);
+  const [ttsPaused, setTtsPaused] = useState(false);
+  const [ttsIndex, setTtsIndex] = useState(-1);
+  const ttsIndexRef = useRef(-1);
+  const ttsActiveRef = useRef(false);
+
+  const paragraphs = useMemo(() => extractParagraphs(chapterHtml), [chapterHtml]);
+  const paragraphsRef = useRef<Paragraph[]>([]);
+  paragraphsRef.current = paragraphs;
+
+  // Load voices
+  useEffect(() => {
+    if (!supportsTTS) return;
+    const load = () => {
+      const v = window.speechSynthesis.getVoices();
+      setVoices(v);
+      if (!voiceURI && v.length) {
+        const preferred =
+          v.find((x) => x.default) || v.find((x) => x.lang?.startsWith('en')) || v[0];
+        if (preferred) setVoiceURI(preferred.voiceURI);
+      }
+    };
+    load();
+    window.speechSynthesis.onvoiceschanged = load;
+    return () => {
+      window.speechSynthesis.onvoiceschanged = null;
+    };
+  }, [supportsTTS, voiceURI]);
+
+  const stopTTS = useCallback(() => {
+    if (!supportsTTS) return;
+    ttsActiveRef.current = false;
+    window.speechSynthesis.cancel();
+    setTtsPlaying(false);
+    setTtsPaused(false);
+    setTtsIndex(-1);
+    ttsIndexRef.current = -1;
+  }, [supportsTTS]);
 
   // Reset when re-opened
   useEffect(() => {
@@ -53,6 +144,8 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
     return () => {
       window.removeEventListener('keydown', onKey);
       document.body.style.overflow = '';
+      if (supportsTTS) window.speechSynthesis.cancel();
+      ttsActiveRef.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, url]);
@@ -76,6 +169,7 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
 
   async function openChapter(index: number) {
     if (index < 0 || index >= chapters.length) return;
+    stopTTS();
     setChapterIndex(index);
     setView('reader');
     setLoadingChapter(true);
@@ -98,6 +192,91 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
     }
   }
 
+  const speakFrom = useCallback(
+    (startIndex: number) => {
+      if (!supportsTTS) return;
+      const list = paragraphsRef.current;
+      if (!list.length) return;
+      window.speechSynthesis.cancel();
+      ttsActiveRef.current = true;
+      setTtsPlaying(true);
+      setTtsPaused(false);
+
+      const speakAt = (i: number) => {
+        if (!ttsActiveRef.current) return;
+        if (i >= list.length) {
+          // Auto-advance to next chapter if possible
+          ttsActiveRef.current = false;
+          setTtsPlaying(false);
+          setTtsIndex(-1);
+          ttsIndexRef.current = -1;
+          if (chapterIndex < chapters.length - 1) {
+            void openChapter(chapterIndex + 1).then(() => {
+              // small delay to allow paragraphs to update
+              setTimeout(() => speakFrom(0), 400);
+            });
+          }
+          return;
+        }
+        setTtsIndex(i);
+        ttsIndexRef.current = i;
+        // Scroll paragraph into view
+        const el = viewportRef.current?.querySelector(`[data-tts-idx="${i}"]`);
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        const utt = new SpeechSynthesisUtterance(list[i].text);
+        utt.rate = rate;
+        utt.pitch = pitch;
+        const v = voices.find((x) => x.voiceURI === voiceURI);
+        if (v) utt.voice = v;
+        utt.onend = () => {
+          if (!ttsActiveRef.current) return;
+          speakAt(i + 1);
+        };
+        utt.onerror = () => {
+          if (!ttsActiveRef.current) return;
+          speakAt(i + 1);
+        };
+        window.speechSynthesis.speak(utt);
+      };
+
+      speakAt(Math.max(0, Math.min(startIndex, list.length - 1)));
+    },
+    [supportsTTS, voices, voiceURI, rate, pitch, chapterIndex, chapters.length] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  const togglePlay = () => {
+    if (!supportsTTS) return;
+    if (!ttsPlaying) {
+      speakFrom(ttsIndexRef.current >= 0 ? ttsIndexRef.current : 0);
+      return;
+    }
+    if (ttsPaused) {
+      window.speechSynthesis.resume();
+      setTtsPaused(false);
+    } else {
+      window.speechSynthesis.pause();
+      setTtsPaused(true);
+    }
+  };
+
+  const skip = (delta: number) => {
+    if (!supportsTTS || !paragraphsRef.current.length) return;
+    const target = Math.max(
+      0,
+      Math.min(
+        paragraphsRef.current.length - 1,
+        (ttsIndexRef.current >= 0 ? ttsIndexRef.current : 0) + delta
+      )
+    );
+    speakFrom(target);
+  };
+
+  // Stop TTS when modal closes
+  useEffect(() => {
+    if (!open) stopTTS();
+  }, [open, stopTTS]);
+
   const readerStyle = useMemo(
     () => ({ fontSize: `${fontSize}px`, lineHeight: 1.7 }),
     [fontSize]
@@ -111,7 +290,7 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
       <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-card/80">
         <div className="flex items-center gap-2 min-w-0">
           {view === 'reader' && (
-            <Button variant="ghost" size="sm" onClick={() => setView('details')} className="gap-1">
+            <Button variant="ghost" size="sm" onClick={() => { stopTTS(); setView('details'); }} className="gap-1">
               <ArrowLeft className="w-4 h-4" /> Back
             </Button>
           )}
@@ -131,6 +310,17 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
               <Button variant="ghost" size="sm" onClick={() => setShowToc((v) => !v)} className="gap-1">
                 <List className="w-4 h-4" />
               </Button>
+              {supportsTTS && (
+                <Button
+                  variant={ttsOpen ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setTtsOpen((v) => !v)}
+                  className="gap-1"
+                  title="Text to speech"
+                >
+                  <Volume2 className="w-4 h-4" />
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -156,6 +346,76 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
           </Button>
         </div>
       </div>
+
+      {/* TTS Panel */}
+      {view === 'reader' && ttsOpen && supportsTTS && (
+        <div className="border-b border-border bg-card/60 px-4 py-3 flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-1">
+            <Button size="sm" variant="outline" onClick={() => skip(-1)} title="Previous paragraph">
+              <SkipBack className="w-4 h-4" />
+            </Button>
+            <Button size="sm" onClick={togglePlay} className="gap-1">
+              {ttsPlaying && !ttsPaused ? (
+                <><Pause className="w-4 h-4" /> Pause</>
+              ) : (
+                <><Play className="w-4 h-4" /> {ttsPaused ? 'Resume' : 'Play'}</>
+              )}
+            </Button>
+            <Button size="sm" variant="outline" onClick={stopTTS} title="Stop">
+              <Square className="w-4 h-4" />
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => skip(1)} title="Next paragraph">
+              <SkipForward className="w-4 h-4" />
+            </Button>
+          </div>
+
+          <label className="flex items-center gap-2 text-xs">
+            Voice
+            <select
+              value={voiceURI}
+              onChange={(e) => setVoiceURI(e.target.value)}
+              className="bg-background border border-border rounded px-2 py-1 text-xs max-w-[220px]"
+            >
+              {voices.length === 0 && <option value="">Default</option>}
+              {voices.map((v) => (
+                <option key={v.voiceURI} value={v.voiceURI}>
+                  {v.name} ({v.lang})
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex items-center gap-2 text-xs">
+            Rate {rate.toFixed(1)}x
+            <input
+              type="range"
+              min={0.5}
+              max={2}
+              step={0.1}
+              value={rate}
+              onChange={(e) => setRate(parseFloat(e.target.value))}
+            />
+          </label>
+
+          <label className="flex items-center gap-2 text-xs">
+            Pitch {pitch.toFixed(1)}
+            <input
+              type="range"
+              min={0.5}
+              max={2}
+              step={0.1}
+              value={pitch}
+              onChange={(e) => setPitch(parseFloat(e.target.value))}
+            />
+          </label>
+
+          {ttsIndex >= 0 && (
+            <span className="text-xs text-muted-foreground ml-auto">
+              ¶ {ttsIndex + 1} / {paragraphs.length}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* URL view */}
       {view === 'url' && (
@@ -277,6 +537,20 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
               {loadingChapter ? (
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Loader2 className="w-4 h-4 animate-spin" /> Loading chapter…
+                </div>
+              ) : paragraphs.length > 0 ? (
+                <div>
+                  {paragraphs.map((p, i) => (
+                    <div
+                      key={i}
+                      data-tts-idx={i}
+                      onClick={() => supportsTTS && ttsOpen && speakFrom(i)}
+                      className={`transition-colors rounded px-2 -mx-2 ${
+                        i === ttsIndex ? 'bg-primary/15 ring-1 ring-primary/40' : ''
+                      } ${supportsTTS && ttsOpen ? 'cursor-pointer hover:bg-muted/50' : ''}`}
+                      dangerouslySetInnerHTML={{ __html: p.html }}
+                    />
+                  ))}
                 </div>
               ) : (
                 <div dangerouslySetInnerHTML={{ __html: chapterHtml }} />
