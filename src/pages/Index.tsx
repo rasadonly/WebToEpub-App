@@ -37,7 +37,7 @@ const Index = () => {
               isGenerating={isGenerating}
             />
           )}
-          <ProgressLog progress={progress} logs={logs} />
+          <ProgressLog progress={progress} logs={logs} onStop={stopConversion} />
         </div>
 
         {/* Reset Button */}
