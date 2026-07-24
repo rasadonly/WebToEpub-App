@@ -14,6 +14,7 @@ const Index = () => {
     fetchChapters,
     generateFromChapters,
     resetConverter,
+    stopConversion,
     isConverting,
     isGenerating
   } = useEpubConverter();
