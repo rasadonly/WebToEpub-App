@@ -107,7 +107,8 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
   const [theme, setTheme] = useState<Theme>('dark');
   const [fontSize, setFontSize] = useState(110); // %
   const [fontFamily, setFontFamily] = useState('serif');
-  const [viewMode, setViewMode] = useState<ViewMode>('double');
+  const [viewMode, setViewMode] = useState<ViewMode>('scroll');
+  const [immersive, setImmersive] = useState(false);
 
   // --- TTS state ---
   const supportsTTS =
