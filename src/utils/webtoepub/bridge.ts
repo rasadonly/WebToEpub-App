@@ -45,8 +45,25 @@ type EngineWindow = Window & {
   util?: {
     sleepController: AbortController;
   };
+  SiteSearchEngine?: {
+    search: (
+      query: string,
+      startIndex?: number,
+      targetResultCount?: number,
+      includeSecondary?: boolean,
+      onProgress?: (site: string, status: string) => void,
+      onResults?: (results: EngineSearchResult[]) => void
+    ) => Promise<{ results: EngineSearchResult[]; nextIndex: number }>;
+  };
   workInProgress?: boolean;
 };
+
+export interface EngineSearchResult {
+  title: string;
+  url: string;
+  snippet: string;
+  source: string;
+}
 
 export interface EnginePackProgress {
   current: number;
@@ -257,6 +274,28 @@ export async function engineListSupportedHosts(): Promise<string[]> {
   const factory = win.parserFactory;
   if (!factory) return [];
   return Array.from(factory.parsers.keys()) as string[];
+}
+
+/**
+ * Search novel sites via the engine's SiteSearchEngine.
+ * Streams partial results via onResults; resolves with the full merged list.
+ */
+export async function engineSearch(
+  query: string,
+  onResults?: (results: EngineSearchResult[]) => void,
+  onProgress?: (site: string, status: string) => void
+): Promise<EngineSearchResult[]> {
+  const win = await ensureIframe();
+  if (!win.SiteSearchEngine) throw new Error('Search engine not ready');
+  const { results } = await win.SiteSearchEngine.search(
+    query,
+    0,
+    20,
+    true,
+    onProgress,
+    onResults
+  );
+  return results;
 }
 
 /** Tear down – mainly for tests. */

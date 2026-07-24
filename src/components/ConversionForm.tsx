@@ -9,9 +9,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { SUPPORTED_SITES, getSiteConfig, extractDomain } from '@/utils/siteConfigs';
 import { NovelSite, EpubMetadata } from '@/types';
-import { BookOpen, Globe, Settings, Hash, Type, List, Search, Sparkles, ArrowRight } from 'lucide-react';
+import { BookOpen, Globe, Settings, Hash, Type, List, Search, Sparkles, ArrowRight, ExternalLink, X } from 'lucide-react';
 import { AdminPanel } from './AdminPanel';
 import { SupportedSites } from './SupportedSites';
+import { engineSearch, EngineSearchResult } from '@/utils/webtoepub/bridge';
 
 interface ConversionFormProps {
   onSubmit: (data: ConversionFormData) => void;
@@ -53,6 +54,49 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
   const [fontFamily, setFontFamily] = useState('Georgia');
   const [includeIndex, setIncludeIndex] = useState(false);
   const [editableUrls, setEditableUrls] = useState(false);
+
+  // Search state (when the user types a query instead of a URL)
+  const [searchResults, setSearchResults] = useState<EngineSearchResult[]>([]);
+  const [searchStatus, setSearchStatus] = useState<string>('');
+  const [isSearching, setIsSearching] = useState(false);
+
+  const isUrlLike = (s: string) => /^https?:\/\//i.test(s.trim());
+
+  const runSearch = async (query: string) => {
+    setIsSearching(true);
+    setSearchResults([]);
+    setSearchStatus('Searching supported sites…');
+    try {
+      const seen = new Set<string>();
+      await engineSearch(
+        query,
+        (partial) => {
+          setSearchResults(prev => {
+            const merged = [...prev];
+            for (const r of partial) {
+              if (!seen.has(r.url)) { seen.add(r.url); merged.push(r); }
+            }
+            return merged;
+          });
+        },
+        (site, status) => setSearchStatus(`${site}: ${status}`)
+      );
+      setSearchStatus('');
+    } catch (err) {
+      toast({
+        title: 'Search failed',
+        description: err instanceof Error ? err.message : 'Try pasting a URL instead.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const clearSearch = () => {
+    setSearchResults([]);
+    setSearchStatus('');
+  };
 
   // Load saved settings from localStorage
   useEffect(() => {
@@ -96,19 +140,25 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!tocUrl) {
+
+    const value = tocUrl.trim();
+    if (!value) {
       toast({
-        title: "Missing URL",
-        description: "Please enter a novel table-of-contents URL.",
+        title: "Enter a URL or search term",
+        description: "Paste a novel's table-of-contents URL, or type a novel name to search.",
         variant: "destructive"
       });
       return;
     }
 
+    // If it's not a URL, run a search instead of trying to fetch
+    if (!isUrlLike(value)) {
+      runSearch(value);
+      return;
+    }
 
     // Save settings to localStorage
-    const domain = extractDomain(tocUrl);
+    const domain = extractDomain(value);
     if (domain) {
       localStorage.setItem(`epub-converter-${domain}`, JSON.stringify({
         tocSelector,
@@ -117,7 +167,7 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
     }
 
     onSubmit({
-      tocUrl,
+      tocUrl: value,
       tocSelector,
       contentSelector,
       metadata,
@@ -129,7 +179,9 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
   };
 
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const hasUrl = tocUrl.trim().length > 0;
+  const trimmed = tocUrl.trim();
+  const hasUrl = trimmed.length > 0 && isUrlLike(trimmed);
+  const hasQuery = trimmed.length > 0 && !isUrlLike(trimmed);
 
   return (
     <div className="w-full max-w-5xl mx-auto">
@@ -156,36 +208,88 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
               <Search className="w-5 h-5 text-muted-foreground absolute left-5 pointer-events-none" />
               <Input
                 id="toc-url"
-                type="url"
+                type="text"
                 value={tocUrl}
                 onChange={(e) => setTocUrl(e.target.value)}
-                placeholder="Paste a novel's table-of-contents URL…"
-                required
+                placeholder="Paste a TOC URL or search a novel by name…"
                 autoFocus
                 className="h-14 md:h-16 pl-14 pr-32 md:pr-36 text-base md:text-lg rounded-full border-0 bg-transparent shadow-none focus-visible:ring-0"
               />
               <Button
                 type="submit"
-                disabled={isConverting || !hasUrl}
+                disabled={isConverting || isSearching || trimmed.length === 0}
                 className="absolute right-2 h-10 md:h-12 rounded-full px-5 md:px-6 bg-primary hover:bg-primary/90 text-primary-foreground gap-2"
               >
-                {isConverting ? (
+                {isConverting || isSearching ? (
                   <>
                     <div className="w-4 h-4 border-2 border-primary-foreground/40 border-t-primary-foreground rounded-full animate-spin" />
-                    <span className="hidden md:inline">Working</span>
+                    <span className="hidden md:inline">{isSearching ? 'Searching' : 'Working'}</span>
                   </>
                 ) : (
                   <>
-                    <span className="hidden md:inline">Fetch</span>
-                    <ArrowRight className="w-4 h-4" />
+                    <span className="hidden md:inline">{hasQuery ? 'Search' : 'Fetch'}</span>
+                    {hasQuery ? <Search className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
                   </>
                 )}
               </Button>
             </div>
             <p className="mt-3 text-center text-xs text-muted-foreground">
-              Works with Novelhall, Novelfull, NovelBin, FreeWebNovel, NovelFire, NovGo, NovelBuddy, NovelArrow &amp; WTR-LAB
+              Paste a TOC URL to convert, or type a novel name to search across supported sites.
             </p>
+
+            {/* Search results */}
+            {(searchResults.length > 0 || isSearching) && (
+              <Card className="mt-4 p-3 bg-card border border-border animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="flex items-center justify-between px-2 py-1 mb-1">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    {isSearching ? (searchStatus || 'Searching…') : `${searchResults.length} results`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={clearSearch}
+                    className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                  >
+                    <X className="w-3.5 h-3.5" /> Clear
+                  </button>
+                </div>
+                <div className="max-h-96 overflow-y-auto divide-y divide-border">
+                  {searchResults.map((r) => (
+                    <button
+                      key={r.url}
+                      type="button"
+                      onClick={() => {
+                        setTocUrl(r.url);
+                        if (r.title && !metadata.title) {
+                          setMetadata(prev => ({ ...prev, title: r.title }));
+                        }
+                        clearSearch();
+                      }}
+                      className="w-full text-left px-3 py-2.5 hover:bg-muted/60 rounded-md transition-smooth"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="font-medium text-sm truncate">{r.title || 'Untitled'}</div>
+                          {r.snippet && (
+                            <div className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{r.snippet}</div>
+                          )}
+                          <div className="text-[11px] text-muted-foreground/80 truncate mt-1">{r.url}</div>
+                        </div>
+                        <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
+                          <ExternalLink className="w-3 h-3" /> {r.source}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                  {isSearching && searchResults.length === 0 && (
+                    <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+                      Querying supported sites…
+                    </div>
+                  )}
+                </div>
+              </Card>
+            )}
           </div>
+
 
           {/* Quick actions */}
           <div className="flex flex-wrap gap-2 justify-center">
