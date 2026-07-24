@@ -260,13 +260,57 @@ function setInput(win: EngineWindow, id: string, value: string) {
 
 async function waitForParser(win: EngineWindow, timeoutMs = 60_000) {
   const started = Date.now();
-  // Poll for parser to be created and webPages populated.
+  const winAny = win as unknown as {
+    ErrorLog?: { queue?: unknown[]; showErrorMessage?: (m: unknown) => void };
+    __WTE_LAST_ERROR?: string | null;
+  };
+  // Reset any prior captured error and hook ErrorLog so failures surface fast.
+  winAny.__WTE_LAST_ERROR = null;
+  try {
+    const el = winAny.ErrorLog;
+    if (el && el.showErrorMessage && !(el as { __WTE_HOOKED?: boolean }).__WTE_HOOKED) {
+      const original = el.showErrorMessage.bind(el);
+      el.showErrorMessage = (msg: unknown) => {
+        try {
+          const text =
+            typeof msg === 'string'
+              ? msg
+              : (msg as { message?: string; toString?: () => string })?.message ||
+                String(msg);
+          winAny.__WTE_LAST_ERROR = text;
+        } catch { /* ignore */ }
+        return original(msg);
+      };
+      (el as { __WTE_HOOKED?: boolean }).__WTE_HOOKED = true;
+    }
+    // Also clear any queued messages from a prior run.
+    if (el && Array.isArray(el.queue)) el.queue.length = 0;
+  } catch { /* ignore */ }
+
   while (Date.now() - started < timeoutMs) {
     const p = win.parser;
     if (p && p.state && p.state.webPages && p.state.webPages.size > 0) return p;
+
+    // Bail out immediately if the engine reported an error.
+    const err =
+      winAny.__WTE_LAST_ERROR ||
+      (Array.isArray(winAny.ErrorLog?.queue) && winAny.ErrorLog!.queue!.length > 0
+        ? (() => {
+            const m = winAny.ErrorLog!.queue![0] as
+              | string
+              | { message?: string; toString?: () => string };
+            return typeof m === 'string' ? m : m?.message || String(m);
+          })()
+        : null);
+    if (err) {
+      throw new Error(String(err).slice(0, 500));
+    }
+
     await new Promise(r => setTimeout(r, 200));
   }
-  throw new Error('Timed out waiting for chapter list. The site may not be supported.');
+  throw new Error(
+    'Timed out waiting for chapter list. The site may be blocked by Cloudflare/anti-bot protection, or is not supported.'
+  );
 }
 
 /**
