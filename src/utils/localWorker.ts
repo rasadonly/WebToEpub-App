@@ -12,15 +12,32 @@ const DEFAULT_HEADERS: Record<string, string> = {
   "Accept-Language": "en-US,en;q=0.9",
 };
 
-// Public CORS proxies — many novel sites don't send CORS headers, so browser
-// fetch would be blocked without a hop. Primary is the project's own
-// Cloudflare Worker; others are fallbacks in case it is down or rate-limited.
-const CORS_PROXIES: Array<(url: string) => string> = [
-  (url) => `https://fragrant-frost-f292.tufive.workers.dev/?url=${encodeURIComponent(url)}`,
-  (url) => `https://cors.eu.org/${url}`,
-  (url) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
-  (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+// CORS proxy list ported from WebToEpub (public/webtoepub/plugin/js/HttpClient.js).
+// Kept in sync with the engine so both fetch paths share the same fallback chain.
+export const CORS_PROXY_LIST: Array<{ name: string; url: string }> = [
+  { name: "corsproxy.io (with key)", url: "https://corsproxy.io/?key=ab3170e1&url=" },
+  { name: "allOrigins (raw)", url: "https://api.allorigins.win/raw?url=" },
+  { name: "CORS.SH", url: "https://proxy.cors.sh/" },
+  { name: "CodeTabs", url: "https://api.codetabs.com/v1/proxy?quest=" },
+  { name: "ThingProxy", url: "https://thingproxy.freeboard.io/fetch/" },
+  { name: "cors.lol", url: "https://api.cors.lol/?url=" },
+  { name: "Render Proxy", url: "https://render-proxy-1-181c.onrender.com/proxy?url=" },
+  { name: "Alwaysdata Proxy", url: "https://prasadghanwat.alwaysdata.net/proxy?url=" },
+  { name: "Lovable Proxy", url: "https://loveable-proxy-forwebtoepub.lovable.app/api/proxy?url=" },
 ];
+
+// Proxies that take the target URL as a query param need encodeURIComponent;
+// path-style proxies (CORS.SH, ThingProxy) just prefix the raw URL.
+const ENCODED_PROXY_SUFFIXES = ["?url=", "?quest=", "&url="];
+
+function buildProxyUrl(proxyBase: string, targetUrl: string): string {
+  const needsEncoding = ENCODED_PROXY_SUFFIXES.some((s) => proxyBase.endsWith(s));
+  return needsEncoding ? proxyBase + encodeURIComponent(targetUrl) : proxyBase + targetUrl;
+}
+
+const CORS_PROXIES: Array<(url: string) => string> = CORS_PROXY_LIST.map(
+  (p) => (url: string) => buildProxyUrl(p.url, url)
+);
 
 async function httpGet(url: string, extra: Record<string, string> = {}): Promise<Response> {
   let lastErr: unknown = null;
