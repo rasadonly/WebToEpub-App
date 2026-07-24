@@ -55,6 +55,49 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
   const [includeIndex, setIncludeIndex] = useState(false);
   const [editableUrls, setEditableUrls] = useState(false);
 
+  // Search state (when the user types a query instead of a URL)
+  const [searchResults, setSearchResults] = useState<EngineSearchResult[]>([]);
+  const [searchStatus, setSearchStatus] = useState<string>('');
+  const [isSearching, setIsSearching] = useState(false);
+
+  const isUrlLike = (s: string) => /^https?:\/\//i.test(s.trim());
+
+  const runSearch = async (query: string) => {
+    setIsSearching(true);
+    setSearchResults([]);
+    setSearchStatus('Searching supported sites…');
+    try {
+      const seen = new Set<string>();
+      await engineSearch(
+        query,
+        (partial) => {
+          setSearchResults(prev => {
+            const merged = [...prev];
+            for (const r of partial) {
+              if (!seen.has(r.url)) { seen.add(r.url); merged.push(r); }
+            }
+            return merged;
+          });
+        },
+        (site, status) => setSearchStatus(`${site}: ${status}`)
+      );
+      setSearchStatus('');
+    } catch (err) {
+      toast({
+        title: 'Search failed',
+        description: err instanceof Error ? err.message : 'Try pasting a URL instead.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const clearSearch = () => {
+    setSearchResults([]);
+    setSearchStatus('');
+  };
+
   // Load saved settings from localStorage
   useEffect(() => {
     const domain = extractDomain(tocUrl);
