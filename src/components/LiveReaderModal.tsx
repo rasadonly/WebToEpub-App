@@ -47,14 +47,21 @@ const TTS_TONES = [
 ];
 
 async function fetchTtsBlob(text: string, voice: string, instructions: string, speed: number, signal: AbortSignal): Promise<Blob> {
-  const { data, error } = await supabase.functions.invoke('tts', {
-    body: { text, voice, instructions, speed },
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tts`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+    },
+    body: JSON.stringify({ text, voice, instructions, speed }),
+    signal,
   });
-  if (signal.aborted) throw new DOMException('aborted', 'AbortError');
-  if (error) throw error;
-  if (data instanceof Blob) return data;
-  if (data instanceof ArrayBuffer) return new Blob([data], { type: 'audio/mpeg' });
-  throw new Error('Invalid TTS response');
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`TTS ${res.status}: ${t.slice(0, 200)}`);
+  }
+  return await res.blob();
 }
 
 interface LiveReaderModalProps {
