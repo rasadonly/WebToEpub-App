@@ -9,7 +9,7 @@ class ArchiveLibrary {
         this.searchQuery = "";
         
         // Base URL for the archive XML and downloads
-        this.XML_URL = "data/offtllnls_files.xml";
+        this.XML_URL = "https://archive.org/download/offtllnls/offtllnls_files.xml";
         this.DOWNLOAD_BASE = "https://archive.org/download/offtllnls/";
     }
 
