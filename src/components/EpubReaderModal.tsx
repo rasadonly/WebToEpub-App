@@ -126,7 +126,7 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
   const ttsActiveRef = useRef(false);
   const pauseTimerRef = useRef<number | null>(null);
   const ttsParaIdxRef = useRef(0);
-  const ttsParasRef = useRef<string[]>([]);
+  const ttsParasRef = useRef<TtsPara[]>([]);
 
   const clearPauseTimer = () => {
     if (pauseTimerRef.current !== null) {
