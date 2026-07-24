@@ -379,6 +379,8 @@ var main = (function() {
         } else {
             parser = parserFactory.manuallySelectParser(manualSelect);
         }
+        window.parser = parser;
+
         if (parser === undefined) {
             ErrorLog.showErrorMessage(UIText.Error.noParserFound);
             return false;
