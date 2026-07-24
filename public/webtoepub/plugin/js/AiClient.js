@@ -48,6 +48,16 @@ class AiClient { // eslint-disable-line no-unused-vars
         return typeof Secrets !== "undefined" ? Secrets.POLLINATIONS_API_KEY : null;
     }
 
+    /** Endpoint override injected by the host app (Lovable AI Gateway proxy). */
+    static _endpoint() {
+        try {
+            if (typeof window !== "undefined" && window.LOVABLE_AI_ENDPOINT) {
+                return window.LOVABLE_AI_ENDPOINT;
+            }
+        } catch (e) { /* ignore */ }
+        return "https://gen.pollinations.ai/v1/chat/completions";
+    }
+
     /** Resolve a possibly-relative href against a base URL. */
     static _resolveUrl(base, href) {
         if (!href) return href;
@@ -74,20 +84,30 @@ class AiClient { // eslint-disable-line no-unused-vars
      * missing key. Uses a low temperature for stable, extractable output.
      */
     static async _chatRaw(system, user, temperature = 0) {
-        const apiKey = AiClient._apiKey();
-        if (!apiKey) {
-            console.warn("[AiClient] No API key found in Secrets.js");
-            return null;
+        const endpoint = AiClient._endpoint();
+        const isLovable = /\/functions\/v1\/ai-parse/.test(endpoint);
+        const headers = { "Content-Type": "application/json" };
+        let model = AiClient.MODEL;
+        if (isLovable) {
+            model = (typeof window !== "undefined" && window.LOVABLE_AI_MODEL) || "google/gemini-2.5-flash";
+            if (typeof window !== "undefined" && window.LOVABLE_AI_ANON_KEY) {
+                headers["Authorization"] = `Bearer ${window.LOVABLE_AI_ANON_KEY}`;
+                headers["apikey"] = window.LOVABLE_AI_ANON_KEY;
+            }
+        } else {
+            const apiKey = AiClient._apiKey();
+            if (!apiKey) {
+                console.warn("[AiClient] No API key found in Secrets.js");
+                return null;
+            }
+            headers["Authorization"] = `Bearer ${apiKey}`;
         }
         try {
-            const fetchOptions = {
+            const res = await fetch(endpoint, {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${apiKey}`
-                },
+                headers,
                 body: JSON.stringify({
-                    model: AiClient.MODEL,
+                    model,
                     temperature,
                     messages: [
                         { role: "system", content: system },
@@ -95,9 +115,13 @@ class AiClient { // eslint-disable-line no-unused-vars
                     ],
                     stream: false
                 })
-            };
-            const xhr = await HttpClient.fetchJson("https://gen.pollinations.ai/v1/chat/completions", fetchOptions);
-            return xhr.json?.choices?.[0]?.message?.content || null;
+            });
+            if (!res.ok) {
+                console.warn("[AiClient] AI request failed:", res.status, await res.text());
+                return null;
+            }
+            const json = await res.json();
+            return json?.choices?.[0]?.message?.content || null;
         } catch (e) {
             console.error("[AiClient] Request failed:", e);
             return null;

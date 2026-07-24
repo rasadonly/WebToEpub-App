@@ -229,7 +229,41 @@ class DefaultParser extends Parser {
     findContent(dom) {
         let hostName = util.extractHostName(dom.baseURI);
         this.logic = this.siteConfigs.constructFindContentLogicForSite(hostName);
-        return this.logic.findContent(dom); 
+        let content = this.logic.findContent(dom);
+        if (content == null || (content.textContent || "").trim().length < 30) {
+            // Try AI selector auto-detection once per host, then cache.
+            try {
+                if (typeof AiClient !== "undefined" && !DefaultParser._aiTried.has(hostName)) {
+                    DefaultParser._aiTried.add(hostName);
+                    let html = dom.documentElement ? dom.documentElement.outerHTML : "";
+                    // Fire-and-forget synchronous best-effort: schedule async work
+                    // for the NEXT chapter; also try inline via cached promise.
+                    let cached = DefaultParser._aiCache.get(hostName);
+                    if (!cached) {
+                        cached = AiClient.fetchAiSelectors(html, dom.baseURI).then((sel) => {
+                            if (sel && sel.content) {
+                                try {
+                                    this.siteConfigs.saveSiteConfig(
+                                        hostName,
+                                        sel.content,
+                                        sel.title || "",
+                                        sel.remove || "",
+                                        dom.baseURI,
+                                        ""
+                                    );
+                                    console.log("[DefaultParser] AI auto-config saved for", hostName, sel);
+                                } catch (e) { console.warn("[DefaultParser] save AI config failed", e); }
+}
+DefaultParser._aiTried = new Set();
+DefaultParser._aiCache = new Map();
+                            return sel;
+                        });
+                        DefaultParser._aiCache.set(hostName, cached);
+                    }
+                }
+            } catch (e) { console.warn("[DefaultParser] AI fallback error:", e); }
+        }
+        return content;
     }
 
     populateUI(dom) {
