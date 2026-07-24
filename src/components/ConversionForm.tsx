@@ -278,31 +278,44 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
                 </div>
                 <div className="max-h-96 overflow-y-auto divide-y divide-border">
                   {searchResults.map((r) => (
-                    <button
+                    <div
                       key={r.url}
-                      type="button"
-                      onClick={() => {
-                        setTocUrl(r.url);
-                        if (r.title && !metadata.title) {
-                          setMetadata(prev => ({ ...prev, title: r.title }));
-                        }
-                        clearSearch();
-                      }}
-                      className="w-full text-left px-3 py-2.5 hover:bg-muted/60 rounded-md transition-smooth"
+                      className="group flex items-stretch gap-1 hover:bg-muted/60 rounded-md transition-smooth"
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <div className="font-medium text-sm truncate">{r.title || 'Untitled'}</div>
-                          {r.snippet && (
-                            <div className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{r.snippet}</div>
-                          )}
-                          <div className="text-[11px] text-muted-foreground/80 truncate mt-1">{r.url}</div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTocUrl(r.url);
+                          if (r.title && !metadata.title) {
+                            setMetadata(prev => ({ ...prev, title: r.title }));
+                          }
+                          clearSearch();
+                        }}
+                        className="flex-1 text-left px-3 py-2.5"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="font-medium text-sm truncate">{r.title || 'Untitled'}</div>
+                            {r.snippet && (
+                              <div className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{r.snippet}</div>
+                            )}
+                            <div className="text-[11px] text-muted-foreground/80 truncate mt-1">{r.url}</div>
+                          </div>
+                          <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
+                            <ExternalLink className="w-3 h-3" /> {r.source}
+                          </span>
                         </div>
-                        <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
-                          <ExternalLink className="w-3 h-3" /> {r.source}
-                        </span>
-                      </div>
-                    </button>
+                      </button>
+                      <button
+                        type="button"
+                        title="Read live"
+                        onClick={(e) => { e.stopPropagation(); clearSearch(); openLiveReader(r.url); }}
+                        className="shrink-0 px-3 my-1 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-smooth inline-flex items-center gap-1 text-xs"
+                      >
+                        <BookOpenCheck className="w-4 h-4" />
+                        <span className="hidden sm:inline">Read</span>
+                      </button>
+                    </div>
                   ))}
                   {isSearching && searchResults.length === 0 && (
                     <div className="px-3 py-6 text-center text-sm text-muted-foreground">
