@@ -112,13 +112,25 @@ export function useEpubConverter() {
           `Handing ${orderedChapters.length} chapters to the engine for fetch + pack`
         );
 
-        await enginePackEpub(orderedChapters, {
-          title: data.metadata.title || 'Novel',
-          author: data.metadata.author || 'Unknown Author',
-          description: data.metadata.description || '',
-          language: data.metadata.language || 'en',
-          fileName: `${data.metadata.title || 'novel'}.epub`,
-        });
+        await enginePackEpub(
+          orderedChapters,
+          {
+            title: data.metadata.title || 'Novel',
+            author: data.metadata.author || 'Unknown Author',
+            description: data.metadata.description || '',
+            language: data.metadata.language || 'en',
+            fileName: `${data.metadata.title || 'novel'}.epub`,
+          },
+          ({ current, total, message }) => {
+            updateProgress({
+              currentChapter: current,
+              totalChapters: total || orderedChapters.length,
+              message: message
+                ? `${message} — fetching chapters…`
+                : `Fetching ${orderedChapters.length} chapters and packing EPUB…`,
+            });
+          }
+        );
 
         updateProgress({
           status: 'complete',
