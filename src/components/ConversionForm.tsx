@@ -14,8 +14,9 @@ import { AdminPanel } from './AdminPanel';
 import { SupportedSites } from './SupportedSites';
 import { engineSearch, cancelSearch, EngineSearchResult } from '@/utils/webtoepub/bridge';
 import { LiveReaderModal } from './LiveReaderModal';
+import { LibraryModal } from './LibraryModal';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+
 
 
 interface ConversionFormProps {
@@ -378,16 +379,8 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
           {/* Menu-controlled dialogs (headless triggers) */}
           <SupportedSites open={supportedOpen} onOpenChange={setSupportedOpen} hideTrigger />
           <AdminPanel open={adminOpen} onOpenChange={setAdminOpen} hideTrigger />
-          <Dialog open={libraryOpen} onOpenChange={setLibraryOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Library</DialogTitle>
-              </DialogHeader>
-              <p className="text-sm text-muted-foreground">
-                Your saved books will appear here. Library sync is coming soon.
-              </p>
-            </DialogContent>
-          </Dialog>
+          <LibraryModal open={libraryOpen} onClose={() => setLibraryOpen(false)} />
+
 
         </div>
 
