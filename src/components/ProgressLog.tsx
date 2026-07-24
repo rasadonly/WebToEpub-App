@@ -11,7 +11,7 @@ interface ProgressLogProps {
   onStop?: () => void;
 }
 
-export default function ProgressLog({ progress, logs }: ProgressLogProps) {
+export default function ProgressLog({ progress, logs, onStop }: ProgressLogProps) {
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
