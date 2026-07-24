@@ -718,6 +718,17 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
           {/* Viewer is always mounted so epub.js has a container even before a book is opened */}
           <div ref={viewerRef} className="absolute inset-0" />
 
+          {bookLoaded && immersive && (
+            <button
+              onClick={() => setImmersive(false)}
+              title="Exit immersive"
+              className="absolute top-3 right-3 z-10 p-2 rounded-full bg-card/70 backdrop-blur border border-border hover:bg-card transition opacity-40 hover:opacity-100"
+            >
+              <Minimize2 className="w-4 h-4" />
+            </button>
+          )}
+
+
           {bookLoaded && viewMode !== 'scroll' && (
             <>
               <button
