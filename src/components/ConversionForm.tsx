@@ -9,11 +9,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { SUPPORTED_SITES, getSiteConfig, extractDomain } from '@/utils/siteConfigs';
 import { NovelSite, EpubMetadata } from '@/types';
-import { BookOpen, Globe, Settings, Hash, Type, List, Search, Sparkles, ArrowRight, ExternalLink, X, BookOpenCheck } from 'lucide-react';
+import { BookOpen, Globe, Settings, Hash, Type, List, Search, Sparkles, ArrowRight, ExternalLink, X, BookOpenCheck, MoreVertical, Library as LibraryIcon } from 'lucide-react';
 import { AdminPanel } from './AdminPanel';
 import { SupportedSites } from './SupportedSites';
 import { engineSearch, cancelSearch, EngineSearchResult } from '@/utils/webtoepub/bridge';
 import { LiveReaderModal } from './LiveReaderModal';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+
 
 interface ConversionFormProps {
   onSubmit: (data: ConversionFormData) => void;
@@ -68,6 +71,12 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
     setLiveReaderUrl(u && u.trim() ? u.trim() : undefined);
     setLiveReaderOpen(true);
   };
+
+  // Menu-controlled dialogs
+  const [supportedOpen, setSupportedOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+
 
   const isUrlLike = (s: string) => /^https?:\/\//i.test(s.trim());
 
@@ -334,20 +343,47 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
 
 
           {/* Quick actions */}
-          <div className="flex flex-wrap gap-2 justify-center">
-            <SupportedSites />
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => openLiveReader(hasUrl ? trimmed : undefined)}
-              className="gap-2"
-            >
-              <BookOpenCheck className="w-4 h-4" /> Live Reader
-            </Button>
-            <AdminPanel />
+          <div className="flex justify-center">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="outline" size="icon" aria-label="More options">
+                  <MoreVertical className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="center" className="w-48">
+                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setSupportedOpen(true); }}>
+                  <Globe className="w-4 h-4 mr-2" /> Supported Sites
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); openLiveReader(hasUrl ? trimmed : undefined); }}>
+                  <BookOpenCheck className="w-4 h-4 mr-2" /> Live Reader
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setAdminOpen(true); }}>
+                  <Settings className="w-4 h-4 mr-2" /> Admin
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setLibraryOpen(true); }}>
+                  <LibraryIcon className="w-4 h-4 mr-2" /> Library
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
 
+          {/* Menu-controlled dialogs (headless triggers) */}
+          <SupportedSites open={supportedOpen} onOpenChange={setSupportedOpen} hideTrigger />
+          <AdminPanel open={adminOpen} onOpenChange={setAdminOpen} hideTrigger />
+          <Dialog open={libraryOpen} onOpenChange={setLibraryOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Library</DialogTitle>
+              </DialogHeader>
+              <p className="text-sm text-muted-foreground">
+                Your saved books will appear here. Library sync is coming soon.
+              </p>
+            </DialogContent>
+          </Dialog>
+
         </div>
+
 
 
 
