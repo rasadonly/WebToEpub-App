@@ -310,6 +310,98 @@ export async function engineSearch(
   return results;
 }
 
+export interface EngineBookInfo {
+  title: string;
+  author: string;
+  description: string;
+  coverUrl: string;
+}
+
+/** Read the currently-loaded book's metadata from engine DOM inputs. */
+export async function engineGetBookInfo(): Promise<EngineBookInfo> {
+  const win = await ensureIframe();
+  const doc = win.document;
+  const val = (id: string) =>
+    (doc.getElementById(id) as HTMLInputElement | HTMLTextAreaElement | null)?.value?.trim() || '';
+  return {
+    title: val('titleInput'),
+    author: val('authorInput'),
+    description: val('descriptionInput'),
+    coverUrl: val('coverImageUrlInput'),
+  };
+}
+
+export interface EngineChapterContent {
+  title: string;
+  html: string;
+}
+
+/**
+ * Fetch a single chapter through the engine, extract clean content,
+ * and return sanitized HTML ready to render inline in our React reader.
+ */
+export async function engineFetchChapter(
+  url: string,
+  chapterTitle?: string
+): Promise<EngineChapterContent> {
+  const win = await ensureIframe();
+  if (!win.parserFactory || !win.HttpClient) throw new Error('Engine not ready');
+
+  // 1) Fetch the raw page (HttpClient handles the proxy chain).
+  const xhr = await win.HttpClient.wrapFetch(url);
+  let dom: Document | null = xhr.responseXML || null;
+  if (!dom && xhr.responseText) {
+    dom = new DOMParser().parseFromString(xhr.responseText, 'text/html');
+  }
+  if (!dom) throw new Error('Failed to load chapter');
+
+  // 2) Pick a parser for this URL and extract the content element.
+  type ParserLike = {
+    findContent?: (d: Document) => Element | null;
+    removeUnwantedElementsFromContentElement?: (el: Element) => void;
+    findChapterTitle?: (d: Document) => Element | string | null;
+  };
+  let parser: ParserLike | null = null;
+  try {
+    parser = win.parserFactory.fetch?.(url, dom) as ParserLike;
+  } catch {
+    /* fall through */
+  }
+
+  let contentEl: Element | null = null;
+  if (parser?.findContent) {
+    try { contentEl = parser.findContent(dom); } catch { /* ignore */ }
+  }
+  if (!contentEl) contentEl = dom.body;
+
+  // 3) Extract title from parser or dom.
+  let title = chapterTitle || '';
+  if (!title && parser?.findChapterTitle) {
+    try {
+      const t = parser.findChapterTitle(dom);
+      if (t) title = (t instanceof Element ? t.textContent : String(t))?.trim() || '';
+    } catch { /* ignore */ }
+  }
+  if (!title) title = dom.title || 'Chapter';
+
+  // 4) Sanitize a clone so we don't mutate parser state.
+  const clone = contentEl.cloneNode(true) as Element;
+  try { parser?.removeUnwantedElementsFromContentElement?.(clone); } catch { /* ignore */ }
+  clone
+    .querySelectorAll(
+      "script,style,iframe,object,embed,form,input,button,select,textarea,noscript,nav,header,footer,[class*='ad-'],[id*='ad-'],[class*='banner'],[class*='share']"
+    )
+    .forEach((el) => el.remove());
+  // Remove inline event handlers.
+  clone.querySelectorAll('*').forEach((el) => {
+    for (const attr of Array.from(el.attributes)) {
+      if (attr.name.startsWith('on')) el.removeAttribute(attr.name);
+    }
+  });
+
+  return { title, html: clone.innerHTML };
+}
+
 /** Tear down – mainly for tests. */
 export function _resetEngine() {
   if (iframe) iframe.remove();
