@@ -20,6 +20,8 @@ import {
   SkipBack,
   SkipForward,
   Square as StopIcon,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -71,19 +73,22 @@ function humanizeForSpeech(sentence: string): string {
     .trim();
 }
 
-function extractParagraphsFromDoc(doc: Document | null | undefined): string[] {
+type TtsPara = { text: string; el: Element | null };
+
+function extractParagraphsFromDoc(doc: Document | null | undefined): TtsPara[] {
   if (!doc) return [];
   const nodes = Array.from(
     doc.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote')
   );
   const seen = new Set<string>();
-  const out: string[] = [];
+  const out: TtsPara[] = [];
   for (const n of nodes) {
     const t = (n.textContent || '').replace(/\s+/g, ' ').trim();
     if (!t || t.length < 2) continue;
-    if (seen.has(t)) continue;
-    seen.add(t);
-    out.push(t);
+    const key = t.slice(0, 120);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ text: t, el: n });
   }
   return out;
 }
@@ -107,7 +112,8 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
   const [theme, setTheme] = useState<Theme>('dark');
   const [fontSize, setFontSize] = useState(110); // %
   const [fontFamily, setFontFamily] = useState('serif');
-  const [viewMode, setViewMode] = useState<ViewMode>('double');
+  const [viewMode, setViewMode] = useState<ViewMode>('scroll');
+  const [immersive, setImmersive] = useState(false);
 
   // --- TTS state ---
   const supportsTTS =
@@ -122,7 +128,7 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
   const ttsActiveRef = useRef(false);
   const pauseTimerRef = useRef<number | null>(null);
   const ttsParaIdxRef = useRef(0);
-  const ttsParasRef = useRef<string[]>([]);
+  const ttsParasRef = useRef<TtsPara[]>([]);
 
   const clearPauseTimer = () => {
     if (pauseTimerRef.current !== null) {
@@ -209,12 +215,15 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
         width: '100%',
         height: '100%',
         allowScriptedContent: false,
-        manager: 'default',
       };
       if (mode === 'scroll') {
-        opts.flow = 'scrolled-doc';
+        // Continuous manager auto-loads the next section as you scroll past
+        // the current chapter's end — no manual "next chapter" tap needed.
+        opts.flow = 'scrolled';
+        opts.manager = 'continuous';
       } else {
         opts.flow = 'paginated';
+        opts.manager = 'default';
         opts.spread = mode === 'double' ? 'always' : 'none';
       }
 
@@ -301,11 +310,11 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
   };
 
   // ---------- TTS engine ----------
-  const collectCurrentParagraphs = useCallback((): string[] => {
+  const collectCurrentParagraphs = useCallback((): TtsPara[] => {
     const r = renditionRef.current;
     if (!r) return [];
     const contents: any[] = (r as any).getContents?.() || [];
-    const paras: string[] = [];
+    const paras: TtsPara[] = [];
     for (const c of contents) {
       const doc: Document | undefined = c?.document;
       paras.push(...extractParagraphsFromDoc(doc));
@@ -319,7 +328,15 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
     const idx = ttsParaIdxRef.current;
 
     if (idx >= paras.length) {
-      // Advance to next page/section, refresh paragraphs, continue.
+      // Try refreshing first — in continuous scroll mode, new sections may
+      // have already been auto-loaded into the DOM as we scrolled paragraphs
+      // into view. If that gives us more text, keep going without a page turn.
+      const refreshed = collectCurrentParagraphs();
+      if (refreshed.length > paras.length) {
+        ttsParasRef.current = refreshed;
+        speakLoop();
+        return;
+      }
       const r = renditionRef.current;
       if (!r) {
         stopTTS();
@@ -333,14 +350,12 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
           stopTTS();
           return;
         }
-        // small wait for contents to be available
         pauseTimerRef.current = window.setTimeout(() => {
           if (!ttsActiveRef.current) return;
           const fresh = collectCurrentParagraphs();
-          // If the same content (end of book) — stop.
           if (
             !fresh.length ||
-            (fresh.length === paras.length && fresh[0] === paras[0])
+            (fresh.length === paras.length && fresh[0]?.text === paras[0]?.text)
           ) {
             stopTTS();
             return;
@@ -353,9 +368,17 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
       return;
     }
 
+    // Scroll the current paragraph into view — this also triggers epub.js's
+    // continuous manager to load the next section when we approach the end.
+    try {
+      paras[idx].el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } catch {
+      /* noop */
+    }
+
     const chosenVoice =
       voices.find((v) => v.voiceURI === voiceURI) || voices[0] || null;
-    const sentences = splitSentences(paras[idx]);
+    const sentences = splitSentences(paras[idx].text);
     if (!sentences.length) {
       ttsParaIdxRef.current = idx + 1;
       speakLoop();
@@ -463,6 +486,7 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
       onDrop={onDrop}
     >
       {/* Header */}
+      {!immersive && (
       <div className="flex items-center justify-between gap-2 px-4 py-2 border-b border-border bg-card/80">
         <div className="flex items-center gap-2 min-w-0">
           <BookOpen className="w-4 h-4 text-primary shrink-0" />
@@ -485,10 +509,27 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
             <Button
               variant={ttsOpen ? 'default' : 'ghost'}
               size="sm"
-              onClick={() => setTtsOpen((v) => !v)}
-              title="Text-to-speech"
+              onClick={() => {
+                setTtsOpen((v) => {
+                  const next = !v;
+                  // Read-aloud only makes sense in continuous scroll.
+                  if (next && viewMode !== 'scroll') setViewMode('scroll');
+                  return next;
+                });
+              }}
+              title="Text-to-speech (scroll mode)"
             >
               <Volume2 className="w-4 h-4" />
+            </Button>
+          )}
+          {bookLoaded && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setImmersive(true)}
+              title="Immersive mode"
+            >
+              <Maximize2 className="w-4 h-4" />
             </Button>
           )}
           <Button
@@ -511,9 +552,10 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
           />
         </div>
       </div>
+      )}
 
       {/* Toolbar */}
-      {bookLoaded && (
+      {bookLoaded && !immersive && (
         <div className="flex flex-wrap items-center gap-3 px-4 py-2 border-b border-border bg-card/60 text-xs">
           <div className="flex items-center gap-1">
             <Button
@@ -600,7 +642,7 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
       )}
 
       {/* TTS panel */}
-      {bookLoaded && ttsOpen && supportsTTS && (
+      {bookLoaded && ttsOpen && supportsTTS && !immersive && (
         <div className="flex flex-wrap items-center gap-3 px-4 py-2 border-b border-border bg-card/40 text-xs">
           <div className="flex items-center gap-1">
             <Button size="sm" variant="outline" onClick={() => skipParagraph(-1)} title="Previous paragraph">
@@ -675,6 +717,17 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
         <div className="flex-1 relative">
           {/* Viewer is always mounted so epub.js has a container even before a book is opened */}
           <div ref={viewerRef} className="absolute inset-0" />
+
+          {bookLoaded && immersive && (
+            <button
+              onClick={() => setImmersive(false)}
+              title="Exit immersive"
+              className="absolute top-3 right-3 z-10 p-2 rounded-full bg-card/70 backdrop-blur border border-border hover:bg-card transition opacity-40 hover:opacity-100"
+            >
+              <Minimize2 className="w-4 h-4" />
+            </button>
+          )}
+
 
           {bookLoaded && viewMode !== 'scroll' && (
             <>
