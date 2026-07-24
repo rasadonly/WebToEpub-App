@@ -183,7 +183,8 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
     return () => {
       window.removeEventListener('keydown', onKey);
       document.body.style.overflow = '';
-      if (supportsTTS) window.speechSynthesis.cancel();
+      abortRef.current?.abort();
+      if (audioRef.current) audioRef.current.pause();
       ttsActiveRef.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
