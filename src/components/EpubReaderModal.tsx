@@ -308,11 +308,11 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
   };
 
   // ---------- TTS engine ----------
-  const collectCurrentParagraphs = useCallback((): string[] => {
+  const collectCurrentParagraphs = useCallback((): TtsPara[] => {
     const r = renditionRef.current;
     if (!r) return [];
     const contents: any[] = (r as any).getContents?.() || [];
-    const paras: string[] = [];
+    const paras: TtsPara[] = [];
     for (const c of contents) {
       const doc: Document | undefined = c?.document;
       paras.push(...extractParagraphsFromDoc(doc));
@@ -326,7 +326,15 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
     const idx = ttsParaIdxRef.current;
 
     if (idx >= paras.length) {
-      // Advance to next page/section, refresh paragraphs, continue.
+      // Try refreshing first — in continuous scroll mode, new sections may
+      // have already been auto-loaded into the DOM as we scrolled paragraphs
+      // into view. If that gives us more text, keep going without a page turn.
+      const refreshed = collectCurrentParagraphs();
+      if (refreshed.length > paras.length) {
+        ttsParasRef.current = refreshed;
+        speakLoop();
+        return;
+      }
       const r = renditionRef.current;
       if (!r) {
         stopTTS();
@@ -340,14 +348,12 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
           stopTTS();
           return;
         }
-        // small wait for contents to be available
         pauseTimerRef.current = window.setTimeout(() => {
           if (!ttsActiveRef.current) return;
           const fresh = collectCurrentParagraphs();
-          // If the same content (end of book) — stop.
           if (
             !fresh.length ||
-            (fresh.length === paras.length && fresh[0] === paras[0])
+            (fresh.length === paras.length && fresh[0]?.text === paras[0]?.text)
           ) {
             stopTTS();
             return;
@@ -360,9 +366,17 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
       return;
     }
 
+    // Scroll the current paragraph into view — this also triggers epub.js's
+    // continuous manager to load the next section when we approach the end.
+    try {
+      paras[idx].el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } catch {
+      /* noop */
+    }
+
     const chosenVoice =
       voices.find((v) => v.voiceURI === voiceURI) || voices[0] || null;
-    const sentences = splitSentences(paras[idx]);
+    const sentences = splitSentences(paras[idx].text);
     if (!sentences.length) {
       ttsParaIdxRef.current = idx + 1;
       speakLoop();
