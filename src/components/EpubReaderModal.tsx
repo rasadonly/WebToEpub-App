@@ -120,6 +120,10 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
         const nav = await book.loaded.navigation;
         setToc(nav?.toc || []);
 
+        // Wait a tick in case the viewer div is still mounting
+        for (let i = 0; i < 20 && !viewerRef.current; i++) {
+          await new Promise((r) => setTimeout(r, 25));
+        }
         if (!viewerRef.current) throw new Error('Viewer not ready');
         viewerRef.current.innerHTML = '';
         const rendition = book.renderTo(viewerRef.current, {
