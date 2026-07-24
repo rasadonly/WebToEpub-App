@@ -200,6 +200,11 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
 
   return (
     <div className="w-full max-w-5xl mx-auto">
+      <LiveReaderModal
+        open={liveReaderOpen}
+        url={liveReaderUrl}
+        onClose={() => setLiveReaderOpen(false)}
+      />
       <form onSubmit={handleSubmit} className="space-y-10">
         {/* Search-engine style hero */}
         <div className="flex flex-col items-center justify-center gap-8 pt-6 md:pt-10">
