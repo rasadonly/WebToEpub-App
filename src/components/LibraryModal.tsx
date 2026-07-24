@@ -71,8 +71,18 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
 
   useEffect(() => {
     if (!open) return;
-    if (tab !== 'mega') load(tab);
+    load(tab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, tab]);
+
+  function titleToHue(title: string) {
+    let hash = 0;
+    for (let i = 0; i < title.length; i++) {
+      hash = (hash << 5) - hash + title.charCodeAt(i);
+      hash |= 0;
+    }
+    return Math.abs(hash) % 360;
+  }
 
   const download = async (book: LibraryBook) => {
     setDownloadingId(book.id);
@@ -200,7 +210,16 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
                   key={book.id}
                   className="bg-background border border-border rounded-xl overflow-hidden flex flex-col hover:border-primary/50 hover:shadow-lg transition-all"
                 >
-                  <div className="aspect-[2/3] bg-muted flex items-center justify-center overflow-hidden">
+                  <div
+                    className="aspect-[2/3] flex items-center justify-center overflow-hidden"
+                    style={
+                      book.coverUrl
+                        ? undefined
+                        : {
+                            background: `linear-gradient(145deg, hsl(${titleToHue(book.title)},55%,32%), hsl(${(titleToHue(book.title) + 40) % 360},50%,18%))`,
+                          }
+                    }
+                  >
                     {book.coverUrl ? (
                       <img
                         src={book.coverUrl}
@@ -209,7 +228,15 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
                         loading="lazy"
                       />
                     ) : (
-                      <BookOpen className="w-10 h-10 text-muted-foreground/40" />
+                      <div className="flex flex-col items-center gap-2 px-3 text-center">
+                        <BookOpen className="w-8 h-8 text-white/70" />
+                        <span className="text-[10px] uppercase tracking-widest text-white/50">
+                          EPUB
+                        </span>
+                        <span className="text-[11px] font-semibold text-white/90 line-clamp-3 leading-tight">
+                          {book.title}
+                        </span>
+                      </div>
                     )}
                   </div>
                   <div className="p-3 flex-1 flex flex-col gap-1">
