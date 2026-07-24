@@ -71,8 +71,18 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
 
   useEffect(() => {
     if (!open) return;
-    if (tab !== 'mega') load(tab);
+    load(tab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, tab]);
+
+  function titleToHue(title: string) {
+    let hash = 0;
+    for (let i = 0; i < title.length; i++) {
+      hash = (hash << 5) - hash + title.charCodeAt(i);
+      hash |= 0;
+    }
+    return Math.abs(hash) % 360;
+  }
 
   const download = async (book: LibraryBook) => {
     setDownloadingId(book.id);
