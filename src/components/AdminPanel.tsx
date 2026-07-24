@@ -148,13 +148,16 @@ export function AdminPanel({ open, onOpenChange, hideTrigger }: { open?: boolean
 
   if (!isAuthenticated) {
     return (
-      <Dialog>
-        <DialogTrigger asChild>
-          <Button variant="outline" size="sm">
-            <Settings className="mr-2 h-4 w-4" />
-            Admin
-          </Button>
-        </DialogTrigger>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        {!hideTrigger && (
+          <DialogTrigger asChild>
+            <Button variant="outline" size="sm">
+              <Settings className="mr-2 h-4 w-4" />
+              Admin
+            </Button>
+          </DialogTrigger>
+        )}
+
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Admin Access</DialogTitle>
