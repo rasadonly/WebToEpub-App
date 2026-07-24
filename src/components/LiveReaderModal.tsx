@@ -459,43 +459,50 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
           <label className="flex items-center gap-2 text-xs">
             Voice
             <select
-              value={voiceURI}
-              onChange={(e) => setVoiceURI(e.target.value)}
+              value={voice}
+              onChange={(e) => setVoice(e.target.value)}
               className="bg-background border border-border rounded px-2 py-1 text-xs max-w-[220px]"
             >
-              {voices.length === 0 && <option value="">Default</option>}
-              {voices.map((v) => (
-                <option key={v.voiceURI} value={v.voiceURI}>
-                  {v.name} ({v.lang})
+              {TTS_VOICES.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.label}
                 </option>
               ))}
             </select>
           </label>
 
           <label className="flex items-center gap-2 text-xs">
-            Rate {rate.toFixed(1)}x
+            Tone
+            <select
+              value={tone}
+              onChange={(e) => setTone(e.target.value)}
+              className="bg-background border border-border rounded px-2 py-1 text-xs max-w-[220px]"
+            >
+              {TTS_TONES.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex items-center gap-2 text-xs">
+            Speed {rate.toFixed(2)}x
             <input
               type="range"
-              min={0.5}
-              max={2}
-              step={0.1}
+              min={0.7}
+              max={1.5}
+              step={0.05}
               value={rate}
               onChange={(e) => setRate(parseFloat(e.target.value))}
             />
           </label>
 
-          <label className="flex items-center gap-2 text-xs">
-            Pitch {pitch.toFixed(1)}
-            <input
-              type="range"
-              min={0.5}
-              max={2}
-              step={0.1}
-              value={pitch}
-              onChange={(e) => setPitch(parseFloat(e.target.value))}
-            />
-          </label>
-
+          {ttsLoading && (
+            <span className="text-xs text-muted-foreground flex items-center gap-1">
+              <Loader2 className="w-3 h-3 animate-spin" /> generating…
+            </span>
+          )}
           {ttsIndex >= 0 && (
             <span className="text-xs text-muted-foreground ml-auto">
               ¶ {ttsIndex + 1} / {paragraphs.length}
