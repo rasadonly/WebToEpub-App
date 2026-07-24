@@ -11,28 +11,32 @@ import {
 import { ExternalLink, Globe } from 'lucide-react';
 import { engineListSupportedHosts } from '@/utils/webtoepub/bridge';
 
-export function SupportedSites() {
+export function SupportedSites({ open, onOpenChange, hideTrigger }: { open?: boolean; onOpenChange?: (o: boolean) => void; hideTrigger?: boolean } = {}) {
   const [hosts, setHosts] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [opened, setOpened] = useState(false);
 
   useEffect(() => {
-    if (!opened || hosts.length > 0) return;
+    const isOpen = open ?? opened;
+    if (!isOpen || hosts.length > 0) return;
     setLoading(true);
     engineListSupportedHosts()
       .then(list => setHosts(list.sort()))
       .catch(() => setHosts([]))
       .finally(() => setLoading(false));
-  }, [opened, hosts.length]);
+  }, [open, opened, hosts.length]);
 
   return (
-    <Dialog onOpenChange={setOpened}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          <Globe className="mr-2 h-4 w-4" />
-          Supported Sites
-        </Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={(o) => { setOpened(o); onOpenChange?.(o); }}>
+      {!hideTrigger && (
+        <DialogTrigger asChild>
+          <Button variant="outline" size="sm">
+            <Globe className="mr-2 h-4 w-4" />
+            Supported Sites
+          </Button>
+        </DialogTrigger>
+      )}
+
       <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
