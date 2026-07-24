@@ -3,7 +3,7 @@ import ProgressLog from '@/components/ProgressLog';
 import ChapterManager from '@/components/ChapterManager';
 import { useEpubConverter } from '@/hooks/useEpubConverter';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Github, Heart } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 
 const Index = () => {
   const {
