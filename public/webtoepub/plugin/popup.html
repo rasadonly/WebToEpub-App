@@ -1181,11 +1181,50 @@
     </span>
 <script>
   window.addEventListener('load', () => {
+    // Core engine
+    try { window.parser = parser; } catch(e) {}
     try { window.parserFactory = parserFactory; } catch(e) {}
-    try { window.EpubPacker = EpubPacker; } catch(e) {}
-    try { window.HttpClient = HttpClient; } catch(e) {}
+    try { window.main = main; } catch(e) {}
     try { window.util = util; } catch(e) {}
+    // Network + packaging
+    try { window.HttpClient = HttpClient; } catch(e) {}
+    try { window.EpubPacker = EpubPacker; } catch(e) {}
+    try { window.EpubItem = EpubItem; } catch(e) {}
+    try { window.EpubItemSupplier = EpubItemSupplier; } catch(e) {}
+    try { window.EpubMetaInfo = EpubMetaInfo; } catch(e) {}
+    try { window.Download = Download; } catch(e) {}
+    // Content processing
+    try { window.Parser = Parser; } catch(e) {}
+    try { window.ImageCollector = ImageCollector; } catch(e) {}
+    try { window.FootnoteExtractor = FootnoteExtractor; } catch(e) {}
+    try { window.Imgur = Imgur; } catch(e) {}
+    // Search + UI helpers
     try { window.SiteSearchEngine = SiteSearchEngine; } catch(e) {}
+    try { window.SearchEngineUI = SearchEngineUI; } catch(e) {}
+    try { window.ChapterUrlsUI = ChapterUrlsUI; } catch(e) {}
+    try { window.CoverImageUI = CoverImageUI; } catch(e) {}
+    try { window.DefaultParserUI = DefaultParserUI; } catch(e) {}
+    try { window.ProgressBar = ProgressBar; } catch(e) {}
+    try { window.UIText = UIText; } catch(e) {}
+    // Storage / prefs / libraries
+    try { window.UserPreferences = UserPreferences; } catch(e) {}
+    try { window.ReadingList = ReadingList; } catch(e) {}
+    try { window.Library = Library; } catch(e) {}
+    try { window.HFLibrary = HFLibrary; } catch(e) {}
+    try { window.HFStatsLibrary = HFStatsLibrary; } catch(e) {}
+    try { window.MegaLibrary = MegaLibrary; } catch(e) {}
+    try { window.ArchiveLibrary = ArchiveLibrary; } catch(e) {}
+    // Diagnostics + AI
+    try { window.ErrorLog = ErrorLog; } catch(e) {}
+    try { window.Logger = Logger; } catch(e) {}
+    try { window.DebugUtil = DebugUtil; } catch(e) {}
+    try { window.AiClient = AiClient; } catch(e) {}
+    try { window.Secrets = Secrets; } catch(e) {}
+    try { window.SiteConfig = SiteConfig; } catch(e) {}
+    try { window.ParserEnvironment = ParserEnvironment; } catch(e) {}
+    // Third-party
+    try { window.DOMPurify = DOMPurify; } catch(e) {}
+    try { window.zip = zip; } catch(e) {}
     window.__WTE_READY = true;
   });
 </script>
