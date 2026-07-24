@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+
 import {
   engineFetchToc,
   engineFetchChapter,
@@ -23,6 +24,45 @@ import {
   type EngineChapter,
   type EngineBookInfo,
 } from '@/utils/webtoepub/bridge';
+
+const TTS_VOICES = [
+  { id: 'alloy', label: 'Alloy — neutral' },
+  { id: 'ash', label: 'Ash — warm male' },
+  { id: 'ballad', label: 'Ballad — expressive' },
+  { id: 'coral', label: 'Coral — bright female' },
+  { id: 'echo', label: 'Echo — calm male' },
+  { id: 'fable', label: 'Fable — storyteller' },
+  { id: 'nova', label: 'Nova — energetic female' },
+  { id: 'onyx', label: 'Onyx — deep male' },
+  { id: 'sage', label: 'Sage — soft female' },
+  { id: 'shimmer', label: 'Shimmer — smooth female' },
+];
+
+const TTS_TONES = [
+  { id: 'natural', label: 'Natural narrator', prompt: 'Read in a warm, natural human narrator voice with gentle expression and lifelike pacing. Honor punctuation. Never robotic or monotone.' },
+  { id: 'dramatic', label: 'Dramatic', prompt: 'Read with cinematic drama and rich emotion, varying pitch and pace to bring scenes to life. Pause for impact.' },
+  { id: 'calm', label: 'Calm bedtime', prompt: 'Read slowly, softly, and soothingly, as if telling a bedtime story. Gentle warmth, quiet pauses.' },
+  { id: 'cheerful', label: 'Cheerful', prompt: 'Read in a bright, friendly, upbeat tone with a smile in the voice.' },
+  { id: 'serious', label: 'Serious news', prompt: 'Read in a clear, composed, professional tone like a seasoned news anchor.' },
+];
+
+async function fetchTtsBlob(text: string, voice: string, instructions: string, speed: number, signal: AbortSignal): Promise<Blob> {
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tts`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+    },
+    body: JSON.stringify({ text, voice, instructions, speed }),
+    signal,
+  });
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`TTS ${res.status}: ${t.slice(0, 200)}`);
+  }
+  return await res.blob();
+}
 
 interface LiveReaderModalProps {
   url?: string;
@@ -83,51 +123,50 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
   const [showToc, setShowToc] = useState(false);
   const viewportRef = useRef<HTMLDivElement>(null);
 
-  // TTS state
-  const supportsTTS = typeof window !== 'undefined' && 'speechSynthesis' in window;
+  // TTS state (Lovable AI, human-sounding)
+  const supportsTTS = typeof window !== 'undefined' && typeof Audio !== 'undefined';
   const [ttsOpen, setTtsOpen] = useState(false);
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [voiceURI, setVoiceURI] = useState<string>('');
+  const [voice, setVoice] = useState<string>('alloy');
+  const [tone, setTone] = useState<string>('natural');
   const [rate, setRate] = useState(1);
-  const [pitch, setPitch] = useState(1);
   const [ttsPlaying, setTtsPlaying] = useState(false);
   const [ttsPaused, setTtsPaused] = useState(false);
+  const [ttsLoading, setTtsLoading] = useState(false);
   const [ttsIndex, setTtsIndex] = useState(-1);
   const ttsIndexRef = useRef(-1);
   const ttsActiveRef = useRef(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const prefetchRef = useRef<{ index: number; blob: Promise<Blob> } | null>(null);
 
   const paragraphs = useMemo(() => extractParagraphs(chapterHtml), [chapterHtml]);
   const paragraphsRef = useRef<Paragraph[]>([]);
   paragraphsRef.current = paragraphs;
 
-  // Load voices
-  useEffect(() => {
-    if (!supportsTTS) return;
-    const load = () => {
-      const v = window.speechSynthesis.getVoices();
-      setVoices(v);
-      if (!voiceURI && v.length) {
-        const preferred =
-          v.find((x) => x.default) || v.find((x) => x.lang?.startsWith('en')) || v[0];
-        if (preferred) setVoiceURI(preferred.voiceURI);
-      }
-    };
-    load();
-    window.speechSynthesis.onvoiceschanged = load;
-    return () => {
-      window.speechSynthesis.onvoiceschanged = null;
-    };
-  }, [supportsTTS, voiceURI]);
+  const releaseAudioUrl = () => {
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+  };
 
   const stopTTS = useCallback(() => {
-    if (!supportsTTS) return;
     ttsActiveRef.current = false;
-    window.speechSynthesis.cancel();
+    abortRef.current?.abort();
+    abortRef.current = null;
+    prefetchRef.current = null;
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = '';
+    }
+    releaseAudioUrl();
     setTtsPlaying(false);
     setTtsPaused(false);
+    setTtsLoading(false);
     setTtsIndex(-1);
     ttsIndexRef.current = -1;
-  }, [supportsTTS]);
+  }, []);
 
   // Reset when re-opened
   useEffect(() => {
@@ -144,7 +183,8 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
     return () => {
       window.removeEventListener('keydown', onKey);
       document.body.style.overflow = '';
-      if (supportsTTS) window.speechSynthesis.cancel();
+      abortRef.current?.abort();
+      if (audioRef.current) audioRef.current.pause();
       ttsActiveRef.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -194,55 +234,100 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
 
   const speakFrom = useCallback(
     (startIndex: number) => {
-      if (!supportsTTS) return;
       const list = paragraphsRef.current;
       if (!list.length) return;
-      window.speechSynthesis.cancel();
+      // Reset any prior playback
+      abortRef.current?.abort();
+      abortRef.current = null;
+      prefetchRef.current = null;
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+      }
+      releaseAudioUrl();
+
       ttsActiveRef.current = true;
       setTtsPlaying(true);
       setTtsPaused(false);
 
-      const speakAt = (i: number) => {
+      const currentInstructions = TTS_TONES.find((t) => t.id === tone)?.prompt ?? TTS_TONES[0].prompt;
+
+      const requestBlob = (i: number, ctrl: AbortController) =>
+        fetchTtsBlob(list[i].text, voice, currentInstructions, rate, ctrl.signal);
+
+      const playAt = async (i: number) => {
         if (!ttsActiveRef.current) return;
         if (i >= list.length) {
-          // Auto-advance to next chapter if possible
           ttsActiveRef.current = false;
           setTtsPlaying(false);
           setTtsIndex(-1);
           ttsIndexRef.current = -1;
           if (chapterIndex < chapters.length - 1) {
             void openChapter(chapterIndex + 1).then(() => {
-              // small delay to allow paragraphs to update
               setTimeout(() => speakFrom(0), 400);
             });
           }
           return;
         }
+
         setTtsIndex(i);
         ttsIndexRef.current = i;
-        // Scroll paragraph into view
         const el = viewportRef.current?.querySelector(`[data-tts-idx="${i}"]`);
         el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-        const utt = new SpeechSynthesisUtterance(list[i].text);
-        utt.rate = rate;
-        utt.pitch = pitch;
-        const v = voices.find((x) => x.voiceURI === voiceURI);
-        if (v) utt.voice = v;
-        utt.onend = () => {
-          if (!ttsActiveRef.current) return;
-          speakAt(i + 1);
-        };
-        utt.onerror = () => {
-          if (!ttsActiveRef.current) return;
-          speakAt(i + 1);
-        };
-        window.speechSynthesis.speak(utt);
+        try {
+          setTtsLoading(true);
+          let blob: Blob;
+          const cached = prefetchRef.current;
+          if (cached && cached.index === i) {
+            blob = await cached.blob;
+          } else {
+            const ctrl = new AbortController();
+            abortRef.current = ctrl;
+            blob = await requestBlob(i, ctrl);
+          }
+          if (!ttsActiveRef.current || ttsIndexRef.current !== i) return;
+
+          // Prefetch next paragraph while this one plays
+          if (i + 1 < list.length) {
+            const nextCtrl = new AbortController();
+            abortRef.current = nextCtrl;
+            prefetchRef.current = {
+              index: i + 1,
+              blob: requestBlob(i + 1, nextCtrl).catch(() => new Blob()),
+            };
+          } else {
+            prefetchRef.current = null;
+          }
+
+          releaseAudioUrl();
+          const url = URL.createObjectURL(blob);
+          audioUrlRef.current = url;
+          const audio = audioRef.current ?? new Audio();
+          audioRef.current = audio;
+          audio.src = url;
+          audio.playbackRate = 1; // speed is baked into TTS via `speed` param
+          audio.onended = () => {
+            if (!ttsActiveRef.current) return;
+            void playAt(i + 1);
+          };
+          audio.onerror = () => {
+            if (!ttsActiveRef.current) return;
+            void playAt(i + 1);
+          };
+          setTtsLoading(false);
+          await audio.play().catch(() => {});
+        } catch (err) {
+          if ((err as DOMException)?.name === 'AbortError') return;
+          console.error('TTS error', err);
+          setTtsLoading(false);
+          if (ttsActiveRef.current) void playAt(i + 1);
+        }
       };
 
-      speakAt(Math.max(0, Math.min(startIndex, list.length - 1)));
+      void playAt(Math.max(0, Math.min(startIndex, list.length - 1)));
     },
-    [supportsTTS, voices, voiceURI, rate, pitch, chapterIndex, chapters.length] // eslint-disable-line react-hooks/exhaustive-deps
+    [voice, tone, rate, chapterIndex, chapters.length] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const togglePlay = () => {
@@ -251,17 +336,19 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
       speakFrom(ttsIndexRef.current >= 0 ? ttsIndexRef.current : 0);
       return;
     }
+    const audio = audioRef.current;
+    if (!audio) return;
     if (ttsPaused) {
-      window.speechSynthesis.resume();
+      void audio.play();
       setTtsPaused(false);
     } else {
-      window.speechSynthesis.pause();
+      audio.pause();
       setTtsPaused(true);
     }
   };
 
   const skip = (delta: number) => {
-    if (!supportsTTS || !paragraphsRef.current.length) return;
+    if (!paragraphsRef.current.length) return;
     const target = Math.max(
       0,
       Math.min(
@@ -372,43 +459,50 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
           <label className="flex items-center gap-2 text-xs">
             Voice
             <select
-              value={voiceURI}
-              onChange={(e) => setVoiceURI(e.target.value)}
+              value={voice}
+              onChange={(e) => setVoice(e.target.value)}
               className="bg-background border border-border rounded px-2 py-1 text-xs max-w-[220px]"
             >
-              {voices.length === 0 && <option value="">Default</option>}
-              {voices.map((v) => (
-                <option key={v.voiceURI} value={v.voiceURI}>
-                  {v.name} ({v.lang})
+              {TTS_VOICES.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.label}
                 </option>
               ))}
             </select>
           </label>
 
           <label className="flex items-center gap-2 text-xs">
-            Rate {rate.toFixed(1)}x
+            Tone
+            <select
+              value={tone}
+              onChange={(e) => setTone(e.target.value)}
+              className="bg-background border border-border rounded px-2 py-1 text-xs max-w-[220px]"
+            >
+              {TTS_TONES.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex items-center gap-2 text-xs">
+            Speed {rate.toFixed(2)}x
             <input
               type="range"
-              min={0.5}
-              max={2}
-              step={0.1}
+              min={0.7}
+              max={1.5}
+              step={0.05}
               value={rate}
               onChange={(e) => setRate(parseFloat(e.target.value))}
             />
           </label>
 
-          <label className="flex items-center gap-2 text-xs">
-            Pitch {pitch.toFixed(1)}
-            <input
-              type="range"
-              min={0.5}
-              max={2}
-              step={0.1}
-              value={pitch}
-              onChange={(e) => setPitch(parseFloat(e.target.value))}
-            />
-          </label>
-
+          {ttsLoading && (
+            <span className="text-xs text-muted-foreground flex items-center gap-1">
+              <Loader2 className="w-3 h-3 animate-spin" /> generating…
+            </span>
+          )}
           {ttsIndex >= 0 && (
             <span className="text-xs text-muted-foreground ml-auto">
               ¶ {ttsIndex + 1} / {paragraphs.length}
