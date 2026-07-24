@@ -1,13 +1,15 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { ConversionProgress } from '@/types';
 import { ConversionFormData } from '@/components/ConversionForm';
 import { useToast } from '@/hooks/use-toast';
 import {
-  engineFetchToc,
+  engineFetchTocLive,
   enginePackEpub,
   engineAbort,
   EngineChapter,
 } from '@/utils/webtoepub/bridge';
+import { fetchChapterLinksLive, ChapterLink } from '@/utils/localWorker';
+import { getSiteConfig } from '@/utils/siteConfigs';
 
 export interface ChapterItem {
   id: string;
@@ -26,6 +28,8 @@ export function useEpubConverter() {
   const [logs, setLogs] = useState<string[]>([]);
   const [chapterList, setChapterList] = useState<ChapterItem[] | null>(null);
   const [pendingData, setPendingData] = useState<ConversionFormData | null>(null);
+  // Accumulates chapters across async batches without stale-closure issues.
+  const liveChaptersRef = useRef<ChapterItem[]>([]);
 
   const addLog = useCallback((message: string) => {
     setLogs(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`]);
@@ -40,43 +44,80 @@ export function useEpubConverter() {
       try {
         setLogs([]);
         setChapterList(null);
+        liveChaptersRef.current = [];
         setPendingData(data);
         updateProgress({
           status: 'fetching-toc',
           currentChapter: 0,
           totalChapters: 0,
-          message: 'Loading WebToEpub engine…',
+          message: 'Fetching chapters…',
         });
-        addLog('Starting conversion via WebToEpub engine');
-        addLog(`Fetching TOC from: ${data.tocUrl}`);
+        addLog('Starting chapter fetch');
+        addLog(`TOC: ${data.tocUrl}`);
 
-        const engineChapters: EngineChapter[] = await engineFetchToc(data.tocUrl);
+        const siteConfig = getSiteConfig(data.tocUrl);
+        const isKnownSite = !!siteConfig;
 
-        if (engineChapters.length === 0) {
-          throw new Error(
-            'No chapter links found. This site may not be supported by the engine.'
-          );
+        /** Called each time a batch of chapter links arrives — updates UI live. */
+        const onBatch = (batch: ChapterLink[] | EngineChapter[]) => {
+          const newItems: ChapterItem[] = batch.map((c, i) => ({
+            id: `${liveChaptersRef.current.length + i}-${c.url}`,
+            url: c.url,
+            title: c.title || `Chapter ${liveChaptersRef.current.length + i + 1}`,
+          }));
+          liveChaptersRef.current = [...liveChaptersRef.current, ...newItems];
+          setChapterList([...liveChaptersRef.current]);
+          updateProgress({
+            status: 'fetching-toc',
+            totalChapters: liveChaptersRef.current.length,
+            message: `Found ${liveChaptersRef.current.length} chapter${liveChaptersRef.current.length === 1 ? '' : 's'}…`,
+          });
+        };
+
+        let usedFastPath = false;
+        if (isKnownSite) {
+          try {
+            addLog(`Fast-fetching via direct parser (${siteConfig!.name})…`);
+            await fetchChapterLinksLive(data.tocUrl, data.tocSelector, onBatch);
+            if (liveChaptersRef.current.length > 0) {
+              usedFastPath = true;
+              addLog(`Direct fetch complete: ${liveChaptersRef.current.length} chapters`);
+            }
+          } catch (fastErr) {
+            addLog(`Direct fetch failed (${(fastErr as Error).message}), trying engine…`);
+            liveChaptersRef.current = [];
+            setChapterList(null);
+          }
         }
 
-        addLog(`Engine returned ${engineChapters.length} chapters`);
+        if (!usedFastPath) {
+          updateProgress({ message: 'Loading WebToEpub engine…' });
+          addLog('Using WebToEpub engine (streaming)…');
+          await engineFetchTocLive(data.tocUrl, onBatch);
+          addLog(`Engine fetch complete: ${liveChaptersRef.current.length} chapters`);
+        }
 
-        let items: ChapterItem[] = engineChapters;
+        if (liveChaptersRef.current.length === 0) {
+          throw new Error('No chapter links found. This site may not be supported.');
+        }
+
+        // Apply pre-filter range if set.
+        let items = liveChaptersRef.current;
         if (!data.chapterRange.useAll) {
           const startIndex = Math.max(0, data.chapterRange.start - 1);
           const endIndex = Math.min(items.length, data.chapterRange.end);
           items = items.slice(startIndex, endIndex);
-          addLog(`Pre-filtered to chapters ${startIndex + 1}-${endIndex}`);
+          addLog(`Filtered to chapters ${startIndex + 1}–${endIndex}`);
         }
 
-        setChapterList(items);
+        liveChaptersRef.current = items;
+        setChapterList([...items]);
         updateProgress({
           status: 'idle',
           totalChapters: items.length,
-          message: `Fetched ${items.length} chapters. Review and adjust below.`,
+          message: `${items.length} chapters ready. Review below, then Generate EPUB.`,
         });
-        addLog(
-          `Ready: ${items.length} chapters loaded. Edit the list, then click Generate EPUB.`
-        );
+        addLog(`Ready: ${items.length} chapters loaded.`);
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : 'An unknown error occurred';
@@ -92,6 +133,7 @@ export function useEpubConverter() {
     },
     [addLog, updateProgress, toast]
   );
+
 
   const generateFromChapters = useCallback(
     async (orderedChapters: ChapterItem[]) => {
@@ -120,6 +162,7 @@ export function useEpubConverter() {
             description: data.metadata.description || '',
             language: data.metadata.language || 'en',
             fileName: `${data.metadata.title || 'novel'}.epub`,
+            tocUrl: data.tocUrl,
           },
           ({ current, total, message }) => {
             updateProgress({

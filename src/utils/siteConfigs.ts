@@ -101,6 +101,17 @@ export const SUPPORTED_SITES: NovelSite[] = [
     exampleUrls: [
       'https://wtr-lab.com/en/serie-1/some-novel'
     ]
+  },
+  {
+    name: 'Wattpad',
+    domain: 'wattpad.com',
+    tocSelector: 'api',
+    contentSelector: '.part-content, pre.part-content',
+    titleSelector: 'h1, .story-meta .title',
+    removeSelectors: ['.ads', 'script', 'style', '.ad-placeholder'],
+    exampleUrls: [
+      'https://www.wattpad.com/story/123456789-some-story'
+    ]
   }
 ];
 

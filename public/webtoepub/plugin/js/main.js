@@ -132,37 +132,9 @@ var main = (function() {
     }
 
     async function tryWattpadDirectEpubDownload(url) {
-        if (typeof WattpadParser === "undefined" || !WattpadParser.isWattpadStoryUrl(url)) {
-            return false;
-        }
-        let progressString = document.getElementById("progressString");
-        if (progressString) {
-            progressString.textContent = "Trying direct EPUB download from wpd.my...";
-        }
-        let direct = await WattpadParser.tryFetchDirectEpub(url);
-        if (!direct) {
-            if (progressString) {
-                progressString.textContent = "wpd.my unavailable — loading via Wattpad parser…";
-            }
-            return false;
-        }
-        let overwriteExisting = userPreferences.overwriteExistingEpub.value;
-        let backgroundDownload = userPreferences.noDownloadPopup.value;
-        await Download.save(direct.blob, direct.fileName, overwriteExisting, backgroundDownload);
-        if (typeof HFStatsLibrary !== "undefined") {
-            HFStatsLibrary.recordEvent({
-                url: url,
-                mode: "manual",
-                action: "epub_convert",
-                title: direct.fileName,
-                author: ""
-            });
-        }
-        if (progressString) {
-            progressString.textContent = "EPUB downloaded from wpd.my.";
-        }
-        return true;
+        return false;
     }
+
 
     async function fetchContentAndPackEpub() {
         let libclick = this;

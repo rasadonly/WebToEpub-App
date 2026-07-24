@@ -23,6 +23,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 interface ConversionFormProps {
   onSubmit: (data: ConversionFormData) => void;
   isConverting: boolean;
+  hasFetchedChapters?: boolean;
 }
 
 export interface ConversionFormData {
@@ -40,7 +41,7 @@ export interface ConversionFormData {
   editableUrls: boolean;
 }
 
-export default function ConversionForm({ onSubmit, isConverting }: ConversionFormProps) {
+export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapters }: ConversionFormProps) {
   const { toast } = useToast();
   const [tocUrl, setTocUrl] = useState('');
   const [tocSelector, setTocSelector] = useState('');
@@ -83,10 +84,34 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
 
   const isUrlLike = (s: string) => /^https?:\/\//i.test(s.trim());
 
+  /** Score a search result against the query (higher = more relevant). */
+  const scoreResult = (r: EngineSearchResult, query: string): number => {
+    const q = query.toLowerCase().trim();
+    const words = q.split(/\s+/).filter(w => w.length > 1);
+    const title = (r.title || '').toLowerCase();
+    const snippet = (r.snippet || '').toLowerCase();
+    const url = (r.url || '').toLowerCase();
+    let score = 0;
+
+    if (title === q) score += 100;
+    if (title.startsWith(q)) score += 60;
+    if (title.includes(q)) score += 40;
+    const matchedInTitle = words.filter(w => title.includes(w));
+    score += matchedInTitle.length * 8;
+    const matchedInSnippet = words.filter(w => snippet.includes(w));
+    score += matchedInSnippet.length * 3;
+    const matchedInUrl = words.filter(w => url.includes(w));
+    score += matchedInUrl.length * 1;
+    // Penalise if nothing matched at all
+    if (matchedInTitle.length === 0 && matchedInSnippet.length === 0) score -= 50;
+    return score;
+  };
+
   const runSearch = async (query: string) => {
     setIsSearching(true);
     setSearchResults([]);
     setSearchStatus('Searching supported sites…');
+    const currentQuery = query;
     try {
       const seen = new Set<string>();
       await engineSearch(
@@ -95,9 +120,17 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
           setSearchResults(prev => {
             const merged = [...prev];
             for (const r of partial) {
-              if (!seen.has(r.url)) { seen.add(r.url); merged.push(r); }
+              if (!seen.has(r.url)) {
+                seen.add(r.url);
+                merged.push(r);
+              }
             }
-            return merged;
+            // Sort by relevance score descending; filter score < -10
+            return merged
+              .map(r => ({ r, s: scoreResult(r, currentQuery) }))
+              .filter(({ s }) => s > -10)
+              .sort((a, b) => b.s - a.s)
+              .map(({ r }) => r);
           });
         },
         (site, status) => setSearchStatus(`${site}: ${status}`)
@@ -283,7 +316,10 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
               <Card className="mt-4 p-3 bg-card border border-border animate-in fade-in slide-in-from-top-2 duration-300">
                 <div className="flex items-center justify-between px-2 py-1 mb-1">
                   <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    {isSearching ? (searchStatus || 'Searching…') : `${searchResults.length} results`}
+                    {isSearching
+                      ? <span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-primary animate-pulse inline-block" />{searchStatus || 'Searching…'}</span>
+                      : `${searchResults.length} result${searchResults.length === 1 ? '' : 's'}`
+                    }
                   </span>
                   <button
                     type="button"
@@ -297,7 +333,7 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
                   {searchResults.map((r) => (
                     <div
                       key={r.url}
-                      className="group flex items-stretch gap-1 hover:bg-muted/60 rounded-md transition-smooth"
+                      className="group flex items-stretch gap-1 hover:bg-muted/60 rounded-md transition-smooth animate-in fade-in slide-in-from-bottom-1 duration-200"
                     >
                       <button
                         type="button"
@@ -334,10 +370,17 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
                       </button>
                     </div>
                   ))}
-                  {isSearching && searchResults.length === 0 && (
-                    <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-                      Querying supported sites…
-                    </div>
+                  {isSearching && (
+                    /* Skeleton rows — one per site still loading */
+                    Array.from({ length: searchResults.length === 0 ? 4 : 2 }).map((_, i) => (
+                      <div key={`skel-${i}`} className="px-3 py-3 flex items-center gap-3 animate-pulse">
+                        <div className="flex-1 space-y-1.5">
+                          <div className="h-3 bg-muted rounded w-3/5" />
+                          <div className="h-2.5 bg-muted/70 rounded w-4/5" />
+                        </div>
+                        <div className="h-5 w-16 bg-muted rounded-full" />
+                      </div>
+                    ))
                   )}
                 </div>
               </Card>
@@ -393,8 +436,8 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
 
 
 
-        {/* Reveal the rest only after URL is entered */}
-        {hasUrl && (
+        {/* Settings card — hidden once chapters are loaded; ChapterManager handles the rest */}
+        {hasUrl && !hasFetchedChapters && (
           <Card className="p-6 bg-gradient-card shadow-card border-0 space-y-6 animate-in fade-in slide-in-from-top-2 duration-300">
             {/* Title (required, kept visible) */}
             <div className="space-y-2">
@@ -569,6 +612,11 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
                 <div className="flex items-center gap-2">
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   Working...
+                </div>
+              ) : hasFetchedChapters ? (
+                <div className="flex items-center gap-2">
+                  <BookOpen className="w-5 h-5" />
+                  Generate EPUB
                 </div>
               ) : (
                 'Fetch Chapters'

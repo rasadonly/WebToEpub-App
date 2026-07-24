@@ -345,6 +345,124 @@ export async function engineFetchToc(url: string): Promise<EngineChapter[]> {
 }
 
 /**
+ * Streaming version of engineFetchToc.
+ * Fires onBatch() each time the engine discovers new chapters so the UI
+ * can show them appearing live, exactly like the Live Reader.
+ */
+export async function engineFetchTocLive(
+  url: string,
+  onBatch: (chapters: EngineChapter[]) => void,
+  timeoutMs = 60_000
+): Promise<EngineChapter[]> {
+  const win = await ensureIframe();
+  if (!win.main) throw new Error('Engine not ready');
+
+  try { win.main.resetUI(); } catch { /* ignore */ }
+  setInput(win, 'startingUrlInput', url);
+
+  // Hook error log so failures surface immediately.
+  const winAny = win as unknown as {
+    ErrorLog?: { queue?: unknown[]; showErrorMessage?: (m: unknown) => void; __WTE_HOOKED?: boolean };
+    __WTE_LAST_ERROR?: string | null;
+  };
+  winAny.__WTE_LAST_ERROR = null;
+  try {
+    const el = winAny.ErrorLog;
+    if (el?.showErrorMessage && !el.__WTE_HOOKED) {
+      const orig = el.showErrorMessage.bind(el);
+      el.showErrorMessage = (msg: unknown) => {
+        try {
+          winAny.__WTE_LAST_ERROR =
+            typeof msg === 'string' ? msg : (msg as { message?: string })?.message || String(msg);
+        } catch { /* ignore */ }
+        return orig(msg);
+      };
+      el.__WTE_HOOKED = true;
+    }
+    if (el && Array.isArray(el.queue)) el.queue.length = 0;
+  } catch { /* ignore */ }
+
+  // Start the engine click WITHOUT blocking — we will poll in parallel.
+  const enginePromise = win.main.onLoadAndAnalyseButtonClick();
+
+  const seen = new Set<string>();
+  const all: EngineChapter[] = [];
+  const started = Date.now();
+  let lastSize = 0;
+  let stableTicks = 0;
+
+  // Poll every 300 ms, streaming new chapters as they appear.
+  while (Date.now() - started < timeoutMs) {
+    await new Promise(r => setTimeout(r, 300));
+
+    // Bail on engine error.
+    const err = winAny.__WTE_LAST_ERROR ||
+      (Array.isArray(winAny.ErrorLog?.queue) && (winAny.ErrorLog!.queue!.length > 0)
+        ? (() => {
+            const m = winAny.ErrorLog!.queue![0] as string | { message?: string };
+            return typeof m === 'string' ? m : m?.message || String(m);
+          })()
+        : null);
+    if (err) throw new Error(String(err).slice(0, 500));
+
+    const p = win.parser;
+    const size = p?.state?.webPages?.size ?? 0;
+
+    if (size > 0) {
+      const batch: EngineChapter[] = [];
+      let idx = 0;
+      p!.state.webPages.forEach(page => {
+        if (!seen.has(page.sourceUrl)) {
+          seen.add(page.sourceUrl);
+          const ch: EngineChapter = {
+            id: `${all.length + batch.length}-${page.sourceUrl}`,
+            url: page.sourceUrl,
+            title: (page.title || `Chapter ${all.length + batch.length + 1}`).trim(),
+          };
+          batch.push(ch);
+        }
+        idx++;
+      });
+
+      if (batch.length > 0) {
+        all.push(...batch);
+        onBatch(batch);
+      }
+
+      // Stable = size unchanged for 3 consecutive polls (~900ms). Engine is done.
+      if (size === lastSize) {
+        stableTicks++;
+        if (stableTicks >= 3) break;
+      } else {
+        stableTicks = 0;
+        lastSize = size;
+      }
+    }
+  }
+
+  // Await the engine promise so any thrown errors surface.
+  try { await enginePromise; } catch { /* errors already captured above */ }
+
+  if (all.length === 0) {
+    throw new Error(
+      'Timed out waiting for chapter list. The site may be blocked by Cloudflare/anti-bot protection, or is not supported.'
+    );
+  }
+
+  return all;
+}
+
+
+export interface EngineMetadata {
+  title?: string;
+  author?: string;
+  description?: string;
+  language?: string;
+  fileName?: string;
+  tocUrl?: string; // Used to initialize engine if it was bypassed for fast-path
+}
+
+/**
  * Regenerate the engine's pagesToFetch from the user's selected/reordered
  * chapter list, then trigger fetch+pack+download.
  */
@@ -354,7 +472,18 @@ export async function enginePackEpub(
   onProgress?: (p: EnginePackProgress) => void
 ): Promise<void> {
   const win = await ensureIframe();
-  if (!win.main || !win.parser) throw new Error('Engine has no active parser');
+  if (!win.main) throw new Error('Engine not ready');
+
+  // If the engine parser hasn't been initialized (because we used the fast path),
+  // we must initialize it now so the engine knows how to pack the EPUB for this site.
+  if (!win.parser && metadata.tocUrl) {
+    try { win.main.resetUI(); } catch { /* ignore */ }
+    setInput(win, 'startingUrlInput', metadata.tocUrl);
+    await win.main.onLoadAndAnalyseButtonClick();
+    await waitForParser(win);
+  }
+
+  if (!win.parser) throw new Error('Engine has no active parser');
 
   // Apply metadata to the engine's form fields
   if (metadata.title) setInput(win, 'titleInput', metadata.title);
@@ -386,6 +515,41 @@ export async function enginePackEpub(
     /* ignore – table may not have data attributes in this build */
   }
 
+  // ── Intercept the engine's Download.save() so the blob is triggered from
+  // the main window, not the hidden iframe. Some browsers refuse to allow
+  // programmatic downloads initiated from an offscreen/hidden iframe.
+  // We patch URL.createObjectURL inside the iframe: when the engine calls it
+  // with an EPUB blob we capture it, revoke the original URL, and trigger the
+  // download from the parent window instead.
+  const iframeWin = win as unknown as Window & { URL: typeof URL };
+  const origCreateObjectURL = iframeWin.URL.createObjectURL.bind(iframeWin.URL);
+  let downloadIntercepted = false;
+  iframeWin.URL.createObjectURL = (obj: Blob | MediaSource): string => {
+    // Cross-realm `instanceof Blob` fails if the Blob was created inside the iframe.
+    // Instead, we duck-type check for Blob properties (size and type).
+    if (!downloadIntercepted && obj && typeof (obj as Blob).size === 'number' &&
+        (obj.type === 'application/epub+zip' || obj.type === 'application/zip' || (obj as Blob).size > 5000)) {
+      downloadIntercepted = true;
+      // Restore immediately so the engine can still use it for other things.
+      iframeWin.URL.createObjectURL = origCreateObjectURL;
+      // Trigger the download from the main window context.
+      const blob = obj as Blob;
+      setTimeout(() => {
+        const a = document.createElement('a');
+        const url = URL.createObjectURL(new Blob([blob], { type: blob.type || 'application/epub+zip' }));
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+      }, 0);
+      // Return a dummy URL so the engine's own anchor click doesn't error.
+      return origCreateObjectURL(new Blob([], { type: 'text/plain' }));
+    }
+    return origCreateObjectURL(obj);
+  };
+
   // Poll the engine's <progress id="fetchProgress"> element and forward it.
   let pollTimer: number | null = null;
   if (onProgress) {
@@ -404,14 +568,33 @@ export async function enginePackEpub(
   }
 
   try {
+    // Hook ErrorLog so we can extract the specific error if it fails
+    const winAny = win as any;
+    if (winAny.ErrorLog && Array.isArray(winAny.ErrorLog.queue)) {
+      winAny.ErrorLog.queue.length = 0;
+    }
+
     // Click the pack button to invoke the engine's full pipeline
     // (fetchContent → EpubPacker.assemble → Download.save).
     const btn = win.main.getPackEpubButton();
     if (!btn) throw new Error('Pack button not found in engine');
     btn.dataset.libclick = 'no';
     await win.main.fetchContentAndPackEpub.call(btn);
+
+    if (!downloadIntercepted) {
+      let errStr = 'EPUB generation failed before completion. Check if the site is blocking access.';
+      if (winAny.ErrorLog && Array.isArray(winAny.ErrorLog.queue) && winAny.ErrorLog.queue.length > 0) {
+        const msg = winAny.ErrorLog.queue[0];
+        errStr = typeof msg === 'string' ? msg : msg?.message || String(msg);
+      }
+      throw new Error(errStr);
+    }
   } finally {
     if (pollTimer !== null) window.clearInterval(pollTimer);
+    // Always restore the original URL.createObjectURL
+    if (iframeWin.URL.createObjectURL !== origCreateObjectURL) {
+      iframeWin.URL.createObjectURL = origCreateObjectURL;
+    }
   }
 }
 

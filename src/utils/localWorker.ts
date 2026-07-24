@@ -3,6 +3,15 @@ export interface WorkerResponse {
   error?: string;
 }
 
+/** A chapter URL + title pair streamed by fetchChapterLinksLive. */
+export interface ChapterLink {
+  url: string;
+  title: string;
+}
+
+/** Called progressively as TOC pages are fetched. */
+export type OnChapterBatch = (batch: ChapterLink[]) => void;
+
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
 
@@ -83,33 +92,63 @@ function stripInside(root: Element, selector: string) {
 
 // ---------- Site-specific link (TOC) parsers ----------
 
-async function tocFreeWebNovel(url: string): Promise<string[]> {
-  const html = await getText(url);
+async function tocFreeWebNovel(
+  url: string,
+  onBatch?: OnChapterBatch
+): Promise<string[]> {
+  const base = url.split('?')[0].replace(/\/$/, '');
+  const html = await getText(base);
   const doc = parseHtml(html);
-  const totalPageMatch = html.match(/window\.chapterPagination\.totalPage\s*=\s*(\d+)/);
-  const totalPage = totalPageMatch ? parseInt(totalPageMatch[1]) : 1;
 
-  const collect = (d: Document, out: string[]) => {
-    d.querySelectorAll("#idData a, .m-newest2 a, .chapter-list a").forEach((a) => {
-      const href = a.getAttribute("href");
-      if (href) out.push(absoluteUrl(url, href));
+  const options = doc.querySelectorAll('#indexselect option');
+  let totalPage = options.length > 0 ? options.length : 1;
+  if (totalPage === 1) {
+    const m = html.match(/window\.chapterPagination\.totalPage\s*=\s*(\d+)/);
+    if (m) totalPage = parseInt(m[1]);
+  }
+
+  const collectPage = (d: Document): ChapterLink[] => {
+    const items: ChapterLink[] = [];
+    d.querySelectorAll('#idData li > a').forEach((a) => {
+      const href = a.getAttribute('href');
+      const title = (a.textContent || '').trim() || a.getAttribute('title') || '';
+      if (href) items.push({ url: absoluteUrl(base, href), title });
     });
+    if (items.length === 0) {
+      d.querySelectorAll('.m-newest2 a, .chapter-list a').forEach((a) => {
+        const href = a.getAttribute('href');
+        const title = (a.textContent || '').trim();
+        if (href) items.push({ url: absoluteUrl(base, href), title });
+      });
+    }
+    return items;
   };
 
   const results: string[] = [];
-  collect(doc, results);
+  const firstBatch = collectPage(doc);
+  firstBatch.forEach(c => results.push(c.url));
+  if (onBatch && firstBatch.length > 0) onBatch(firstBatch);
 
-  if (totalPage > 1) {
-    const base = url.replace(/\/$/, "");
-    const pageUrls: string[] = [];
-    for (let p = 2; p <= totalPage; p++) pageUrls.push(`${base}/${p}`);
-    const htmls = await Promise.all(pageUrls.map((u) => getText(u).catch(() => "")));
-    htmls.forEach((h) => h && collect(parseHtml(h), results));
+  // Fetch remaining pages one-by-one so each batch streams into the UI.
+  for (let p = 2; p <= totalPage; p++) {
+    try {
+      const h = await getText(`${base}?page=${p}`);
+      if (h) {
+        const batch = collectPage(parseHtml(h));
+        batch.forEach(c => results.push(c.url));
+        if (onBatch && batch.length > 0) onBatch(batch);
+      }
+    } catch { /* skip failed page */ }
   }
+
   return results;
 }
 
-async function tocNovelFire(url: string): Promise<string[]> {
+
+async function tocNovelFire(
+  url: string,
+  onBatch?: OnChapterBatch
+): Promise<string[]> {
   let base = url.replace(/\/$/, "");
   if (base.endsWith("/chapters")) base = base.slice(0, -"/chapters".length);
   const chaptersUrl = `${base}/chapters`;
@@ -120,25 +159,35 @@ async function tocNovelFire(url: string): Promise<string[]> {
   ).sort((a, b) => a - b);
   const maxPage = pages.length ? Math.max(...pages) : 1;
 
-  const collect = (html: string, out: string[]) => {
+  const collectPage = (html: string): ChapterLink[] => {
+    const items: ChapterLink[] = [];
     const d = parseHtml(html);
     d.querySelectorAll(".chapter-list li a").forEach((a) => {
       const href = a.getAttribute("href");
-      if (href) out.push(absoluteUrl(chaptersUrl, href));
+      const title = (a.textContent || '').trim();
+      if (href) items.push({ url: absoluteUrl(chaptersUrl, href), title });
     });
+    return items;
   };
 
   const results: string[] = [];
-  collect(firstHtml, results);
+  const firstBatch = collectPage(firstHtml);
+  firstBatch.forEach(c => results.push(c.url));
+  if (onBatch && firstBatch.length > 0) onBatch(firstBatch);
 
-  if (maxPage > 1) {
-    const urls: string[] = [];
-    for (let p = 2; p <= maxPage; p++) urls.push(`${chaptersUrl}?page=${p}`);
-    const htmls = await Promise.all(urls.map((u) => getText(u).catch(() => "")));
-    htmls.forEach((h) => h && collect(h, results));
+  for (let p = 2; p <= maxPage; p++) {
+    try {
+      const h = await getText(`${chaptersUrl}?page=${p}`);
+      if (h) {
+        const batch = collectPage(h);
+        batch.forEach(c => results.push(c.url));
+        if (onBatch && batch.length > 0) onBatch(batch);
+      }
+    } catch { /* skip */ }
   }
   return results;
 }
+
 
 async function tocNovGo(url: string): Promise<string[]> {
   const html = await getText(url);
@@ -198,7 +247,10 @@ async function tocNovelArrow(url: string): Promise<string[]> {
     .map((cid) => `${apiBase}/novels/${slug}/chapters/${cid}`);
 }
 
-async function tocNovelFull(url: string): Promise<string[]> {
+async function tocNovelFull(
+  url: string,
+  onBatch?: OnChapterBatch
+): Promise<string[]> {
   const html = await getText(url);
   const doc = parseHtml(html);
   let limit = 1;
@@ -210,37 +262,65 @@ async function tocNovelFull(url: string): Promise<string[]> {
     if (page) limit = parseInt(page) + 1;
   }
   const origin = new URL(url).origin;
-  const pageUrls: string[] = [];
-  for (let i = 1; i <= limit; i++) pageUrls.push(`${url}?page=${i}&per-page=50`);
-  const htmls = await Promise.all(pageUrls.map((u) => getText(u).catch(() => "")));
-  const out: string[] = [];
-  htmls.forEach((h) => {
-    if (!h) return;
+
+  const collectPage = (h: string): ChapterLink[] => {
+    const items: ChapterLink[] = [];
     parseHtml(h)
       .querySelectorAll("ul.list-chapter a, .list-chapter a")
       .forEach((a) => {
         const href = a.getAttribute("href");
-        if (href) out.push(absoluteUrl(origin, href));
+        const title = (a.textContent || '').trim();
+        if (href) items.push({ url: absoluteUrl(origin, href), title });
       });
-  });
-  return out;
+    return items;
+  };
+
+  const results: string[] = [];
+  // Fetch all pages in parallel (novelfull pages are fast), but stream page 1 first.
+  const firstBatch = collectPage(html);
+  firstBatch.forEach(c => results.push(c.url));
+  if (onBatch && firstBatch.length > 0) onBatch(firstBatch);
+
+  if (limit > 1) {
+    // Fetch pages 2..limit in parallel, then emit as they resolve.
+    const pageUrls: string[] = [];
+    for (let i = 2; i <= limit; i++) pageUrls.push(`${url}?page=${i}&per-page=50`);
+    await Promise.all(
+      pageUrls.map(async (u) => {
+        try {
+          const h = await getText(u);
+          if (!h) return;
+          const batch = collectPage(h);
+          batch.forEach(c => results.push(c.url));
+          if (onBatch && batch.length > 0) onBatch(batch);
+        } catch { /* skip */ }
+      })
+    );
+  }
+  return results;
 }
 
-async function tocNovelBin(url: string): Promise<string[]> {
+async function tocNovelBin(
+  url: string,
+  onBatch?: OnChapterBatch
+): Promise<string[]> {
   const html = await getText(url);
   const idMatch = html.match(/data-novel-id=["'](\d+)["']/);
   const origin = new URL(url).origin;
   const novelId = idMatch?.[1] || new URL(url).pathname.split("/").filter(Boolean).pop();
   const ajaxHtml = await getText(`${origin}/ajax/chapter-archive?novelId=${novelId}`);
-  const results: string[] = [];
+  const results: ChapterLink[] = [];
   parseHtml(ajaxHtml)
     .querySelectorAll("a[href]")
     .forEach((a) => {
       const href = a.getAttribute("href");
-      if (href) results.push(absoluteUrl(origin, href));
+      const title = (a.textContent || '').trim();
+      if (href) results.push({ url: absoluteUrl(origin, href), title });
     });
-  return results;
+  if (onBatch && results.length > 0) onBatch(results);
+  return results.map(c => c.url);
 }
+
 
 async function tocWtrLab(url: string): Promise<string[]> {
   const u = new URL(url);
@@ -319,6 +399,7 @@ function siteKey(hostname: string): string {
   if (hostname.includes("novelfull")) return "novelfull";
   if (hostname.includes("novelbin") || hostname.includes("novlove")) return "novelbin";
   if (hostname.includes("wtr-lab.com")) return "wtrlab";
+  if (hostname.includes("wattpad.com")) return "wattpad";
   return "generic";
 }
 
@@ -337,6 +418,62 @@ async function bodyNovelhall(url: string): Promise<string> {
   return extractWithSelector(doc, "#htmlContent, .entry-content, .content");
 }
 
+// ---- Wattpad ----
+// Wattpad's public API v3 endpoint returns JSON with story parts.
+// Story URLs: https://www.wattpad.com/story/{storyId}-{slug}
+// Part URLs:  https://www.wattpad.com/{partId}-{slug}
+
+function wattpadStoryId(url: string): string | null {
+  // Match /story/1234567 or /myworks/1234567
+  const m = url.match(/(?:\/story\/|story\/)([0-9]+)/);
+  if (m) return m[1];
+  // Some URLs put the ID directly after wattpad.com/
+  const m2 = url.match(/wattpad\.com\/([0-9]+)/);
+  return m2 ? m2[1] : null;
+}
+
+async function tocWattpad(url: string): Promise<string[]> {
+  const storyId = wattpadStoryId(url);
+  if (!storyId) throw new Error("Wattpad: could not extract story ID from URL");
+
+  // Fetch the story info via Wattpad's v3 API (public, no auth needed)
+  const apiBase = "https://www.wattpad.com/api/v3";
+  const storyJson = await getJson(
+    `${apiBase}/stories/${storyId}?fields=id,title,parts(id,title,url)`
+  );
+  const parts: Array<{ id: number; title: string; url: string }> =
+    storyJson?.parts || [];
+  if (!parts.length) throw new Error("Wattpad: no chapters found via API");
+  // Return the canonical part URLs
+  return parts.map((p) =>
+    p.url.startsWith("http") ? p.url : `https://www.wattpad.com/${p.id}`
+  );
+}
+
+async function bodyWattpad(url: string): Promise<string> {
+  // Extract partId from URL (wattpad.com/{partId}-...)
+  const partIdMatch = url.match(/wattpad\.com\/(\d+)/);
+  if (partIdMatch) {
+    try {
+      const apiBase = "https://www.wattpad.com/api/v3";
+      const partJson = await getJson(
+        `${apiBase}/story_parts/${partIdMatch[1]}?fields=id,title,text`
+      );
+      const text: string = partJson?.text || "";
+      if (text.trim().length > 20) {
+        // text is already HTML
+        return text;
+      }
+    } catch { /* fall through to scraping */ }
+  }
+  // Fallback: scrape the page
+  const doc = parseHtml(await getText(url));
+  return extractWithSelector(
+    doc,
+    ".part-content, pre.part-content, [data-field='text']"
+  );
+}
+
 export async function fetchChapterLinks(tocUrl: string, linkSelector: string): Promise<string[]> {
   const hostname = new URL(tocUrl).hostname;
   const key = siteKey(hostname);
@@ -351,6 +488,7 @@ export async function fetchChapterLinks(tocUrl: string, linkSelector: string): P
       case "novelfull":    return await tocNovelFull(tocUrl);
       case "novelbin":     return await tocNovelBin(tocUrl);
       case "wtrlab":       return await tocWtrLab(tocUrl);
+      case "wattpad":      return await tocWattpad(tocUrl);
       default: {
         const doc = parseHtml(await getText(tocUrl));
         const out: string[] = [];
@@ -365,6 +503,48 @@ export async function fetchChapterLinks(tocUrl: string, linkSelector: string): P
     throw new Error(`Failed to fetch chapter links: ${(e as Error).message}`);
   }
 }
+
+/**
+ * Streaming version of fetchChapterLinks.
+ * Calls onBatch() each time a page of the TOC is fetched, so chapters appear
+ * in the UI progressively rather than all at once at the end.
+ * Returns the complete flat list when all pages are done.
+ */
+export async function fetchChapterLinksLive(
+  tocUrl: string,
+  linkSelector: string,
+  onBatch: OnChapterBatch
+): Promise<ChapterLink[]> {
+  const hostname = new URL(tocUrl).hostname;
+  const key = siteKey(hostname);
+  const all: ChapterLink[] = [];
+  const wrap = (batch: ChapterLink[]) => {
+    all.push(...batch);
+    onBatch(batch);
+  };
+
+  try {
+    switch (key) {
+      case "freewebnovel": await tocFreeWebNovel(tocUrl, wrap); break;
+      case "novelfire":    await tocNovelFire(tocUrl, wrap); break;
+      case "novelfull":    await tocNovelFull(tocUrl, wrap); break;
+      case "novelbin":     await tocNovelBin(tocUrl, wrap); break;
+      default: {
+        // For sites that return everything at once (API-based / single-page),
+        // fetch and emit one batch so the UI still updates.
+        const urls = await fetchChapterLinks(tocUrl, linkSelector);
+        const batch = urls.map((url, i) => ({ url, title: `Chapter ${i + 1}` }));
+        if (batch.length > 0) wrap(batch);
+        break;
+      }
+    }
+  } catch (e) {
+    throw new Error(`Failed to fetch chapter links: ${(e as Error).message}`);
+  }
+
+  return all;
+}
+
 
 export async function fetchChapterContent(
   chapterUrl: string,
@@ -383,6 +563,7 @@ export async function fetchChapterContent(
       case "novgo":        return bodyNovGo(chapterUrl);
       case "novelbuddy":   return bodyNovelBuddy(chapterUrl);
       case "novelarrow":   return bodyNovelArrow(chapterUrl);
+      case "wattpad":      return bodyWattpad(chapterUrl);
       default:             return bodyGeneric(chapterUrl, contentSelector);
     }
   };

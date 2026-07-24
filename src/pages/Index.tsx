@@ -16,7 +16,8 @@ const Index = () => {
     resetConverter,
     stopConversion,
     isConverting,
-    isGenerating
+    isGenerating,
+    isFetchingToc,
   } = useEpubConverter();
 
   return (
@@ -28,13 +29,18 @@ const Index = () => {
 
         {/* Main Content */}
         <div className="space-y-6">
-          <ConversionForm onSubmit={fetchChapters} isConverting={isConverting} />
+          <ConversionForm
+            onSubmit={fetchChapters}
+            isConverting={isConverting}
+            hasFetchedChapters={!!(chapterList && chapterList.length > 0)}
+          />
           {chapterList && chapterList.length > 0 && (
             <ChapterManager
               chapters={chapterList}
               onChange={setChapterList}
               onGenerate={generateFromChapters}
               isGenerating={isGenerating}
+              isStreaming={isFetchingToc}
             />
           )}
           <ProgressLog progress={progress} logs={logs} onStop={stopConversion} />
@@ -60,3 +66,4 @@ const Index = () => {
 };
 
 export default Index;
+

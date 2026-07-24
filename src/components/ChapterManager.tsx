@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,7 +13,8 @@ import {
   CheckSquare,
   Square,
   ListFilter,
-  BookOpen
+  BookOpen,
+  Loader2,
 } from 'lucide-react';
 
 interface ChapterManagerProps {
@@ -21,19 +22,39 @@ interface ChapterManagerProps {
   onChange: (chapters: ChapterItem[]) => void;
   onGenerate: (selected: ChapterItem[]) => void;
   isGenerating: boolean;
+  /** True while chapters are still streaming in from the TOC fetch. */
+  isStreaming?: boolean;
 }
 
 export default function ChapterManager({
   chapters,
   onChange,
   onGenerate,
-  isGenerating
+  isGenerating,
+  isStreaming = false,
 }: ChapterManagerProps) {
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(chapters.map(c => c.id))
   );
   const [rangeStart, setRangeStart] = useState(1);
   const [rangeEnd, setRangeEnd] = useState(chapters.length);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom while streaming so the user sees new chapters arrive.
+  useEffect(() => {
+    if (isStreaming && listRef.current) {
+      listRef.current.scrollTop = listRef.current.scrollHeight;
+    }
+  }, [chapters.length, isStreaming]);
+
+  // Keep newly streamed chapters selected by default.
+  useEffect(() => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      chapters.forEach(c => { if (!next.has(c.id)) next.add(c.id); });
+      return next;
+    });
+  }, [chapters]);
 
   // Keep selected in sync when chapters change externally
   const syncSelected = (next: ChapterItem[], keep: Set<string>) => {
@@ -110,17 +131,31 @@ export default function ChapterManager({
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <BookOpen className="w-5 h-5 text-primary" />
             Chapters ({selectedList.length}/{chapters.length} selected)
+            {isStreaming && (
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-primary animate-pulse">
+                <span className="w-2 h-2 rounded-full bg-primary inline-block" />
+                fetching…
+              </span>
+            )}
           </h2>
           <p className="text-xs text-muted-foreground">
-            Reorder, remove or reverse before generating.
+            {isStreaming
+              ? 'Chapters are loading live — more may still appear below.'
+              : 'Reorder, remove or reverse before generating.'}
           </p>
         </div>
         <Button
           onClick={() => onGenerate(selectedList)}
-          disabled={isGenerating || selectedList.length === 0}
+          disabled={isGenerating || isStreaming || selectedList.length === 0}
           className="bg-gradient-primary hover:shadow-glow transition-smooth"
         >
-          {isGenerating ? 'Generating…' : `Generate EPUB (${selectedList.length})`}
+          {isGenerating ? (
+            <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Generating…</>
+          ) : isStreaming ? (
+            <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Fetching chapters…</>
+          ) : (
+            `Generate EPUB (${selectedList.length})`
+          )}
         </Button>
       </div>
 
@@ -182,13 +217,13 @@ export default function ChapterManager({
       </div>
 
       {/* List */}
-      <div className="max-h-[420px] overflow-y-auto rounded-lg border border-border/60 divide-y divide-border/40">
+      <div ref={listRef} className="max-h-[420px] overflow-y-auto rounded-lg border border-border/60 divide-y divide-border/40">
         {chapters.map((c, idx) => {
           const isSelected = selected.has(c.id);
           return (
             <div
               key={c.id}
-              className={`flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
+              className={`flex items-center gap-2 px-3 py-2 text-sm transition-colors animate-in fade-in slide-in-from-bottom-1 duration-200 ${
                 isSelected ? 'bg-background' : 'bg-muted/30 opacity-60'
               }`}
             >
