@@ -71,6 +71,20 @@ export default function ProgressLog({ progress, logs, onStop }: ProgressLogProps
           {progress.status === 'complete' && (
             <Download className="w-5 h-5 text-success animate-pulse-glow" />
           )}
+          {onStop &&
+            (progress.status === 'fetching-toc' ||
+              progress.status === 'processing-chapters' ||
+              progress.status === 'generating-epub') && (
+              <Button
+                onClick={onStop}
+                variant="destructive"
+                size="sm"
+                className="gap-2"
+              >
+                <Square className="w-4 h-4 fill-current" />
+                Stop
+              </Button>
+            )}
         </div>
 
         {/* Progress Bar */}
