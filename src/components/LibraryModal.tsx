@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { X, Send, Cloud, Archive, Loader2, Download, Search, BookOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -233,7 +233,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
                         {
                           '--library-cover-hue': `${titleToHue(book.title)}deg`,
                           '--library-cover-hue-end': `${(titleToHue(book.title) + 40) % 360}deg`,
-                        } as React.CSSProperties
+                        } as CSSProperties
                       }
                     >
                       {book.coverUrl ? (
