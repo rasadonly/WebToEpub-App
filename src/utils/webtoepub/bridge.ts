@@ -178,14 +178,10 @@ function makeHfFileUrl(repoId: string, path: string): string {
 
 function base64ToBlob(base64: string, mimeType: string): Blob {
   const binary = window.atob(base64.trim());
-  const chunks: Uint8Array[] = [];
-  for (let i = 0; i < binary.length; i += 8192) {
-    const slice = binary.slice(i, i + 8192);
-    const bytes = new Uint8Array(slice.length);
-    for (let j = 0; j < slice.length; j++) bytes[j] = slice.charCodeAt(j);
-    chunks.push(bytes);
-  }
-  return new Blob(chunks, { type: mimeType });
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  return new Blob([buffer], { type: mimeType });
 }
 
 function ensureIframe(): Promise<EngineWindow> {
