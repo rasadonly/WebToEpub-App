@@ -42,8 +42,18 @@ type EngineWindow = Window & {
   parserFactory?: {
     parsers: Map<string, unknown>;
   };
+  util?: {
+    sleepController: AbortController;
+  };
   workInProgress?: boolean;
 };
+
+export interface EnginePackProgress {
+  current: number;
+  total: number;
+  message: string;
+}
+
 
 let iframe: HTMLIFrameElement | null = null;
 let readyPromise: Promise<EngineWindow> | null = null;
