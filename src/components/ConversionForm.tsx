@@ -72,6 +72,12 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
     setLiveReaderOpen(true);
   };
 
+  // Menu-controlled dialogs
+  const [supportedOpen, setSupportedOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+
+
   const isUrlLike = (s: string) => /^https?:\/\//i.test(s.trim());
 
   const runSearch = async (query: string) => {
