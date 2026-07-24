@@ -385,6 +385,7 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
           <SupportedSites open={supportedOpen} onOpenChange={setSupportedOpen} hideTrigger />
           <AdminPanel open={adminOpen} onOpenChange={setAdminOpen} hideTrigger />
           <LibraryModal open={libraryOpen} onClose={() => setLibraryOpen(false)} />
+          <EpubReaderModal open={epubReaderOpen} onClose={() => setEpubReaderOpen(false)} />
 
 
         </div>
