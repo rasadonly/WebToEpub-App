@@ -45,8 +45,25 @@ type EngineWindow = Window & {
   util?: {
     sleepController: AbortController;
   };
+  SiteSearchEngine?: {
+    search: (
+      query: string,
+      startIndex?: number,
+      targetResultCount?: number,
+      includeSecondary?: boolean,
+      onProgress?: (site: string, status: string) => void,
+      onResults?: (results: EngineSearchResult[]) => void
+    ) => Promise<{ results: EngineSearchResult[]; nextIndex: number }>;
+  };
   workInProgress?: boolean;
 };
+
+export interface EngineSearchResult {
+  title: string;
+  url: string;
+  snippet: string;
+  source: string;
+}
 
 export interface EnginePackProgress {
   current: number;
