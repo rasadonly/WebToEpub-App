@@ -41,9 +41,13 @@ type EngineWindow = Window & {
   };
   parserFactory?: {
     parsers: Map<string, unknown>;
+    fetch?: (url: string, dom?: Document) => unknown;
   };
   util?: {
     sleepController: AbortController;
+  };
+  HttpClient?: {
+    wrapFetch: (url: string) => Promise<{ responseXML?: Document; responseText?: string }>;
   };
   SiteSearchEngine?: {
     search: (
