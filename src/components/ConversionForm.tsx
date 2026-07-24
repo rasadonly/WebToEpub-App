@@ -127,168 +127,51 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
     });
   };
 
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const hasUrl = tocUrl.trim().length > 0;
+
   return (
-    <div className="w-full max-w-2xl mx-auto space-y-4">
-      {/* Control Buttons */}
-      <div className="flex flex-wrap gap-2 justify-center">
-        <SupportedSites />
-        <AdminPanel />
-      </div>
-      
-      <Card className="p-6 bg-gradient-card shadow-card border-0">
-        <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Header */}
-        <div className="text-center space-y-2">
-          <div className="flex items-center justify-center gap-2 text-primary">
-            <BookOpen className="w-8 h-8" />
-            <h1 className="text-2xl font-bold">Link to EPUB</h1>
+    <div className="w-full max-w-2xl mx-auto space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Simple hero URL input */}
+        <div className="flex flex-col items-center justify-center gap-6 pt-4">
+          <div className="text-center space-y-2">
+            <div className="flex items-center justify-center gap-2 text-primary">
+              <BookOpen className="w-7 h-7" />
+              <h1 className="text-3xl font-bold">Link to EPUB</h1>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Paste a novel's table of contents URL to begin
+            </p>
           </div>
-          <p className="text-muted-foreground">
-            Convert web novels into beautiful EPUB files
-          </p>
-        </div>
 
-        {/* Site Selection */}
-        <div className="space-y-2">
-          <Label htmlFor="site-select" className="flex items-center gap-2">
-            <Globe className="w-4 h-4" />
-            Supported Sites (Optional)
-          </Label>
-          <Select value={selectedSite} onValueChange={handleSiteSelect}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select a site for auto-configuration" />
-            </SelectTrigger>
-            <SelectContent>
-              {SUPPORTED_SITES.map(site => (
-                <SelectItem key={site.domain} value={site.name}>
-                  {site.name} ({site.domain})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* TOC URL */}
-        <div className="space-y-2">
-          <Label htmlFor="toc-url">Table of Contents URL *</Label>
-          <Input
-            id="toc-url"
-            type="url"
-            value={tocUrl}
-            onChange={(e) => setTocUrl(e.target.value)}
-            placeholder="https://example.com/novel/table-of-contents"
-            required
-            className="transition-smooth focus:shadow-glow"
-          />
-        </div>
-
-        {/* Selectors */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="toc-selector" className="flex items-center gap-2">
-              <Settings className="w-4 h-4" />
-              Chapter Links Selector *
-            </Label>
+          <div className="w-full max-w-xl">
             <Input
-              id="toc-selector"
-              value={tocSelector}
-              onChange={(e) => setTocSelector(e.target.value)}
-              placeholder="a[href*='chapter']"
+              id="toc-url"
+              type="url"
+              value={tocUrl}
+              onChange={(e) => setTocUrl(e.target.value)}
+              placeholder="https://novelfull.com/martial-god-asura.html"
               required
-              className="transition-smooth focus:shadow-glow"
+              autoFocus
+              className="h-14 text-base rounded-full px-6 shadow-card transition-smooth focus:shadow-glow"
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="content-selector">Chapter Content Selector *</Label>
-            <Input
-              id="content-selector"
-              value={contentSelector}
-              onChange={(e) => setContentSelector(e.target.value)}
-              placeholder=".chapter-content"
-              required
-              className="transition-smooth focus:shadow-glow"
-            />
-          </div>
+
+          {!hasUrl && (
+            <div className="flex flex-wrap gap-2 justify-center">
+              <SupportedSites />
+              <AdminPanel />
+            </div>
+          )}
         </div>
 
-        {/* Chapter Range Selection */}
-        <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
-          <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-2">
-            <Hash className="w-4 h-4" />
-            Chapter Selection
-          </h3>
-          <div className="space-y-4">
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="use-all-chapters"
-                checked={chapterRange.useAll}
-                onCheckedChange={(checked) => setChapterRange(prev => ({ ...prev, useAll: checked }))}
-              />
-              <Label htmlFor="use-all-chapters">Convert all chapters</Label>
-            </div>
-            {!chapterRange.useAll && (
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="start-chapter">Start Chapter</Label>
-                  <Input
-                    id="start-chapter"
-                    type="number"
-                    min="1"
-                    value={chapterRange.start}
-                    onChange={(e) => setChapterRange(prev => ({ ...prev, start: parseInt(e.target.value) || 1 }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="end-chapter">End Chapter</Label>
-                  <Input
-                    id="end-chapter"
-                    type="number"
-                    min="1"
-                    value={chapterRange.end}
-                    onChange={(e) => setChapterRange(prev => ({ ...prev, end: parseInt(e.target.value) || 999 }))}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Font and Display Options */}
-        <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
-          <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-2">
-            <Type className="w-4 h-4" />
-            Display Options
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Reveal the rest only after URL is entered */}
+        {hasUrl && (
+          <Card className="p-6 bg-gradient-card shadow-card border-0 space-y-6 animate-in fade-in slide-in-from-top-2 duration-300">
+            {/* Title (required, kept visible) */}
             <div className="space-y-2">
-              <Label htmlFor="font-family">Font Family</Label>
-              <Select value={fontFamily} onValueChange={setFontFamily}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Georgia">Georgia (Default)</SelectItem>
-                  <SelectItem value="Merriweather">Merriweather</SelectItem>
-                  <SelectItem value="Crimson Text">Crimson Text</SelectItem>
-                  <SelectItem value="Libre Baskerville">Libre Baskerville</SelectItem>
-                  <SelectItem value="Source Serif Pro">Source Serif Pro</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-            </div>
-          </div>
-        </div>
-
-        {/* Metadata */}
-        <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
-          <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-2">
-            <List className="w-4 h-4" />
-            Book Metadata
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="title">Title *</Label>
+              <Label htmlFor="title">Book Title *</Label>
               <Input
                 id="title"
                 value={metadata.title}
@@ -297,45 +180,176 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
                 required
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="author">Author</Label>
-              <Input
-                id="author"
-                value={metadata.author}
-                onChange={(e) => setMetadata(prev => ({ ...prev, author: e.target.value }))}
-                placeholder="Author Name"
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="description">Description (Optional)</Label>
-            <Textarea
-              id="description"
-              value={metadata.description}
-              onChange={(e) => setMetadata(prev => ({ ...prev, description: e.target.value }))}
-              placeholder="Brief description of the novel..."
-              rows={3}
-            />
-          </div>
-        </div>
 
-        {/* Submit Button */}
-        <Button
-          type="submit"
-          disabled={isConverting}
-          className="w-full bg-gradient-primary hover:shadow-glow transition-smooth text-lg py-6"
-        >
-          {isConverting ? (
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              Working...
-            </div>
-          ) : (
-            'Fetch Chapters'
-          )}
-        </Button>
-        </form>
-      </Card>
+            {/* Advanced toggle */}
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(v => !v)}
+              className="text-sm text-primary hover:underline"
+            >
+              {showAdvanced ? 'Hide advanced options' : 'Show advanced options'}
+            </button>
+
+            {showAdvanced && (
+              <div className="space-y-6">
+                {/* Site Selection */}
+                <div className="space-y-2">
+                  <Label htmlFor="site-select" className="flex items-center gap-2">
+                    <Globe className="w-4 h-4" />
+                    Supported Sites (Optional)
+                  </Label>
+                  <Select value={selectedSite} onValueChange={handleSiteSelect}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a site for auto-configuration" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SUPPORTED_SITES.map(site => (
+                        <SelectItem key={site.domain} value={site.name}>
+                          {site.name} ({site.domain})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Selectors */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="toc-selector" className="flex items-center gap-2">
+                      <Settings className="w-4 h-4" />
+                      Chapter Links Selector *
+                    </Label>
+                    <Input
+                      id="toc-selector"
+                      value={tocSelector}
+                      onChange={(e) => setTocSelector(e.target.value)}
+                      placeholder="a[href*='chapter']"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="content-selector">Chapter Content Selector *</Label>
+                    <Input
+                      id="content-selector"
+                      value={contentSelector}
+                      onChange={(e) => setContentSelector(e.target.value)}
+                      placeholder=".chapter-content"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Chapter Range */}
+                <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
+                  <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-2">
+                    <Hash className="w-4 h-4" />
+                    Chapter Selection
+                  </h3>
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="use-all-chapters"
+                      checked={chapterRange.useAll}
+                      onCheckedChange={(checked) => setChapterRange(prev => ({ ...prev, useAll: checked }))}
+                    />
+                    <Label htmlFor="use-all-chapters">Convert all chapters</Label>
+                  </div>
+                  {!chapterRange.useAll && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="start-chapter">Start Chapter</Label>
+                        <Input
+                          id="start-chapter"
+                          type="number"
+                          min="1"
+                          value={chapterRange.start}
+                          onChange={(e) => setChapterRange(prev => ({ ...prev, start: parseInt(e.target.value) || 1 }))}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="end-chapter">End Chapter</Label>
+                        <Input
+                          id="end-chapter"
+                          type="number"
+                          min="1"
+                          value={chapterRange.end}
+                          onChange={(e) => setChapterRange(prev => ({ ...prev, end: parseInt(e.target.value) || 999 }))}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Font */}
+                <div className="space-y-2">
+                  <Label htmlFor="font-family" className="flex items-center gap-2">
+                    <Type className="w-4 h-4" />
+                    Font Family
+                  </Label>
+                  <Select value={fontFamily} onValueChange={setFontFamily}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Georgia">Georgia (Default)</SelectItem>
+                      <SelectItem value="Merriweather">Merriweather</SelectItem>
+                      <SelectItem value="Crimson Text">Crimson Text</SelectItem>
+                      <SelectItem value="Libre Baskerville">Libre Baskerville</SelectItem>
+                      <SelectItem value="Source Serif Pro">Source Serif Pro</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Metadata */}
+                <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
+                  <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-2">
+                    <List className="w-4 h-4" />
+                    Book Metadata
+                  </h3>
+                  <div className="space-y-2">
+                    <Label htmlFor="author">Author</Label>
+                    <Input
+                      id="author"
+                      value={metadata.author}
+                      onChange={(e) => setMetadata(prev => ({ ...prev, author: e.target.value }))}
+                      placeholder="Author Name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="description">Description (Optional)</Label>
+                    <Textarea
+                      id="description"
+                      value={metadata.description}
+                      onChange={(e) => setMetadata(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="Brief description of the novel..."
+                      rows={3}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2 justify-center pt-2">
+                  <SupportedSites />
+                  <AdminPanel />
+                </div>
+              </div>
+            )}
+
+            <Button
+              type="submit"
+              disabled={isConverting}
+              className="w-full bg-gradient-primary hover:shadow-glow transition-smooth text-lg py-6"
+            >
+              {isConverting ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Working...
+                </div>
+              ) : (
+                'Fetch Chapters'
+              )}
+            </Button>
+          </Card>
+        )}
+      </form>
     </div>
   );
 }
