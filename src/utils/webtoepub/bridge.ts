@@ -60,7 +60,46 @@ type EngineWindow = Window & {
     ) => Promise<{ results: EngineSearchResult[]; nextIndex: number }>;
   };
   workInProgress?: boolean;
+  HFLibrary?: {
+    getTelegramCatalog: () => Promise<HFBookEntry[]>;
+    getCatalog: () => Promise<HFBookEntry[]>;
+    downloadBook: (epubPath: string, repoId: string) => Promise<Blob>;
+    getCoverUrl: (coverPath: string, repoId: string) => Promise<string>;
+  };
+  ArchiveLibrary?: new () => ArchiveLibraryInstance;
+  MegaLibrary?: new () => MegaLibraryInstance;
+  mega?: { File: { fromURL: (url: string) => Promise<MegaNode> } };
 };
+
+export interface HFBookEntry {
+  id: string;
+  title: string;
+  author?: string;
+  description?: string;
+  epubPath: string;
+  coverPath?: string;
+  uploadedAt?: string;
+  size?: number;
+  repoId: string;
+}
+
+interface ArchiveLibraryInstance {
+  loadRoot: () => Promise<void>;
+  folders: Record<string, Array<{ name: string; path: string; size: number; url: string }>>;
+}
+
+interface MegaLibraryInstance {
+  epubFiles: MegaNode[];
+}
+
+interface MegaNode {
+  name?: string;
+  directory?: boolean;
+  children?: MegaNode[];
+  size?: number;
+  loadAttributes: () => Promise<void>;
+  downloadBuffer: () => Promise<ArrayBuffer>;
+}
 
 export interface EngineSearchResult {
   title: string;
