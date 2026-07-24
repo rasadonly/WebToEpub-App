@@ -78,6 +78,7 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
   const [supportedOpen, setSupportedOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [epubReaderOpen, setEpubReaderOpen] = useState(false);
 
 
   const isUrlLike = (s: string) => /^https?:\/\//i.test(s.trim());
