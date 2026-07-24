@@ -233,55 +233,100 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
 
   const speakFrom = useCallback(
     (startIndex: number) => {
-      if (!supportsTTS) return;
       const list = paragraphsRef.current;
       if (!list.length) return;
-      window.speechSynthesis.cancel();
+      // Reset any prior playback
+      abortRef.current?.abort();
+      abortRef.current = null;
+      prefetchRef.current = null;
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+      }
+      releaseAudioUrl();
+
       ttsActiveRef.current = true;
       setTtsPlaying(true);
       setTtsPaused(false);
 
-      const speakAt = (i: number) => {
+      const currentInstructions = TTS_TONES.find((t) => t.id === tone)?.prompt ?? TTS_TONES[0].prompt;
+
+      const requestBlob = (i: number, ctrl: AbortController) =>
+        fetchTtsBlob(list[i].text, voice, currentInstructions, rate, ctrl.signal);
+
+      const playAt = async (i: number) => {
         if (!ttsActiveRef.current) return;
         if (i >= list.length) {
-          // Auto-advance to next chapter if possible
           ttsActiveRef.current = false;
           setTtsPlaying(false);
           setTtsIndex(-1);
           ttsIndexRef.current = -1;
           if (chapterIndex < chapters.length - 1) {
             void openChapter(chapterIndex + 1).then(() => {
-              // small delay to allow paragraphs to update
               setTimeout(() => speakFrom(0), 400);
             });
           }
           return;
         }
+
         setTtsIndex(i);
         ttsIndexRef.current = i;
-        // Scroll paragraph into view
         const el = viewportRef.current?.querySelector(`[data-tts-idx="${i}"]`);
         el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-        const utt = new SpeechSynthesisUtterance(list[i].text);
-        utt.rate = rate;
-        utt.pitch = pitch;
-        const v = voices.find((x) => x.voiceURI === voiceURI);
-        if (v) utt.voice = v;
-        utt.onend = () => {
-          if (!ttsActiveRef.current) return;
-          speakAt(i + 1);
-        };
-        utt.onerror = () => {
-          if (!ttsActiveRef.current) return;
-          speakAt(i + 1);
-        };
-        window.speechSynthesis.speak(utt);
+        try {
+          setTtsLoading(true);
+          let blob: Blob;
+          const cached = prefetchRef.current;
+          if (cached && cached.index === i) {
+            blob = await cached.blob;
+          } else {
+            const ctrl = new AbortController();
+            abortRef.current = ctrl;
+            blob = await requestBlob(i, ctrl);
+          }
+          if (!ttsActiveRef.current || ttsIndexRef.current !== i) return;
+
+          // Prefetch next paragraph while this one plays
+          if (i + 1 < list.length) {
+            const nextCtrl = new AbortController();
+            abortRef.current = nextCtrl;
+            prefetchRef.current = {
+              index: i + 1,
+              blob: requestBlob(i + 1, nextCtrl).catch(() => new Blob()),
+            };
+          } else {
+            prefetchRef.current = null;
+          }
+
+          releaseAudioUrl();
+          const url = URL.createObjectURL(blob);
+          audioUrlRef.current = url;
+          const audio = audioRef.current ?? new Audio();
+          audioRef.current = audio;
+          audio.src = url;
+          audio.playbackRate = 1; // speed is baked into TTS via `speed` param
+          audio.onended = () => {
+            if (!ttsActiveRef.current) return;
+            void playAt(i + 1);
+          };
+          audio.onerror = () => {
+            if (!ttsActiveRef.current) return;
+            void playAt(i + 1);
+          };
+          setTtsLoading(false);
+          await audio.play().catch(() => {});
+        } catch (err) {
+          if ((err as DOMException)?.name === 'AbortError') return;
+          console.error('TTS error', err);
+          setTtsLoading(false);
+          if (ttsActiveRef.current) void playAt(i + 1);
+        }
       };
 
-      speakAt(Math.max(0, Math.min(startIndex, list.length - 1)));
+      void playAt(Math.max(0, Math.min(startIndex, list.length - 1)));
     },
-    [supportsTTS, voices, voiceURI, rate, pitch, chapterIndex, chapters.length] // eslint-disable-line react-hooks/exhaustive-deps
+    [voice, tone, rate, chapterIndex, chapters.length] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const togglePlay = () => {
@@ -290,17 +335,19 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
       speakFrom(ttsIndexRef.current >= 0 ? ttsIndexRef.current : 0);
       return;
     }
+    const audio = audioRef.current;
+    if (!audio) return;
     if (ttsPaused) {
-      window.speechSynthesis.resume();
+      void audio.play();
       setTtsPaused(false);
     } else {
-      window.speechSynthesis.pause();
+      audio.pause();
       setTtsPaused(true);
     }
   };
 
   const skip = (delta: number) => {
-    if (!supportsTTS || !paragraphsRef.current.length) return;
+    if (!paragraphsRef.current.length) return;
     const target = Math.max(
       0,
       Math.min(
