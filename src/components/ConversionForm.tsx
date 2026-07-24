@@ -61,6 +61,14 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
   const [searchStatus, setSearchStatus] = useState<string>('');
   const [isSearching, setIsSearching] = useState(false);
 
+  // Live Reader state
+  const [liveReaderOpen, setLiveReaderOpen] = useState(false);
+  const [liveReaderUrl, setLiveReaderUrl] = useState<string | undefined>(undefined);
+  const openLiveReader = (u?: string) => {
+    setLiveReaderUrl(u && u.trim() ? u.trim() : undefined);
+    setLiveReaderOpen(true);
+  };
+
   const isUrlLike = (s: string) => /^https?:\/\//i.test(s.trim());
 
   const runSearch = async (query: string) => {
