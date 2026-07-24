@@ -97,14 +97,15 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!tocUrl || !tocSelector || !contentSelector || !metadata.title) {
+    if (!tocUrl) {
       toast({
-        title: "Missing Information",
-        description: "Please fill in all required fields.",
+        title: "Missing URL",
+        description: "Please enter a novel table-of-contents URL.",
         variant: "destructive"
       });
       return;
     }
+
 
     // Save settings to localStorage
     const domain = extractDomain(tocUrl);
