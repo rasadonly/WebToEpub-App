@@ -15,6 +15,7 @@ import { SupportedSites } from './SupportedSites';
 import { engineSearch, cancelSearch, EngineSearchResult } from '@/utils/webtoepub/bridge';
 import { LiveReaderModal } from './LiveReaderModal';
 import { LibraryModal } from './LibraryModal';
+import { EpubReaderModal } from './EpubReaderModal';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 
 
