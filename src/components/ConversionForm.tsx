@@ -9,10 +9,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { SUPPORTED_SITES, getSiteConfig, extractDomain } from '@/utils/siteConfigs';
 import { NovelSite, EpubMetadata } from '@/types';
-import { BookOpen, Globe, Settings, Hash, Type, List, Search, Sparkles, ArrowRight, ExternalLink, X } from 'lucide-react';
+import { BookOpen, Globe, Settings, Hash, Type, List, Search, Sparkles, ArrowRight, ExternalLink, X, BookOpenCheck } from 'lucide-react';
 import { AdminPanel } from './AdminPanel';
 import { SupportedSites } from './SupportedSites';
 import { engineSearch, cancelSearch, EngineSearchResult } from '@/utils/webtoepub/bridge';
+import { LiveReaderModal } from './LiveReaderModal';
 
 interface ConversionFormProps {
   onSubmit: (data: ConversionFormData) => void;
