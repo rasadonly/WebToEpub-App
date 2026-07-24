@@ -248,9 +248,18 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
                 )}
               </Button>
             </div>
-            <p className="mt-3 text-center text-xs text-muted-foreground">
-              Paste a TOC URL to convert, or type a novel name to search across supported sites.
-            </p>
+            <div className="mt-3 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 text-xs text-muted-foreground">
+              <span>Paste a TOC or chapter URL to convert, or type a novel name to search.</span>
+              {hasUrl && (
+                <button
+                  type="button"
+                  onClick={() => openLiveReader(trimmed)}
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                >
+                  <BookOpenCheck className="w-3.5 h-3.5" /> Read live instead
+                </button>
+              )}
+            </div>
 
             {/* Search results */}
             {(searchResults.length > 0 || isSearching) && (
