@@ -60,7 +60,46 @@ type EngineWindow = Window & {
     ) => Promise<{ results: EngineSearchResult[]; nextIndex: number }>;
   };
   workInProgress?: boolean;
+  HFLibrary?: {
+    getTelegramCatalog: () => Promise<HFBookEntry[]>;
+    getCatalog: () => Promise<HFBookEntry[]>;
+    downloadBook: (epubPath: string, repoId: string) => Promise<Blob>;
+    getCoverUrl: (coverPath: string, repoId: string) => Promise<string>;
+  };
+  ArchiveLibrary?: new () => ArchiveLibraryInstance;
+  MegaLibrary?: new () => MegaLibraryInstance;
+  mega?: { File: { fromURL: (url: string) => Promise<MegaNode> } };
 };
+
+export interface HFBookEntry {
+  id: string;
+  title: string;
+  author?: string;
+  description?: string;
+  epubPath: string;
+  coverPath?: string;
+  uploadedAt?: string;
+  size?: number;
+  repoId: string;
+}
+
+interface ArchiveLibraryInstance {
+  loadRoot: () => Promise<void>;
+  folders: Record<string, Array<{ name: string; path: string; size: number; url: string }>>;
+}
+
+interface MegaLibraryInstance {
+  epubFiles: MegaNode[];
+}
+
+interface MegaNode {
+  name?: string;
+  directory?: boolean;
+  children?: MegaNode[];
+  size?: number;
+  loadAttributes: () => Promise<void>;
+  downloadBuffer: () => Promise<ArrayBuffer>;
+}
 
 export interface EngineSearchResult {
   title: string;
@@ -408,3 +447,150 @@ export function _resetEngine() {
   iframe = null;
   readyPromise = null;
 }
+
+// ─────────────────────────────────────────────────────────────
+// Library bridges — call the vendored HFLibrary / ArchiveLibrary
+// / MegaLibrary classes directly and return plain data so the
+// React UI never touches the WebToEpub popup DOM.
+// ─────────────────────────────────────────────────────────────
+
+export interface LibraryBook {
+  id: string;
+  title: string;
+  author: string;
+  description: string;
+  coverUrl?: string;
+  size?: number;
+  uploadedAt?: string;
+  /** Opaque handle we pass back to library functions to trigger downloads. */
+  handle: unknown;
+  source: 'telegram' | 'hf' | 'mega' | 'archive';
+}
+
+async function fetchHFBooks(mode: 'telegram' | 'hf'): Promise<LibraryBook[]> {
+  const win = await ensureIframe();
+  if (!win.HFLibrary) throw new Error('HFLibrary not ready');
+  const list =
+    mode === 'telegram'
+      ? await win.HFLibrary.getTelegramCatalog()
+      : await win.HFLibrary.getCatalog();
+  const out: LibraryBook[] = [];
+  for (const item of list) {
+    let coverUrl: string | undefined;
+    if (item.coverPath) {
+      try {
+        coverUrl = await win.HFLibrary.getCoverUrl(item.coverPath, item.repoId);
+      } catch {
+        /* ignore cover errors */
+      }
+    }
+    out.push({
+      id: item.id,
+      title: item.title || 'Untitled',
+      author: item.author || '',
+      description: item.description || '',
+      coverUrl,
+      size: item.size,
+      uploadedAt: item.uploadedAt,
+      handle: { epubPath: item.epubPath, repoId: item.repoId },
+      source: mode,
+    });
+  }
+  return out;
+}
+
+export const libraryGetTelegram = () => fetchHFBooks('telegram');
+export const libraryGetPublic = () => fetchHFBooks('hf');
+
+export async function libraryDownloadHF(handle: unknown): Promise<Blob> {
+  const win = await ensureIframe();
+  if (!win.HFLibrary) throw new Error('HFLibrary not ready');
+  const { epubPath, repoId } = handle as { epubPath: string; repoId: string };
+  return await win.HFLibrary.downloadBook(epubPath, repoId);
+}
+
+// ── Archive.org ────────────────────────────────────────────
+let archiveInstance: ArchiveLibraryInstance | null = null;
+export async function libraryGetArchive(): Promise<LibraryBook[]> {
+  const win = await ensureIframe();
+  if (!win.ArchiveLibrary) throw new Error('ArchiveLibrary not ready');
+  // Ensure the loader/grid DOM ids the class expects exist – it uses them
+  // only for progress indication, so injecting stubs is enough.
+  const doc = win.document;
+  for (const id of ['libraryLoader', 'archiveLibraryGrid']) {
+    if (!doc.getElementById(id)) {
+      const el = doc.createElement('div');
+      el.id = id;
+      el.style.display = 'none';
+      doc.body.appendChild(el);
+    }
+  }
+  if (!archiveInstance) archiveInstance = new win.ArchiveLibrary();
+  await archiveInstance.loadRoot();
+  const books: LibraryBook[] = [];
+  for (const [folder, files] of Object.entries(archiveInstance.folders)) {
+    for (const f of files) {
+      books.push({
+        id: f.path,
+        title: f.name.replace(/\.epub$/i, ''),
+        author: folder,
+        description: '',
+        size: f.size,
+        handle: { url: f.url },
+        source: 'archive',
+      });
+    }
+  }
+  books.sort((a, b) => a.title.localeCompare(b.title));
+  return books;
+}
+
+export async function libraryDownloadArchive(handle: unknown): Promise<Blob> {
+  const { url } = handle as { url: string };
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`Archive download failed: ${resp.status}`);
+  return await resp.blob();
+}
+
+// ── Mega ────────────────────────────────────────────────────
+const megaFiles = new Map<string, MegaNode>();
+export async function libraryGetMega(folderUrl: string): Promise<LibraryBook[]> {
+  const win = await ensureIframe();
+  if (!win.mega) throw new Error('Mega SDK not loaded in engine');
+  const folder = await win.mega.File.fromURL(folderUrl);
+  await folder.loadAttributes();
+  const found: MegaNode[] = [];
+  const walk = (n: MegaNode) => {
+    if (!n.children) return;
+    for (const c of n.children) {
+      if (c.directory) walk(c);
+      else if (c.name?.toLowerCase().endsWith('.epub')) found.push(c);
+    }
+  };
+  walk(folder);
+  megaFiles.clear();
+  const out: LibraryBook[] = [];
+  found.forEach((f, i) => {
+    const id = `mega-${i}`;
+    megaFiles.set(id, f);
+    out.push({
+      id,
+      title: (f.name || 'Untitled').replace(/\.epub$/i, ''),
+      author: '',
+      description: '',
+      size: f.size,
+      handle: { id },
+      source: 'mega',
+    });
+  });
+  return out;
+}
+
+export async function libraryDownloadMega(handle: unknown): Promise<Blob> {
+  const { id } = handle as { id: string };
+  const file = megaFiles.get(id);
+  if (!file) throw new Error('Mega file no longer available – reload the folder.');
+  const buf = await file.downloadBuffer();
+  return new Blob([buf], { type: 'application/epub+zip' });
+}
+
