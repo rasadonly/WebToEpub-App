@@ -508,10 +508,27 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
             <Button
               variant={ttsOpen ? 'default' : 'ghost'}
               size="sm"
-              onClick={() => setTtsOpen((v) => !v)}
-              title="Text-to-speech"
+              onClick={() => {
+                setTtsOpen((v) => {
+                  const next = !v;
+                  // Read-aloud only makes sense in continuous scroll.
+                  if (next && viewMode !== 'scroll') setViewMode('scroll');
+                  return next;
+                });
+              }}
+              title="Text-to-speech (scroll mode)"
             >
               <Volume2 className="w-4 h-4" />
+            </Button>
+          )}
+          {bookLoaded && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setImmersive(true)}
+              title="Immersive mode"
+            >
+              <Maximize2 className="w-4 h-4" />
             </Button>
           )}
           <Button
