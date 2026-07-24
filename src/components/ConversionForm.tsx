@@ -9,12 +9,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { SUPPORTED_SITES, getSiteConfig, extractDomain } from '@/utils/siteConfigs';
 import { NovelSite, EpubMetadata } from '@/types';
-import { BookOpen, Globe, Settings, Hash, Type, List, Search, Sparkles, ArrowRight, ExternalLink, X, BookOpenCheck, MoreVertical, Library as LibraryIcon } from 'lucide-react';
+import { BookOpen, Globe, Settings, Hash, Type, List, Search, Sparkles, ArrowRight, ExternalLink, X, BookOpenCheck, MoreVertical, Library as LibraryIcon, BookMarked } from 'lucide-react';
 import { AdminPanel } from './AdminPanel';
 import { SupportedSites } from './SupportedSites';
 import { engineSearch, cancelSearch, EngineSearchResult } from '@/utils/webtoepub/bridge';
 import { LiveReaderModal } from './LiveReaderModal';
 import { LibraryModal } from './LibraryModal';
+import { EpubReaderModal } from './EpubReaderModal';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 
 
@@ -77,6 +78,7 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
   const [supportedOpen, setSupportedOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [epubReaderOpen, setEpubReaderOpen] = useState(false);
 
 
   const isUrlLike = (s: string) => /^https?:\/\//i.test(s.trim());
@@ -371,6 +373,9 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
                 <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setLibraryOpen(true); }}>
                   <LibraryIcon className="w-4 h-4 mr-2" /> Library
                 </DropdownMenuItem>
+                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setEpubReaderOpen(true); }}>
+                  <BookMarked className="w-4 h-4 mr-2" /> EPUB Reader
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -380,6 +385,7 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
           <SupportedSites open={supportedOpen} onOpenChange={setSupportedOpen} hideTrigger />
           <AdminPanel open={adminOpen} onOpenChange={setAdminOpen} hideTrigger />
           <LibraryModal open={libraryOpen} onClose={() => setLibraryOpen(false)} />
+          <EpubReaderModal open={epubReaderOpen} onClose={() => setEpubReaderOpen(false)} />
 
 
         </div>
