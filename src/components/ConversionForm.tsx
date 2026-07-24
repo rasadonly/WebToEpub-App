@@ -342,15 +342,21 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
           </div>
 
 
-          {/* Quick actions */}
-          <div className="flex justify-center">
+          {/* Quick actions — fixed to top-right like Google/Bing account menu */}
+          <div className="fixed top-3 right-3 md:top-4 md:right-4 z-50">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button type="button" variant="outline" size="icon" aria-label="More options">
-                  <MoreVertical className="w-4 h-4" />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="More options"
+                  className="h-10 w-10 rounded-full bg-card/70 backdrop-blur border border-border shadow-sm hover:bg-card hover:shadow-md transition-smooth"
+                >
+                  <MoreVertical className="w-5 h-5" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="center" className="w-48">
+              <DropdownMenuContent align="end" sideOffset={8} className="w-52">
                 <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setSupportedOpen(true); }}>
                   <Globe className="w-4 h-4 mr-2" /> Supported Sites
                 </DropdownMenuItem>
@@ -367,6 +373,7 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+
 
           {/* Menu-controlled dialogs (headless triggers) */}
           <SupportedSites open={supportedOpen} onOpenChange={setSupportedOpen} hideTrigger />
