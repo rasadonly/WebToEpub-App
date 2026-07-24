@@ -28,8 +28,8 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
   if (!open) return null;
 
   const src = url
-    ? `/webtoepub/live-reader.html?url=${encodeURIComponent(url)}`
-    : `/webtoepub/live-reader.html`;
+    ? `/webtoepub/plugin/live-reader.html?url=${encodeURIComponent(url)}`
+    : `/webtoepub/plugin/live-reader.html`;
 
   return (
     <div className="fixed inset-0 z-[100] bg-background/95 backdrop-blur-sm flex flex-col animate-in fade-in duration-200">
