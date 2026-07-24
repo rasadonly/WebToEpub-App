@@ -373,6 +373,9 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
                 <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setLibraryOpen(true); }}>
                   <LibraryIcon className="w-4 h-4 mr-2" /> Library
                 </DropdownMenuItem>
+                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setEpubReaderOpen(true); }}>
+                  <BookMarked className="w-4 h-4 mr-2" /> EPUB Reader
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
