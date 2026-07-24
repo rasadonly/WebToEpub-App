@@ -1179,6 +1179,14 @@
         <script src="js/AiClient.js"></script>
         <script src="js/main.js?v=20260614_v9"></script>
     </span>
+<script>
+  window.addEventListener('load', () => {
+    try { window.parserFactory = parserFactory; } catch(e) {}
+    try { window.EpubPacker = EpubPacker; } catch(e) {}
+    try { window.HttpClient = HttpClient; } catch(e) {}
+    window.__WTE_READY = true;
+  });
+</script>
 </body>
 
 </html>
