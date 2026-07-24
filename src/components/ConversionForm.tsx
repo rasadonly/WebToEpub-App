@@ -131,40 +131,99 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
   const hasUrl = tocUrl.trim().length > 0;
 
   return (
-    <div className="w-full max-w-2xl mx-auto space-y-6">
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Simple hero URL input */}
-        <div className="flex flex-col items-center justify-center gap-6 pt-4">
-          <div className="text-center space-y-2">
-            <div className="flex items-center justify-center gap-2 text-primary">
-              <BookOpen className="w-7 h-7" />
-              <h1 className="text-3xl font-bold">Link to EPUB</h1>
+    <div className="w-full max-w-5xl mx-auto">
+      <form onSubmit={handleSubmit} className="space-y-10">
+        {/* Search-engine style hero */}
+        <div className="flex flex-col items-center justify-center gap-8 pt-6 md:pt-10">
+          {/* Wordmark */}
+          <div className="text-center space-y-3">
+            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary/60 px-3 py-1 text-xs text-muted-foreground">
+              <Sparkles className="w-3.5 h-3.5 text-primary" />
+              Web novels, beautifully bound
             </div>
-            <p className="text-sm text-muted-foreground">
-              Paste a novel's table of contents URL to begin
+            <h1 className="font-display text-6xl md:text-7xl font-extrabold tracking-tight leading-none">
+              <span className="text-foreground">Link</span>
+              <span className="text-primary">2</span>
+              <span className="text-foreground">Epub</span>
+              <span className="text-primary">.</span>
+            </h1>
+          </div>
+
+          {/* Pill search */}
+          <div className="w-full max-w-2xl">
+            <div className="group relative flex items-center rounded-full bg-card border border-border shadow-search transition-smooth focus-within:border-primary/40 focus-within:shadow-glow">
+              <Search className="w-5 h-5 text-muted-foreground absolute left-5 pointer-events-none" />
+              <Input
+                id="toc-url"
+                type="url"
+                value={tocUrl}
+                onChange={(e) => setTocUrl(e.target.value)}
+                placeholder="Paste a novel's table-of-contents URL…"
+                required
+                autoFocus
+                className="h-14 md:h-16 pl-14 pr-32 md:pr-36 text-base md:text-lg rounded-full border-0 bg-transparent shadow-none focus-visible:ring-0"
+              />
+              <Button
+                type="submit"
+                disabled={isConverting || !hasUrl}
+                className="absolute right-2 h-10 md:h-12 rounded-full px-5 md:px-6 bg-primary hover:bg-primary/90 text-primary-foreground gap-2"
+              >
+                {isConverting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-primary-foreground/40 border-t-primary-foreground rounded-full animate-spin" />
+                    <span className="hidden md:inline">Working</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="hidden md:inline">Fetch</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </Button>
+            </div>
+            <p className="mt-3 text-center text-xs text-muted-foreground">
+              Works with Novelhall, Novelfull, NovelBin, FreeWebNovel, NovelFire, NovGo, NovelBuddy, NovelArrow &amp; WTR-LAB
             </p>
           </div>
 
-          <div className="w-full max-w-xl">
-            <Input
-              id="toc-url"
-              type="url"
-              value={tocUrl}
-              onChange={(e) => setTocUrl(e.target.value)}
-              placeholder="https://novelfull.com/martial-god-asura.html"
-              required
-              autoFocus
-              className="h-14 text-base rounded-full px-6 shadow-card transition-smooth focus:shadow-glow"
-            />
+          {/* Quick actions */}
+          <div className="flex flex-wrap gap-2 justify-center">
+            <SupportedSites />
+            <AdminPanel />
           </div>
 
+          {/* Sites grid — only before URL entered */}
           {!hasUrl && (
-            <div className="flex flex-wrap gap-2 justify-center">
-              <SupportedSites />
-              <AdminPanel />
+            <div className="w-full pt-4">
+              <div className="mb-4 flex items-end justify-between px-1">
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                  Supported sites
+                </h2>
+                <span className="text-xs text-muted-foreground">{SUPPORTED_SITES.length} available</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {SUPPORTED_SITES.map(site => (
+                  <button
+                    key={site.domain}
+                    type="button"
+                    onClick={() => handleSiteSelect(site.name)}
+                    className="group text-left rounded-xl border border-border bg-card p-4 shadow-card hover:border-primary/40 hover:-translate-y-0.5 transition-smooth"
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center group-hover:bg-primary group-hover:text-primary-foreground transition-smooth">
+                        <Globe className="w-3.5 h-3.5" />
+                      </div>
+                      <span className="font-display font-semibold text-sm truncate">{site.name}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate">{site.domain}</p>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>
+
+
 
         {/* Reveal the rest only after URL is entered */}
         {hasUrl && (
