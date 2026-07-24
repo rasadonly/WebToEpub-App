@@ -93,12 +93,19 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
   }
 
   const download = async (book: LibraryBook) => {
+    // Archive.org: open direct download link — no proxy fetch on our side.
+    if (book.source === 'archive') {
+      const { url } = book.handle as { url: string };
+      window.open(url, '_blank', 'noopener,noreferrer');
+      toast({ title: 'Opening Archive.org', description: `${book.title}.epub` });
+      return;
+    }
     setDownloadingId(book.id);
     try {
-      let blob: Blob;
-      if (book.source === 'mega') blob = await libraryDownloadMega(book.handle);
-      else if (book.source === 'archive') blob = await libraryDownloadArchive(book.handle);
-      else blob = await libraryDownloadHF(book.handle);
+      const blob =
+        book.source === 'mega'
+          ? await libraryDownloadMega(book.handle)
+          : await libraryDownloadHF(book.handle);
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = `${book.title}.epub`;
@@ -115,6 +122,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
       setDownloadingId(null);
     }
   };
+
 
   const filtered = useMemo(
     () =>
