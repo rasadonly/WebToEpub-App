@@ -552,6 +552,7 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
           />
         </div>
       </div>
+      )}
 
       {/* Toolbar */}
       {bookLoaded && (
