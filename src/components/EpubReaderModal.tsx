@@ -71,19 +71,22 @@ function humanizeForSpeech(sentence: string): string {
     .trim();
 }
 
-function extractParagraphsFromDoc(doc: Document | null | undefined): string[] {
+type TtsPara = { text: string; el: Element | null };
+
+function extractParagraphsFromDoc(doc: Document | null | undefined): TtsPara[] {
   if (!doc) return [];
   const nodes = Array.from(
     doc.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote')
   );
   const seen = new Set<string>();
-  const out: string[] = [];
+  const out: TtsPara[] = [];
   for (const n of nodes) {
     const t = (n.textContent || '').replace(/\s+/g, ' ').trim();
     if (!t || t.length < 2) continue;
-    if (seen.has(t)) continue;
-    seen.add(t);
-    out.push(t);
+    const key = t.slice(0, 120);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ text: t, el: n });
   }
   return out;
 }
