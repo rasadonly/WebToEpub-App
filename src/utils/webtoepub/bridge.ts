@@ -211,6 +211,17 @@ function ensureIframe(): Promise<EngineWindow> {
         reject(new Error('Iframe has no contentWindow'));
         return;
       }
+      // Inject our free AI proxy endpoint so AiClient uses Lovable AI Gateway
+      // instead of Pollinations for search fallback and selector autocomplete.
+      try {
+        const supaUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined) || '';
+        const anon = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined) || '';
+        if (supaUrl) {
+          (win as unknown as Record<string, unknown>).LOVABLE_AI_ENDPOINT = `${supaUrl}/functions/v1/ai-parse`;
+          if (anon) (win as unknown as Record<string, unknown>).LOVABLE_AI_ANON_KEY = anon;
+          (win as unknown as Record<string, unknown>).LOVABLE_AI_MODEL = 'google/gemini-2.5-flash';
+        }
+      } catch { /* ignore */ }
       const started = Date.now();
       const poll = () => {
         const ready = (win as unknown as { __WTE_READY?: boolean }).__WTE_READY;

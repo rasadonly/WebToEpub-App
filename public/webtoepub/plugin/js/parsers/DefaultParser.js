@@ -253,7 +253,9 @@ class DefaultParser extends Parser {
                                     );
                                     console.log("[DefaultParser] AI auto-config saved for", hostName, sel);
                                 } catch (e) { console.warn("[DefaultParser] save AI config failed", e); }
-                            }
+}
+DefaultParser._aiTried = new Set();
+DefaultParser._aiCache = new Map();
                             return sel;
                         });
                         DefaultParser._aiCache.set(hostName, cached);
