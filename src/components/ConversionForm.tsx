@@ -140,19 +140,25 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!tocUrl) {
+
+    const value = tocUrl.trim();
+    if (!value) {
       toast({
-        title: "Missing URL",
-        description: "Please enter a novel table-of-contents URL.",
+        title: "Enter a URL or search term",
+        description: "Paste a novel's table-of-contents URL, or type a novel name to search.",
         variant: "destructive"
       });
       return;
     }
 
+    // If it's not a URL, run a search instead of trying to fetch
+    if (!isUrlLike(value)) {
+      runSearch(value);
+      return;
+    }
 
     // Save settings to localStorage
-    const domain = extractDomain(tocUrl);
+    const domain = extractDomain(value);
     if (domain) {
       localStorage.setItem(`epub-converter-${domain}`, JSON.stringify({
         tocSelector,
@@ -161,7 +167,7 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
     }
 
     onSubmit({
-      tocUrl,
+      tocUrl: value,
       tocSelector,
       contentSelector,
       metadata,
@@ -173,7 +179,9 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
   };
 
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const hasUrl = tocUrl.trim().length > 0;
+  const trimmed = tocUrl.trim();
+  const hasUrl = trimmed.length > 0 && isUrlLike(trimmed);
+  const hasQuery = trimmed.length > 0 && !isUrlLike(trimmed);
 
   return (
     <div className="w-full max-w-5xl mx-auto">
