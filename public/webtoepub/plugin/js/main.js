@@ -379,6 +379,8 @@ var main = (function() {
         } else {
             parser = parserFactory.manuallySelectParser(manualSelect);
         }
+        window.parser = parser;
+
         if (parser === undefined) {
             ErrorLog.showErrorMessage(UIText.Error.noParserFound);
             return false;
@@ -487,6 +489,8 @@ var main = (function() {
     function resetUI() {
         initialWebPage = null;
         parser = null;
+        window.parser = null;
+
         let metaInfo = new EpubMetaInfo();
         metaInfo.uuid = "";
         populateMetaInfo(metaInfo);

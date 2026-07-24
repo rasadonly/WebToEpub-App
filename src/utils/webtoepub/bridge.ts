@@ -77,14 +77,9 @@ function ensureIframe(): Promise<EngineWindow> {
       }
       const started = Date.now();
       const poll = () => {
-        if (win.main && win.parserFactory) {
+        const ready = (win as unknown as { __WTE_READY?: boolean }).__WTE_READY;
+        if (ready && win.main && win.parserFactory) {
           window.clearTimeout(failTimer);
-          try {
-            // Suppress engine's stats/library noise in web-app mode.
-            (win as unknown as { HFStatsLibrary?: unknown }).HFStatsLibrary = undefined;
-          } catch {
-            /* ignore */
-          }
           resolve(win);
           return;
         }
@@ -97,6 +92,7 @@ function ensureIframe(): Promise<EngineWindow> {
       };
       poll();
     });
+
 
     document.body.appendChild(el);
     iframe = el;
