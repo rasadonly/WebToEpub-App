@@ -123,51 +123,50 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
   const [showToc, setShowToc] = useState(false);
   const viewportRef = useRef<HTMLDivElement>(null);
 
-  // TTS state
-  const supportsTTS = typeof window !== 'undefined' && 'speechSynthesis' in window;
+  // TTS state (Lovable AI, human-sounding)
+  const supportsTTS = typeof window !== 'undefined' && typeof Audio !== 'undefined';
   const [ttsOpen, setTtsOpen] = useState(false);
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [voiceURI, setVoiceURI] = useState<string>('');
+  const [voice, setVoice] = useState<string>('alloy');
+  const [tone, setTone] = useState<string>('natural');
   const [rate, setRate] = useState(1);
-  const [pitch, setPitch] = useState(1);
   const [ttsPlaying, setTtsPlaying] = useState(false);
   const [ttsPaused, setTtsPaused] = useState(false);
+  const [ttsLoading, setTtsLoading] = useState(false);
   const [ttsIndex, setTtsIndex] = useState(-1);
   const ttsIndexRef = useRef(-1);
   const ttsActiveRef = useRef(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const prefetchRef = useRef<{ index: number; blob: Promise<Blob> } | null>(null);
 
   const paragraphs = useMemo(() => extractParagraphs(chapterHtml), [chapterHtml]);
   const paragraphsRef = useRef<Paragraph[]>([]);
   paragraphsRef.current = paragraphs;
 
-  // Load voices
-  useEffect(() => {
-    if (!supportsTTS) return;
-    const load = () => {
-      const v = window.speechSynthesis.getVoices();
-      setVoices(v);
-      if (!voiceURI && v.length) {
-        const preferred =
-          v.find((x) => x.default) || v.find((x) => x.lang?.startsWith('en')) || v[0];
-        if (preferred) setVoiceURI(preferred.voiceURI);
-      }
-    };
-    load();
-    window.speechSynthesis.onvoiceschanged = load;
-    return () => {
-      window.speechSynthesis.onvoiceschanged = null;
-    };
-  }, [supportsTTS, voiceURI]);
+  const releaseAudioUrl = () => {
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+  };
 
   const stopTTS = useCallback(() => {
-    if (!supportsTTS) return;
     ttsActiveRef.current = false;
-    window.speechSynthesis.cancel();
+    abortRef.current?.abort();
+    abortRef.current = null;
+    prefetchRef.current = null;
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = '';
+    }
+    releaseAudioUrl();
     setTtsPlaying(false);
     setTtsPaused(false);
+    setTtsLoading(false);
     setTtsIndex(-1);
     ttsIndexRef.current = -1;
-  }, [supportsTTS]);
+  }, []);
 
   // Reset when re-opened
   useEffect(() => {
