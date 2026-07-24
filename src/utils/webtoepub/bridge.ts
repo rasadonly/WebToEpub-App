@@ -276,6 +276,28 @@ export async function engineListSupportedHosts(): Promise<string[]> {
   return Array.from(factory.parsers.keys()) as string[];
 }
 
+/**
+ * Search novel sites via the engine's SiteSearchEngine.
+ * Streams partial results via onResults; resolves with the full merged list.
+ */
+export async function engineSearch(
+  query: string,
+  onResults?: (results: EngineSearchResult[]) => void,
+  onProgress?: (site: string, status: string) => void
+): Promise<EngineSearchResult[]> {
+  const win = await ensureIframe();
+  if (!win.SiteSearchEngine) throw new Error('Search engine not ready');
+  const { results } = await win.SiteSearchEngine.search(
+    query,
+    0,
+    20,
+    true,
+    onProgress,
+    onResults
+  );
+  return results;
+}
+
 /** Tear down – mainly for tests. */
 export function _resetEngine() {
   if (iframe) iframe.remove();
