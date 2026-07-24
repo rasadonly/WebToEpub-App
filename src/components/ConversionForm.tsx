@@ -9,10 +9,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { SUPPORTED_SITES, getSiteConfig, extractDomain } from '@/utils/siteConfigs';
 import { NovelSite, EpubMetadata } from '@/types';
-import { BookOpen, Globe, Settings, Hash, Type, List, Search, Sparkles, ArrowRight, ExternalLink, X } from 'lucide-react';
+import { BookOpen, Globe, Settings, Hash, Type, List, Search, Sparkles, ArrowRight, ExternalLink, X, BookOpenCheck } from 'lucide-react';
 import { AdminPanel } from './AdminPanel';
 import { SupportedSites } from './SupportedSites';
 import { engineSearch, cancelSearch, EngineSearchResult } from '@/utils/webtoepub/bridge';
+import { LiveReaderModal } from './LiveReaderModal';
 
 interface ConversionFormProps {
   onSubmit: (data: ConversionFormData) => void;
@@ -59,6 +60,14 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
   const [searchResults, setSearchResults] = useState<EngineSearchResult[]>([]);
   const [searchStatus, setSearchStatus] = useState<string>('');
   const [isSearching, setIsSearching] = useState(false);
+
+  // Live Reader state
+  const [liveReaderOpen, setLiveReaderOpen] = useState(false);
+  const [liveReaderUrl, setLiveReaderUrl] = useState<string | undefined>(undefined);
+  const openLiveReader = (u?: string) => {
+    setLiveReaderUrl(u && u.trim() ? u.trim() : undefined);
+    setLiveReaderOpen(true);
+  };
 
   const isUrlLike = (s: string) => /^https?:\/\//i.test(s.trim());
 
@@ -191,6 +200,11 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
 
   return (
     <div className="w-full max-w-5xl mx-auto">
+      <LiveReaderModal
+        open={liveReaderOpen}
+        url={liveReaderUrl}
+        onClose={() => setLiveReaderOpen(false)}
+      />
       <form onSubmit={handleSubmit} className="space-y-10">
         {/* Search-engine style hero */}
         <div className="flex flex-col items-center justify-center gap-8 pt-6 md:pt-10">
@@ -239,9 +253,18 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
                 )}
               </Button>
             </div>
-            <p className="mt-3 text-center text-xs text-muted-foreground">
-              Paste a TOC URL to convert, or type a novel name to search across supported sites.
-            </p>
+            <div className="mt-3 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 text-xs text-muted-foreground">
+              <span>Paste a TOC or chapter URL to convert, or type a novel name to search.</span>
+              {hasUrl && (
+                <button
+                  type="button"
+                  onClick={() => openLiveReader(trimmed)}
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                >
+                  <BookOpenCheck className="w-3.5 h-3.5" /> Read live instead
+                </button>
+              )}
+            </div>
 
             {/* Search results */}
             {(searchResults.length > 0 || isSearching) && (
@@ -260,31 +283,44 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
                 </div>
                 <div className="max-h-96 overflow-y-auto divide-y divide-border">
                   {searchResults.map((r) => (
-                    <button
+                    <div
                       key={r.url}
-                      type="button"
-                      onClick={() => {
-                        setTocUrl(r.url);
-                        if (r.title && !metadata.title) {
-                          setMetadata(prev => ({ ...prev, title: r.title }));
-                        }
-                        clearSearch();
-                      }}
-                      className="w-full text-left px-3 py-2.5 hover:bg-muted/60 rounded-md transition-smooth"
+                      className="group flex items-stretch gap-1 hover:bg-muted/60 rounded-md transition-smooth"
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <div className="font-medium text-sm truncate">{r.title || 'Untitled'}</div>
-                          {r.snippet && (
-                            <div className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{r.snippet}</div>
-                          )}
-                          <div className="text-[11px] text-muted-foreground/80 truncate mt-1">{r.url}</div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTocUrl(r.url);
+                          if (r.title && !metadata.title) {
+                            setMetadata(prev => ({ ...prev, title: r.title }));
+                          }
+                          clearSearch();
+                        }}
+                        className="flex-1 text-left px-3 py-2.5"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="font-medium text-sm truncate">{r.title || 'Untitled'}</div>
+                            {r.snippet && (
+                              <div className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{r.snippet}</div>
+                            )}
+                            <div className="text-[11px] text-muted-foreground/80 truncate mt-1">{r.url}</div>
+                          </div>
+                          <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
+                            <ExternalLink className="w-3 h-3" /> {r.source}
+                          </span>
                         </div>
-                        <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
-                          <ExternalLink className="w-3 h-3" /> {r.source}
-                        </span>
-                      </div>
-                    </button>
+                      </button>
+                      <button
+                        type="button"
+                        title="Read live"
+                        onClick={(e) => { e.stopPropagation(); clearSearch(); openLiveReader(r.url); }}
+                        className="shrink-0 px-3 my-1 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-smooth inline-flex items-center gap-1 text-xs"
+                      >
+                        <BookOpenCheck className="w-4 h-4" />
+                        <span className="hidden sm:inline">Read</span>
+                      </button>
+                    </div>
                   ))}
                   {isSearching && searchResults.length === 0 && (
                     <div className="px-3 py-6 text-center text-sm text-muted-foreground">
@@ -300,6 +336,14 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
           {/* Quick actions */}
           <div className="flex flex-wrap gap-2 justify-center">
             <SupportedSites />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => openLiveReader(hasUrl ? trimmed : undefined)}
+              className="gap-2"
+            >
+              <BookOpenCheck className="w-4 h-4" /> Live Reader
+            </Button>
             <AdminPanel />
           </div>
 
