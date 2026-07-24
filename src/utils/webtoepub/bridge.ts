@@ -510,43 +510,59 @@ export async function libraryDownloadHF(handle: unknown): Promise<Blob> {
 }
 
 // ── Archive.org ────────────────────────────────────────────
-let archiveInstance: ArchiveLibraryInstance | null = null;
+const ARCHIVE_XML = 'https://archive.org/download/offtllnls/offtllnls_files.xml';
+const ARCHIVE_DL_BASE = 'https://archive.org/download/offtllnls/';
+let archiveCache: LibraryBook[] | null = null;
+
 export async function libraryGetArchive(): Promise<LibraryBook[]> {
+  if (archiveCache) return archiveCache;
   const win = await ensureIframe();
-  if (!win.ArchiveLibrary) throw new Error('ArchiveLibrary not ready');
-  // Ensure the loader/grid DOM ids the class expects exist – it uses them
-  // only for progress indication, so injecting stubs is enough.
-  const doc = win.document;
-  for (const id of ['libraryLoader', 'archiveLibraryGrid']) {
-    if (!doc.getElementById(id)) {
-      const el = doc.createElement('div');
-      el.id = id;
-      el.style.display = 'none';
-      doc.body.appendChild(el);
-    }
+  if (!win.HttpClient) throw new Error('HttpClient not ready');
+  const xhr = await win.HttpClient.wrapFetch(ARCHIVE_XML);
+  let doc: Document | null = xhr.responseXML || null;
+  if (!doc && xhr.responseText) {
+    doc = new DOMParser().parseFromString(xhr.responseText, 'text/xml');
   }
-  if (!archiveInstance) archiveInstance = new win.ArchiveLibrary();
-  await archiveInstance.loadRoot();
+  if (!doc) throw new Error('Archive.org XML unavailable');
   const books: LibraryBook[] = [];
-  for (const [folder, files] of Object.entries(archiveInstance.folders)) {
-    for (const f of files) {
-      books.push({
-        id: f.path,
-        title: f.name.replace(/\.epub$/i, ''),
-        author: folder,
-        description: '',
-        size: f.size,
-        handle: { url: f.url },
-        source: 'archive',
-      });
-    }
+  const fileNodes = doc.getElementsByTagName('file');
+  for (let i = 0; i < fileNodes.length; i++) {
+    const node = fileNodes[i];
+    const fmt = node.getElementsByTagName('format')[0];
+    if (!fmt || fmt.textContent !== 'EPUB') continue;
+    const nameAttr = node.getAttribute('name');
+    if (!nameAttr) continue;
+    const parts = nameAttr.split('/');
+    if (parts.length < 2) continue;
+    const folder = parts[0];
+    const fileName = parts.slice(1).join('/');
+    const sizeNode = node.getElementsByTagName('size')[0];
+    const size = sizeNode ? parseInt(sizeNode.textContent || '0', 10) : 0;
+    const url = ARCHIVE_DL_BASE + encodeURIComponent(folder) + '/' + encodeURIComponent(fileName);
+    books.push({
+      id: nameAttr,
+      title: fileName.replace(/\.epub$/i, ''),
+      author: folder,
+      description: '',
+      size,
+      handle: { url },
+      source: 'archive',
+    });
   }
   books.sort((a, b) => a.title.localeCompare(b.title));
+  archiveCache = books;
   return books;
 }
 
 export async function libraryDownloadArchive(handle: unknown): Promise<Blob> {
   const { url } = handle as { url: string };
+  const win = await ensureIframe();
+  if (win.HttpClient) {
+    const xhr = await win.HttpClient.wrapFetch(url);
+    if (xhr.responseText) {
+      return new Blob([xhr.responseText], { type: 'application/epub+zip' });
+    }
+  }
   const resp = await fetch(url);
   if (!resp.ok) throw new Error(`Archive download failed: ${resp.status}`);
   return await resp.blob();
