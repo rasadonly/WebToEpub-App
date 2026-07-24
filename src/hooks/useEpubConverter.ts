@@ -5,6 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 import {
   engineFetchToc,
   enginePackEpub,
+  engineAbort,
   EngineChapter,
 } from '@/utils/webtoepub/bridge';
 
@@ -111,13 +112,25 @@ export function useEpubConverter() {
           `Handing ${orderedChapters.length} chapters to the engine for fetch + pack`
         );
 
-        await enginePackEpub(orderedChapters, {
-          title: data.metadata.title || 'Novel',
-          author: data.metadata.author || 'Unknown Author',
-          description: data.metadata.description || '',
-          language: data.metadata.language || 'en',
-          fileName: `${data.metadata.title || 'novel'}.epub`,
-        });
+        await enginePackEpub(
+          orderedChapters,
+          {
+            title: data.metadata.title || 'Novel',
+            author: data.metadata.author || 'Unknown Author',
+            description: data.metadata.description || '',
+            language: data.metadata.language || 'en',
+            fileName: `${data.metadata.title || 'novel'}.epub`,
+          },
+          ({ current, total, message }) => {
+            updateProgress({
+              currentChapter: current,
+              totalChapters: total || orderedChapters.length,
+              message: message
+                ? `${message} — fetching chapters…`
+                : `Fetching ${orderedChapters.length} chapters and packing EPUB…`,
+            });
+          }
+        );
 
         updateProgress({
           status: 'complete',
@@ -158,6 +171,17 @@ export function useEpubConverter() {
     setPendingData(null);
   }, []);
 
+  const stopConversion = useCallback(async () => {
+    addLog('Stop requested — aborting engine…');
+    await engineAbort();
+    updateProgress({ status: 'error', message: 'Stopped by user.' });
+    toast({
+      title: 'Stopped',
+      description: 'Conversion was cancelled.',
+      duration: 4000,
+    });
+  }, [addLog, updateProgress, toast]);
+
   const isFetchingToc = progress.status === 'fetching-toc';
   const isGenerating =
     progress.status === 'processing-chapters' || progress.status === 'generating-epub';
@@ -170,6 +194,7 @@ export function useEpubConverter() {
     fetchChapters,
     generateFromChapters,
     resetConverter,
+    stopConversion,
     isFetchingToc,
     isGenerating,
     isConverting: isFetchingToc || isGenerating,

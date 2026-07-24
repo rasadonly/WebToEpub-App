@@ -42,8 +42,18 @@ type EngineWindow = Window & {
   parserFactory?: {
     parsers: Map<string, unknown>;
   };
+  util?: {
+    sleepController: AbortController;
+  };
   workInProgress?: boolean;
 };
+
+export interface EnginePackProgress {
+  current: number;
+  total: number;
+  message: string;
+}
+
 
 let iframe: HTMLIFrameElement | null = null;
 let readyPromise: Promise<EngineWindow> | null = null;
@@ -159,7 +169,8 @@ export async function engineFetchToc(url: string): Promise<EngineChapter[]> {
  */
 export async function enginePackEpub(
   orderedChapters: EngineChapter[],
-  metadata: EngineMetadata
+  metadata: EngineMetadata,
+  onProgress?: (p: EnginePackProgress) => void
 ): Promise<void> {
   const win = await ensureIframe();
   if (!win.main || !win.parser) throw new Error('Engine has no active parser');
@@ -194,12 +205,47 @@ export async function enginePackEpub(
     /* ignore – table may not have data attributes in this build */
   }
 
-  // Click the pack button to invoke the engine's full pipeline
-  // (fetchContent → EpubPacker.assemble → Download.save).
-  const btn = win.main.getPackEpubButton();
-  if (!btn) throw new Error('Pack button not found in engine');
-  btn.dataset.libclick = 'no';
-  await win.main.fetchContentAndPackEpub.call(btn);
+  // Poll the engine's <progress id="fetchProgress"> element and forward it.
+  let pollTimer: number | null = null;
+  if (onProgress) {
+    const doc = win.document;
+    pollTimer = window.setInterval(() => {
+      const bar = doc.getElementById('fetchProgress') as HTMLProgressElement | null;
+      const msg = doc.getElementById('progressString');
+      if (bar) {
+        onProgress({
+          current: Number(bar.value) || 0,
+          total: Number(bar.max) || orderedChapters.length,
+          message: msg?.textContent || '',
+        });
+      }
+    }, 500);
+  }
+
+  try {
+    // Click the pack button to invoke the engine's full pipeline
+    // (fetchContent → EpubPacker.assemble → Download.save).
+    const btn = win.main.getPackEpubButton();
+    if (!btn) throw new Error('Pack button not found in engine');
+    btn.dataset.libclick = 'no';
+    await win.main.fetchContentAndPackEpub.call(btn);
+  } finally {
+    if (pollTimer !== null) window.clearInterval(pollTimer);
+  }
+}
+
+/**
+ * Abort an in-flight fetch/pack. Signals the engine's shared sleepController;
+ * the fetch loop checks it between chapters and unwinds cleanly.
+ */
+export async function engineAbort(): Promise<void> {
+  if (!readyPromise) return;
+  const win = await readyPromise;
+  try {
+    win.util?.sleepController.abort();
+  } catch {
+    /* ignore */
+  }
 }
 
 /**
