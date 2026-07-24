@@ -117,4 +117,12 @@ All colors MUST be HSL.
     font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif;
     letter-spacing: -0.02em;
   }
+
+  .library-cover-fallback {
+    background: linear-gradient(
+      145deg,
+      hsl(var(--library-cover-hue) 55% 32%),
+      hsl(var(--library-cover-hue-end) 50% 18%)
+    );
+  }
 }

@@ -1,3 +1,5 @@
+import { CORS_PROXY_LIST } from '../localWorker';
+
 /**
  * Bridge to the vendored WebToEpub engine (public/webtoepub/index.html).
  *
@@ -117,6 +119,70 @@ export interface EnginePackProgress {
 
 let iframe: HTMLIFrameElement | null = null;
 let readyPromise: Promise<EngineWindow> | null = null;
+
+const HF_OLD_REPO_ID = 'Amono5667/webtoepub-library';
+const HF_CATALOG_FILE = 'catalog.json';
+
+function withTimeout(url: string, init: RequestInit = {}, timeoutMs = 15_000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...init, signal: controller.signal }).finally(() => {
+    window.clearTimeout(timer);
+  });
+}
+
+function buildProxyUrl(proxyBase: string, targetUrl: string): string {
+  const encodedSuffixes = ['?url=', '?quest=', '&url='];
+  const needsEncoding = encodedSuffixes.some((suffix) => proxyBase.endsWith(suffix));
+  return needsEncoding ? proxyBase + encodeURIComponent(targetUrl) : proxyBase + targetUrl;
+}
+
+async function fetchTextWithProxyFallback(url: string, timeoutMs = 15_000): Promise<string> {
+  try {
+    const direct = await withTimeout(url, { cache: 'no-store' }, timeoutMs);
+    if (direct.ok) return await direct.text();
+  } catch {
+    /* CORS or network failure — try proxies below */
+  }
+
+  let lastError: unknown = null;
+  const preferred = [...CORS_PROXY_LIST].sort((a, b) => {
+    const score = (u: string) => (u.includes('corsproxy.io') ? 0 : u.includes('allorigins') ? 1 : 2);
+    return score(a.url) - score(b.url);
+  });
+
+  for (const proxy of preferred) {
+    try {
+      const response = await withTimeout(buildProxyUrl(proxy.url, url), { cache: 'no-store' }, timeoutMs);
+      if (!response.ok) {
+        lastError = new Error(`${proxy.name} returned ${response.status}`);
+        continue;
+      }
+      return await response.text();
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('All library proxies failed');
+}
+
+async function fetchJsonWithProxyFallback<T>(url: string, timeoutMs = 15_000): Promise<T> {
+  const text = await fetchTextWithProxyFallback(url, timeoutMs);
+  return JSON.parse(text) as T;
+}
+
+function makeHfFileUrl(repoId: string, path: string): string {
+  return `https://huggingface.co/datasets/${repoId}/resolve/main/${path}`;
+}
+
+function base64ToBlob(base64: string, mimeType: string): Blob {
+  const binary = window.atob(base64.trim());
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  return new Blob([buffer], { type: mimeType });
+}
 
 function ensureIframe(): Promise<EngineWindow> {
   if (readyPromise) return readyPromise;
@@ -468,45 +534,41 @@ export interface LibraryBook {
 }
 
 async function fetchHFBooks(mode: 'telegram' | 'hf'): Promise<LibraryBook[]> {
-  const win = await ensureIframe();
-  if (!win.HFLibrary) throw new Error('HFLibrary not ready');
-  const list =
-    mode === 'telegram'
-      ? await win.HFLibrary.getTelegramCatalog()
-      : await win.HFLibrary.getCatalog();
-  const out: LibraryBook[] = [];
-  for (const item of list) {
-    let coverUrl: string | undefined;
-    if (item.coverPath) {
-      try {
-        coverUrl = await win.HFLibrary.getCoverUrl(item.coverPath, item.repoId);
-      } catch {
-        /* ignore cover errors */
-      }
-    }
-    out.push({
+  const repoId = mode === 'telegram' ? HF_OLD_REPO_ID : HF_OLD_REPO_ID;
+  const list = await fetchJsonWithProxyFallback<HFBookEntry[]>(
+    makeHfFileUrl(repoId, HF_CATALOG_FILE),
+    12_000
+  );
+  if (!Array.isArray(list)) return [];
+
+  return list
+    .map((item) => ({
       id: item.id,
       title: item.title || 'Untitled',
       author: item.author || '',
       description: item.description || '',
-      coverUrl,
       size: item.size,
       uploadedAt: item.uploadedAt,
-      handle: { epubPath: item.epubPath, repoId: item.repoId },
+      handle: { epubPath: item.epubPath, repoId: item.repoId || repoId },
       source: mode,
+    }))
+    .sort((a, b) => {
+      const aTime = Date.parse(a.uploadedAt || '');
+      const bTime = Date.parse(b.uploadedAt || '');
+      return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
     });
-  }
-  return out;
 }
 
 export const libraryGetTelegram = () => fetchHFBooks('telegram');
 export const libraryGetPublic = () => fetchHFBooks('hf');
 
 export async function libraryDownloadHF(handle: unknown): Promise<Blob> {
-  const win = await ensureIframe();
-  if (!win.HFLibrary) throw new Error('HFLibrary not ready');
   const { epubPath, repoId } = handle as { epubPath: string; repoId: string };
-  return await win.HFLibrary.downloadBook(epubPath, repoId);
+  const url = makeHfFileUrl(repoId || HF_OLD_REPO_ID, epubPath);
+  const response = await withTimeout(url, { cache: 'no-store' }, 25_000);
+  if (!response.ok) throw new Error(`Failed to download book: ${response.status}`);
+  if (!epubPath.toLowerCase().endsWith('.txt')) return await response.blob();
+  return base64ToBlob(await response.text(), 'application/epub+zip');
 }
 
 // ── Archive.org ────────────────────────────────────────────
@@ -516,14 +578,9 @@ let archiveCache: LibraryBook[] | null = null;
 
 export async function libraryGetArchive(): Promise<LibraryBook[]> {
   if (archiveCache) return archiveCache;
-  const win = await ensureIframe();
-  if (!win.HttpClient) throw new Error('HttpClient not ready');
-  const xhr = await win.HttpClient.wrapFetch(ARCHIVE_XML);
-  let doc: Document | null = xhr.responseXML || null;
-  if (!doc && xhr.responseText) {
-    doc = new DOMParser().parseFromString(xhr.responseText, 'text/xml');
-  }
-  if (!doc) throw new Error('Archive.org XML unavailable');
+  const xmlText = await fetchTextWithProxyFallback(ARCHIVE_XML, 20_000);
+  const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
+  if (doc.querySelector('parsererror')) throw new Error('Archive.org XML unavailable');
   const books: LibraryBook[] = [];
   const fileNodes = doc.getElementsByTagName('file');
   for (let i = 0; i < fileNodes.length; i++) {
@@ -556,16 +613,14 @@ export async function libraryGetArchive(): Promise<LibraryBook[]> {
 
 export async function libraryDownloadArchive(handle: unknown): Promise<Blob> {
   const { url } = handle as { url: string };
-  const win = await ensureIframe();
-  if (win.HttpClient) {
-    const xhr = await win.HttpClient.wrapFetch(url);
-    if (xhr.responseText) {
-      return new Blob([xhr.responseText], { type: 'application/epub+zip' });
-    }
+  try {
+    const direct = await withTimeout(url, { cache: 'no-store' }, 25_000);
+    if (direct.ok) return await direct.blob();
+  } catch {
+    /* try proxy below */
   }
-  const resp = await fetch(url);
-  if (!resp.ok) throw new Error(`Archive download failed: ${resp.status}`);
-  return await resp.blob();
+  const text = await fetchTextWithProxyFallback(url, 25_000);
+  return new Blob([text], { type: 'application/epub+zip' });
 }
 
 // ── Mega ────────────────────────────────────────────────────
