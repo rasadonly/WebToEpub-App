@@ -210,12 +210,15 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
         width: '100%',
         height: '100%',
         allowScriptedContent: false,
-        manager: 'default',
       };
       if (mode === 'scroll') {
-        opts.flow = 'scrolled-doc';
+        // Continuous manager auto-loads the next section as you scroll past
+        // the current chapter's end — no manual "next chapter" tap needed.
+        opts.flow = 'scrolled';
+        opts.manager = 'continuous';
       } else {
         opts.flow = 'paginated';
+        opts.manager = 'default';
         opts.spread = mode === 'double' ? 'always' : 'none';
       }
 
