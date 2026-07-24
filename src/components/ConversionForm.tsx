@@ -347,35 +347,6 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
             <AdminPanel />
           </div>
 
-          {/* Sites grid — only before URL entered */}
-          {!hasUrl && (
-            <div className="w-full pt-4">
-              <div className="mb-4 flex items-end justify-between px-1">
-                <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                  Supported sites
-                </h2>
-                <span className="text-xs text-muted-foreground">{SUPPORTED_SITES.length} available</span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                {SUPPORTED_SITES.map(site => (
-                  <button
-                    key={site.domain}
-                    type="button"
-                    onClick={() => handleSiteSelect(site.name)}
-                    className="group text-left rounded-xl border border-border bg-card p-4 shadow-card hover:border-primary/40 hover:-translate-y-0.5 transition-smooth"
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center group-hover:bg-primary group-hover:text-primary-foreground transition-smooth">
-                        <Globe className="w-3.5 h-3.5" />
-                      </div>
-                      <span className="font-display font-semibold text-sm truncate">{site.name}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground truncate">{site.domain}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
 
