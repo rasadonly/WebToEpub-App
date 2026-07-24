@@ -37,7 +37,7 @@ export function SupportedSites({ open, onOpenChange, hideTrigger }: { open?: boo
         </DialogTrigger>
       )}
 
-      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-none w-screen h-screen sm:rounded-none p-6 overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             Supported Novel Websites{hosts.length ? ` (${hosts.length} sites)` : ''}
