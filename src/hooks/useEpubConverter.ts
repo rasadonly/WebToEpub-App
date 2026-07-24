@@ -171,6 +171,17 @@ export function useEpubConverter() {
     setPendingData(null);
   }, []);
 
+  const stopConversion = useCallback(async () => {
+    addLog('Stop requested — aborting engine…');
+    await engineAbort();
+    updateProgress({ status: 'error', message: 'Stopped by user.' });
+    toast({
+      title: 'Stopped',
+      description: 'Conversion was cancelled.',
+      duration: 4000,
+    });
+  }, [addLog, updateProgress, toast]);
+
   const isFetchingToc = progress.status === 'fetching-toc';
   const isGenerating =
     progress.status === 'processing-chapters' || progress.status === 'generating-epub';
@@ -183,6 +194,7 @@ export function useEpubConverter() {
     fetchChapters,
     generateFromChapters,
     resetConverter,
+    stopConversion,
     isFetchingToc,
     isGenerating,
     isConverting: isFetchingToc || isGenerating,
