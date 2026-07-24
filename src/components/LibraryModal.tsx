@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { X, Send, Cloud, Archive, Loader2, Download, Search, BookOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +22,8 @@ interface LibraryModalProps {
 type Tab = 'telegram' | 'mega' | 'archive';
 
 const DEFAULT_MEGA_URL = 'https://mega.nz/folder/Ci4ETASB#KIFVuPI99P1Ytg0dxmtYlw';
+const INITIAL_VISIBLE_BOOKS = 80;
+const LOAD_MORE_COUNT = 80;
 
 const TABS: { id: Tab; label: string; icon: typeof Send }[] = [
   { id: 'telegram', label: 'Telegram (HF)', icon: Send },
@@ -44,6 +46,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
   const [error, setError] = useState<string | null>(null);
   const [megaUrl, setMegaUrl] = useState(DEFAULT_MEGA_URL);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_BOOKS);
 
   useEffect(() => {
     if (!open) return;
@@ -56,6 +59,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
     setLoading(true);
     setError(null);
     setBooks([]);
+    setVisibleCount(INITIAL_VISIBLE_BOOKS);
     try {
       let list: LibraryBook[] = [];
       if (which === 'telegram') list = await libraryGetTelegram();
@@ -74,6 +78,10 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
     load(tab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, tab]);
+
+  useEffect(() => {
+    setVisibleCount(INITIAL_VISIBLE_BOOKS);
+  }, [query, tab]);
 
   function titleToHue(title: string) {
     let hash = 0;
@@ -108,12 +116,17 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
     }
   };
 
-  const filtered = books.filter(
-    (b) =>
-      !query ||
-      b.title.toLowerCase().includes(query.toLowerCase()) ||
-      b.author.toLowerCase().includes(query.toLowerCase())
+  const filtered = useMemo(
+    () =>
+      books.filter(
+        (b) =>
+          !query ||
+          b.title.toLowerCase().includes(query.toLowerCase()) ||
+          b.author.toLowerCase().includes(query.toLowerCase())
+      ),
+    [books, query]
   );
+  const visibleBooks = filtered.slice(0, visibleCount);
 
   if (!open) return null;
 
@@ -133,11 +146,13 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
         {/* Tabs */}
         <div className="flex gap-1 px-3 pt-3 border-b border-border">
           {TABS.map(({ id, label, icon: Icon }) => (
-            <button
+            <Button
               key={id}
+              type="button"
+              variant="ghost"
               onClick={() => setTab(id)}
               className={cn(
-                'flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-t-lg transition-colors border border-b-0',
+                'h-auto flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-t-lg rounded-b-none transition-colors border border-b-0',
                 tab === id
                   ? 'bg-background text-foreground border-border'
                   : 'text-muted-foreground hover:text-foreground border-transparent'
@@ -145,7 +160,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
             >
               <Icon className="w-4 h-4" />
               {label}
-            </button>
+            </Button>
           ))}
         </div>
 
@@ -197,83 +212,96 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
 
           {!loading && !error && filtered.length === 0 && (
             <div className="text-center text-muted-foreground py-16">
-              {tab === 'mega' && books.length === 0
-                ? 'Enter a Mega folder URL and click “Load folder”.'
-                : 'No books found.'}
+              No books found.
             </div>
           )}
 
           {!loading && !error && filtered.length > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-              {filtered.map((book) => (
-                <div
-                  key={book.id}
-                  className="bg-background border border-border rounded-xl overflow-hidden flex flex-col hover:border-primary/50 hover:shadow-lg transition-all"
-                >
+            <>
+              <div className="mb-3 text-xs text-muted-foreground">
+                Showing {visibleBooks.length} of {filtered.length} books
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                {visibleBooks.map((book) => (
                   <div
-                    className="aspect-[2/3] flex items-center justify-center overflow-hidden"
-                    style={
-                      book.coverUrl
-                        ? undefined
-                        : {
-                            background: `linear-gradient(145deg, hsl(${titleToHue(book.title)},55%,32%), hsl(${(titleToHue(book.title) + 40) % 360},50%,18%))`,
-                          }
-                    }
+                    key={book.id}
+                    className="bg-background border border-border rounded-xl overflow-hidden flex flex-col hover:border-primary/50 hover:shadow-lg transition-all"
                   >
-                    {book.coverUrl ? (
-                      <img
-                        src={book.coverUrl}
-                        alt={book.title}
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="flex flex-col items-center gap-2 px-3 text-center">
-                        <BookOpen className="w-8 h-8 text-white/70" />
-                        <span className="text-[10px] uppercase tracking-widest text-white/50">
-                          EPUB
-                        </span>
-                        <span className="text-[11px] font-semibold text-white/90 line-clamp-3 leading-tight">
-                          {book.title}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-3 flex-1 flex flex-col gap-1">
-                    <h3
-                      className="font-semibold text-sm line-clamp-2 leading-tight"
-                      title={book.title}
+                    <div
+                      className="aspect-[2/3] flex items-center justify-center overflow-hidden library-cover-fallback"
+                      style={
+                        {
+                          '--library-cover-hue': `${titleToHue(book.title)}deg`,
+                          '--library-cover-hue-end': `${(titleToHue(book.title) + 40) % 360}deg`,
+                        } as React.CSSProperties
+                      }
                     >
-                      {book.title}
-                    </h3>
-                    {book.author && (
-                      <p className="text-xs text-muted-foreground line-clamp-1">
-                        {book.author}
-                      </p>
-                    )}
-                    {book.size !== undefined && (
-                      <p className="text-[10px] text-muted-foreground/80">
-                        {formatSize(book.size)}
-                      </p>
-                    )}
-                    <Button
-                      size="sm"
-                      className="mt-auto w-full"
-                      onClick={() => download(book)}
-                      disabled={downloadingId === book.id}
-                    >
-                      {downloadingId === book.id ? (
-                        <Loader2 className="w-3 h-3 animate-spin" />
+                      {book.coverUrl ? (
+                        <img
+                          src={book.coverUrl}
+                          alt={book.title}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
                       ) : (
-                        <>
-                          <Download className="w-3 h-3 mr-1" /> EPUB
-                        </>
+                        <div className="flex flex-col items-center gap-2 px-3 text-center text-primary-foreground">
+                          <BookOpen className="w-8 h-8 opacity-70" />
+                          <span className="text-[10px] uppercase tracking-widest opacity-60">
+                            EPUB
+                          </span>
+                          <span className="text-[11px] font-semibold opacity-90 line-clamp-3 leading-tight">
+                            {book.title}
+                          </span>
+                        </div>
                       )}
-                    </Button>
+                    </div>
+                    <div className="p-3 flex-1 flex flex-col gap-1">
+                      <h3
+                        className="font-semibold text-sm line-clamp-2 leading-tight"
+                        title={book.title}
+                      >
+                        {book.title}
+                      </h3>
+                      {book.author && (
+                        <p className="text-xs text-muted-foreground line-clamp-1">
+                          {book.author}
+                        </p>
+                      )}
+                      {book.size !== undefined && (
+                        <p className="text-[10px] text-muted-foreground/80">
+                          {formatSize(book.size)}
+                        </p>
+                      )}
+                      <Button
+                        size="sm"
+                        className="mt-auto w-full"
+                        onClick={() => download(book)}
+                        disabled={downloadingId === book.id}
+                      >
+                        {downloadingId === book.id ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <>
+                            <Download className="w-3 h-3 mr-1" /> EPUB
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </div>
+                ))}
+              </div>
+              {visibleCount < filtered.length && (
+                <div className="flex justify-center pt-5">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setVisibleCount((count) => count + LOAD_MORE_COUNT)}
+                  >
+                    Load more
+                  </Button>
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           )}
         </div>
       </div>
