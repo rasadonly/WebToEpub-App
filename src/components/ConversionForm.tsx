@@ -83,17 +83,23 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
       );
       setSearchStatus('');
     } catch (err) {
-      toast({
-        title: 'Search failed',
-        description: err instanceof Error ? err.message : 'Try pasting a URL instead.',
-        variant: 'destructive',
-      });
+      if (err instanceof Error && err.message === '__cancelled__') {
+        // silent — user picked a result or cleared
+      } else {
+        toast({
+          title: 'Search failed',
+          description: err instanceof Error ? err.message : 'Try pasting a URL instead.',
+          variant: 'destructive',
+        });
+      }
     } finally {
       setIsSearching(false);
     }
   };
 
   const clearSearch = () => {
+    cancelSearch();
+    setIsSearching(false);
     setSearchResults([]);
     setSearchStatus('');
   };
