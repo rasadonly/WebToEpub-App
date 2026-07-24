@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { supabase } from '@/integrations/supabase/client';
 import {
   engineFetchToc,
   engineFetchChapter,
@@ -23,6 +24,38 @@ import {
   type EngineChapter,
   type EngineBookInfo,
 } from '@/utils/webtoepub/bridge';
+
+const TTS_VOICES = [
+  { id: 'alloy', label: 'Alloy — neutral' },
+  { id: 'ash', label: 'Ash — warm male' },
+  { id: 'ballad', label: 'Ballad — expressive' },
+  { id: 'coral', label: 'Coral — bright female' },
+  { id: 'echo', label: 'Echo — calm male' },
+  { id: 'fable', label: 'Fable — storyteller' },
+  { id: 'nova', label: 'Nova — energetic female' },
+  { id: 'onyx', label: 'Onyx — deep male' },
+  { id: 'sage', label: 'Sage — soft female' },
+  { id: 'shimmer', label: 'Shimmer — smooth female' },
+];
+
+const TTS_TONES = [
+  { id: 'natural', label: 'Natural narrator', prompt: 'Read in a warm, natural human narrator voice with gentle expression and lifelike pacing. Honor punctuation. Never robotic or monotone.' },
+  { id: 'dramatic', label: 'Dramatic', prompt: 'Read with cinematic drama and rich emotion, varying pitch and pace to bring scenes to life. Pause for impact.' },
+  { id: 'calm', label: 'Calm bedtime', prompt: 'Read slowly, softly, and soothingly, as if telling a bedtime story. Gentle warmth, quiet pauses.' },
+  { id: 'cheerful', label: 'Cheerful', prompt: 'Read in a bright, friendly, upbeat tone with a smile in the voice.' },
+  { id: 'serious', label: 'Serious news', prompt: 'Read in a clear, composed, professional tone like a seasoned news anchor.' },
+];
+
+async function fetchTtsBlob(text: string, voice: string, instructions: string, speed: number, signal: AbortSignal): Promise<Blob> {
+  const { data, error } = await supabase.functions.invoke('tts', {
+    body: { text, voice, instructions, speed },
+  });
+  if (signal.aborted) throw new DOMException('aborted', 'AbortError');
+  if (error) throw error;
+  if (data instanceof Blob) return data;
+  if (data instanceof ArrayBuffer) return new Blob([data], { type: 'audio/mpeg' });
+  throw new Error('Invalid TTS response');
+}
 
 interface LiveReaderModalProps {
   url?: string;
