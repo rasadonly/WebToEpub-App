@@ -12,7 +12,7 @@ import { NovelSite, EpubMetadata } from '@/types';
 import { BookOpen, Globe, Settings, Hash, Type, List, Search, Sparkles, ArrowRight, ExternalLink, X } from 'lucide-react';
 import { AdminPanel } from './AdminPanel';
 import { SupportedSites } from './SupportedSites';
-import { engineSearch, EngineSearchResult } from '@/utils/webtoepub/bridge';
+import { engineSearch, cancelSearch, EngineSearchResult } from '@/utils/webtoepub/bridge';
 
 interface ConversionFormProps {
   onSubmit: (data: ConversionFormData) => void;
