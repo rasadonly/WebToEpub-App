@@ -379,16 +379,8 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
           {/* Menu-controlled dialogs (headless triggers) */}
           <SupportedSites open={supportedOpen} onOpenChange={setSupportedOpen} hideTrigger />
           <AdminPanel open={adminOpen} onOpenChange={setAdminOpen} hideTrigger />
-          <Dialog open={libraryOpen} onOpenChange={setLibraryOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Library</DialogTitle>
-              </DialogHeader>
-              <p className="text-sm text-muted-foreground">
-                Your saved books will appear here. Library sync is coming soon.
-              </p>
-            </DialogContent>
-          </Dialog>
+          <LibraryModal open={libraryOpen} onClose={() => setLibraryOpen(false)} />
+
 
         </div>
 
