@@ -331,6 +331,14 @@ export default function ConversionForm({ onSubmit, isConverting }: ConversionFor
           {/* Quick actions */}
           <div className="flex flex-wrap gap-2 justify-center">
             <SupportedSites />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => openLiveReader(hasUrl ? trimmed : undefined)}
+              className="gap-2"
+            >
+              <BookOpenCheck className="w-4 h-4" /> Live Reader
+            </Button>
             <AdminPanel />
           </div>
 
