@@ -278,8 +278,13 @@ export async function engineListSupportedHosts(): Promise<string[]> {
 
 /**
  * Search novel sites via the engine's SiteSearchEngine.
- * Streams partial results via onResults; resolves with the full merged list.
+ * Streams partial results; callbacks stop firing after cancelSearch().
  */
+let searchCancelToken = 0;
+export function cancelSearch() {
+  searchCancelToken++;
+}
+
 export async function engineSearch(
   query: string,
   onResults?: (results: EngineSearchResult[]) => void,
@@ -287,14 +292,17 @@ export async function engineSearch(
 ): Promise<EngineSearchResult[]> {
   const win = await ensureIframe();
   if (!win.SiteSearchEngine) throw new Error('Search engine not ready');
+  const myToken = ++searchCancelToken;
+  const isLive = () => myToken === searchCancelToken;
   const { results } = await win.SiteSearchEngine.search(
     query,
     0,
     20,
     true,
-    onProgress,
-    onResults
+    (site, status) => { if (isLive()) onProgress?.(site, status); },
+    (partial) => { if (isLive()) onResults?.(partial); }
   );
+  if (!isLive()) throw new Error('__cancelled__');
   return results;
 }
 
