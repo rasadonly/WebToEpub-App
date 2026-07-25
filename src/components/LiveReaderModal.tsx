@@ -812,9 +812,15 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
                     <div
                       key={i}
                       data-tts-idx={i}
-                      onClick={() => supportsTTS && ttsOpen && speakFrom(i)}
+                      onClick={(e) => {
+                        if (!supportsTTS) return;
+                        // Let real links navigate; jump TTS on any other click.
+                        const target = e.target as HTMLElement;
+                        if (target.closest('a')) return;
+                        speakFrom(i);
+                      }}
                       className={`transition-colors rounded px-2 -mx-2 mb-3 ${
-                        supportsTTS && ttsOpen ? 'cursor-pointer' : ''
+                        supportsTTS ? 'cursor-pointer' : ''
                       }`}
                       style={
                         i === ttsIndex
