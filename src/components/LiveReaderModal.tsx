@@ -147,6 +147,35 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
   const ttsIndexRef = useRef(-1);
   const ttsActiveRef = useRef(false);
   const pauseTimerRef = useRef<number | null>(null);
+  // Live-tunable refs so voice/speed/pitch changes take effect on the NEXT
+  // sentence utterance without restarting playback.
+  const rateRef = useRef(rate);
+  const pitchRef = useRef(pitch);
+  const voiceURIRef = useRef(voiceURI);
+  rateRef.current = rate;
+  pitchRef.current = pitch;
+  voiceURIRef.current = voiceURI;
+
+  /** Find the paragraph index closest to the current viewport center. */
+  const findParagraphInView = useCallback((): number => {
+    const vp = viewportRef.current;
+    if (!vp) return 0;
+    const vpRect = vp.getBoundingClientRect();
+    const target = vpRect.top + vpRect.height * 0.25;
+    const nodes = vp.querySelectorAll<HTMLElement>('[data-tts-idx]');
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    nodes.forEach((n) => {
+      const r = n.getBoundingClientRect();
+      // Prefer paragraphs whose top is at or just above the reading line.
+      const dist = Math.abs(r.top - target);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIdx = parseInt(n.dataset.ttsIdx || '0', 10);
+      }
+    });
+    return bestIdx;
+  }, []);
 
   const paragraphs = useMemo(() => extractParagraphs(chapterHtml), [chapterHtml]);
   const paragraphsRef = useRef<Paragraph[]>([]);
@@ -300,8 +329,8 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
       setTtsPlaying(true);
       setTtsPaused(false);
 
-      const chosenVoice =
-        voices.find((v) => v.voiceURI === voiceURI) || voices[0] || null;
+      const pickVoice = () =>
+        voices.find((v) => v.voiceURI === voiceURIRef.current) || voices[0] || null;
 
       const speakParagraph = (pIndex: number) => {
         if (!ttsActiveRef.current) return;
@@ -342,14 +371,18 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
           const raw = sentences[sIndex++];
           const text = humanizeForSpeech(raw);
           const utt = new SpeechSynthesisUtterance(text);
+          const chosenVoice = pickVoice();
           if (chosenVoice) {
             utt.voice = chosenVoice;
             utt.lang = chosenVoice.lang;
           }
+          // Read from live refs so slider changes apply on the next sentence.
+          const currentPitch = pitchRef.current;
+          const currentRate = rateRef.current;
           const jitter = (Math.random() - 0.5) * 0.08;
           const rateJit = (Math.random() - 0.5) * 0.06;
-          utt.pitch = Math.max(0, Math.min(2, pitch + jitter));
-          utt.rate = Math.max(0.5, Math.min(2, rate + rateJit));
+          utt.pitch = Math.max(0, Math.min(2, currentPitch + jitter));
+          utt.rate = Math.max(0.5, Math.min(2, currentRate + rateJit));
           utt.volume = 1;
           const endsStrong = /[.!?…]["'”’)]?$/.test(raw);
           utt.onend = () => {
@@ -371,13 +404,16 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
 
       speakParagraph(Math.max(0, Math.min(startIndex, list.length - 1)));
     },
-    [supportsTTS, voices, voiceURI, rate, pitch, chapterIndex, chapters.length] // eslint-disable-line react-hooks/exhaustive-deps
+    [supportsTTS, voices, chapterIndex, chapters.length] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const togglePlay = () => {
     if (!supportsTTS) return;
     if (!ttsPlaying) {
-      speakFrom(ttsIndexRef.current >= 0 ? ttsIndexRef.current : 0);
+      // Start from wherever the reader is currently looking, not chapter start.
+      const start =
+        ttsIndexRef.current >= 0 ? ttsIndexRef.current : findParagraphInView();
+      speakFrom(start);
       return;
     }
     if (ttsPaused) {
@@ -391,15 +427,28 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
 
   const skip = (delta: number) => {
     if (!paragraphsRef.current.length) return;
+    const base = ttsIndexRef.current >= 0 ? ttsIndexRef.current : findParagraphInView();
     const target = Math.max(
       0,
-      Math.min(
-        paragraphsRef.current.length - 1,
-        (ttsIndexRef.current >= 0 ? ttsIndexRef.current : 0) + delta
-      )
+      Math.min(paragraphsRef.current.length - 1, base + delta)
     );
     speakFrom(target);
   };
+
+  // Apply voice changes immediately: cancel the current utterance so the
+  // next sentence (started from onend) picks up the new voice via refs.
+  // Rate/pitch changes only need the ref update — they apply on the next
+  // sentence automatically without interrupting the current one.
+  useEffect(() => {
+    if (!supportsTTS || !ttsActiveRef.current) return;
+    window.speechSynthesis.cancel();
+    // speakSentence will be re-scheduled by the onend/onerror handler chain,
+    // but cancel() suppresses those events on some engines — restart from
+    // the current paragraph to be safe.
+    const idx = ttsIndexRef.current >= 0 ? ttsIndexRef.current : 0;
+    pauseTimerRef.current = window.setTimeout(() => speakFrom(idx), 60);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceURI]);
 
   // Stop TTS when modal closes
   useEffect(() => {
