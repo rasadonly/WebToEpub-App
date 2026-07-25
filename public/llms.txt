@@ -6,7 +6,7 @@ Link2Epub runs entirely in the browser. No account or install required. Built on
 
 ## Core
 
-- [App](https://epub-novel-forge.lovable.app/): Paste TOC URL, fetch chapters, select range, generate EPUB.
+- [App](https://linktoepub.com/): Paste TOC URL, fetch chapters, select range, generate EPUB.
 
 ## Features
 
