@@ -329,8 +329,8 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
       setTtsPlaying(true);
       setTtsPaused(false);
 
-      const chosenVoice =
-        voices.find((v) => v.voiceURI === voiceURI) || voices[0] || null;
+      const pickVoice = () =>
+        voices.find((v) => v.voiceURI === voiceURIRef.current) || voices[0] || null;
 
       const speakParagraph = (pIndex: number) => {
         if (!ttsActiveRef.current) return;
@@ -371,14 +371,18 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
           const raw = sentences[sIndex++];
           const text = humanizeForSpeech(raw);
           const utt = new SpeechSynthesisUtterance(text);
+          const chosenVoice = pickVoice();
           if (chosenVoice) {
             utt.voice = chosenVoice;
             utt.lang = chosenVoice.lang;
           }
+          // Read from live refs so slider changes apply on the next sentence.
+          const currentPitch = pitchRef.current;
+          const currentRate = rateRef.current;
           const jitter = (Math.random() - 0.5) * 0.08;
           const rateJit = (Math.random() - 0.5) * 0.06;
-          utt.pitch = Math.max(0, Math.min(2, pitch + jitter));
-          utt.rate = Math.max(0.5, Math.min(2, rate + rateJit));
+          utt.pitch = Math.max(0, Math.min(2, currentPitch + jitter));
+          utt.rate = Math.max(0.5, Math.min(2, currentRate + rateJit));
           utt.volume = 1;
           const endsStrong = /[.!?…]["'”’)]?$/.test(raw);
           utt.onend = () => {
@@ -400,7 +404,7 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
 
       speakParagraph(Math.max(0, Math.min(startIndex, list.length - 1)));
     },
-    [supportsTTS, voices, voiceURI, rate, pitch, chapterIndex, chapters.length] // eslint-disable-line react-hooks/exhaustive-deps
+    [supportsTTS, voices, chapterIndex, chapters.length] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const togglePlay = () => {
