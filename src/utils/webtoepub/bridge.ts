@@ -454,14 +454,8 @@ export async function engineFetchTocLive(
 }
 
 
-export interface EngineMetadata {
-  title?: string;
-  author?: string;
-  description?: string;
-  language?: string;
-  fileName?: string;
-  tocUrl?: string; // Used to initialize engine if it was bypassed for fast-path
-}
+
+
 
 /**
  * Regenerate the engine's pagesToFetch from the user's selected/reordered
