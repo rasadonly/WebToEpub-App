@@ -406,8 +406,11 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
       return;
     }
 
-    // Scroll the current paragraph into view — this also triggers epub.js's
-    // continuous manager to load the next section when we approach the end.
+    // Highlight + scroll current paragraph into view. Scrolling also nudges
+    // epub.js's continuous manager to auto-load the next section as needed.
+    setTtsIndex(idx);
+    setTtsTotal(paras.length);
+    highlightParagraph(paras[idx].el);
     try {
       paras[idx].el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     } catch {
