@@ -125,10 +125,13 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
   const [pitch, setPitch] = useState(1);
   const [ttsPlaying, setTtsPlaying] = useState(false);
   const [ttsPaused, setTtsPaused] = useState(false);
+  const [ttsIndex, setTtsIndex] = useState(-1);
+  const [ttsTotal, setTtsTotal] = useState(0);
   const ttsActiveRef = useRef(false);
   const pauseTimerRef = useRef<number | null>(null);
   const ttsParaIdxRef = useRef(0);
   const ttsParasRef = useRef<TtsPara[]>([]);
+  const ttsHighlightedRef = useRef<Element | null>(null);
 
   const clearPauseTimer = () => {
     if (pauseTimerRef.current !== null) {
@@ -137,12 +140,28 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
     }
   };
 
+  const clearHighlight = () => {
+    if (ttsHighlightedRef.current) {
+      ttsHighlightedRef.current.classList.remove('tts-current');
+      ttsHighlightedRef.current = null;
+    }
+  };
+
+  const highlightParagraph = (el: Element | null) => {
+    clearHighlight();
+    if (!el) return;
+    el.classList.add('tts-current');
+    ttsHighlightedRef.current = el;
+  };
+
   const stopTTS = useCallback(() => {
     ttsActiveRef.current = false;
     clearPauseTimer();
     if (supportsTTS) window.speechSynthesis.cancel();
+    clearHighlight();
     setTtsPlaying(false);
     setTtsPaused(false);
+    setTtsIndex(-1);
   }, [supportsTTS]);
 
   // Load voices (prefer Google English)
@@ -229,6 +248,25 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
 
       const rendition = book.renderTo(viewerRef.current, opts);
       renditionRef.current = rendition;
+      // Inject TTS highlight styling into every rendered section (iframe).
+      rendition.hooks.content.register((contents: any) => {
+        try {
+          const doc: Document = contents.document;
+          if (doc.getElementById('tts-highlight-style')) return;
+          const style = doc.createElement('style');
+          style.id = 'tts-highlight-style';
+          style.textContent = `
+            .tts-current {
+              background: rgba(239, 68, 68, 0.16) !important;
+              box-shadow: -4px 0 0 rgba(239, 68, 68, 0.8) !important;
+              padding-left: 8px !important;
+              border-radius: 3px;
+              transition: background 0.25s ease;
+            }
+          `;
+          doc.head.appendChild(style);
+        } catch { /* noop */ }
+      });
       applyTheme(rendition, theme, fontSize, fontFamily);
 
       rendition.on('relocated', (loc: any) => {
@@ -368,8 +406,11 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
       return;
     }
 
-    // Scroll the current paragraph into view — this also triggers epub.js's
-    // continuous manager to load the next section when we approach the end.
+    // Highlight + scroll current paragraph into view. Scrolling also nudges
+    // epub.js's continuous manager to auto-load the next section as needed.
+    setTtsIndex(idx);
+    setTtsTotal(paras.length);
+    highlightParagraph(paras[idx].el);
     try {
       paras[idx].el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     } catch {
@@ -648,8 +689,12 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
             <Button size="sm" variant="outline" onClick={() => skipParagraph(-1)} title="Previous paragraph">
               <SkipBack className="w-3.5 h-3.5" />
             </Button>
-            <Button size="sm" onClick={togglePlay} title={ttsPlaying && !ttsPaused ? 'Pause' : 'Play'}>
-              {ttsPlaying && !ttsPaused ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+            <Button size="sm" onClick={togglePlay} className="gap-1" title={ttsPlaying && !ttsPaused ? 'Pause' : 'Play'}>
+              {ttsPlaying && !ttsPaused ? (
+                <><Pause className="w-3.5 h-3.5" /> Pause</>
+              ) : (
+                <><Play className="w-3.5 h-3.5" /> {ttsPaused ? 'Resume' : 'Play'}</>
+              )}
             </Button>
             <Button size="sm" variant="outline" onClick={stopTTS} title="Stop">
               <StopIcon className="w-3.5 h-3.5" />
@@ -657,6 +702,11 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
             <Button size="sm" variant="outline" onClick={() => skipParagraph(1)} title="Next paragraph">
               <SkipForward className="w-3.5 h-3.5" />
             </Button>
+            {ttsIndex >= 0 && ttsTotal > 0 && (
+              <span className="ml-2 text-muted-foreground tabular-nums">
+                ¶ {ttsIndex + 1} / {ttsTotal}
+              </span>
+            )}
           </div>
 
           <label className="flex items-center gap-1">
