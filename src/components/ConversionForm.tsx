@@ -466,7 +466,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
 
           {/* Quick actions — fixed to top-right like Google/Bing account menu */}
           <div className="fixed top-3 right-3 md:top-4 md:right-4 z-50">
-            <DropdownMenu>
+            <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <Button
                   type="button"
@@ -479,24 +479,24 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" sideOffset={8} className="w-52">
-                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setSupportedOpen(true); }}>
+                <DropdownMenuItem onSelect={() => setSupportedOpen(true)}>
                   <Globe className="w-4 h-4 mr-2" /> Supported Sites
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); openLiveReader(hasUrl ? trimmed : undefined); }}>
+                <DropdownMenuItem onSelect={() => openLiveReader(hasUrl ? trimmed : undefined)}>
                   <BookOpenCheck className="w-4 h-4 mr-2" /> Live Reader
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setAdminOpen(true); }}>
+                <DropdownMenuItem onSelect={() => setAdminOpen(true)}>
                   <Settings className="w-4 h-4 mr-2" /> Admin
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setLibraryOpen(true); }}>
+                <DropdownMenuItem onSelect={() => setLibraryOpen(true)}>
                   <LibraryIcon className="w-4 h-4 mr-2" /> Library
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setEpubReaderOpen(true); }}>
+                <DropdownMenuItem onSelect={() => setEpubReaderOpen(true)}>
                   <BookMarked className="w-4 h-4 mr-2" /> EPUB Reader
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setForumOpen(true); }}>
+                <DropdownMenuItem onSelect={() => setForumOpen(true)}>
                   <MessagesSquare className="w-4 h-4 mr-2" /> Community Forum
                 </DropdownMenuItem>
               </DropdownMenuContent>
