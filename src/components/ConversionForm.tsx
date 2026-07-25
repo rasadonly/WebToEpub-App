@@ -83,6 +83,45 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
   const [epubReaderOpen, setEpubReaderOpen] = useState(false);
   const [forumOpen, setForumOpen] = useState(false);
 
+  // "Load & Analyse" state — auto-fetches book metadata like WebToEpub
+  const [isAnalysing, setIsAnalysing] = useState(false);
+
+  const handleLoadAnalyse = async () => {
+    const url = tocUrl.trim();
+    if (!url || !isUrlLike(url)) {
+      toast({
+        title: 'Enter a URL first',
+        description: 'Paste the novel\'s table-of-contents URL to load its metadata.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setIsAnalysing(true);
+    try {
+      const info = await engineLoadMetadata(url);
+      setMetadata(prev => ({
+        title: info.title || prev.title,
+        author: info.author && info.author !== '<unknown>' ? info.author : prev.author,
+        language: info.language || prev.language || 'en',
+        description: info.description || prev.description || '',
+        fileName: info.fileName || prev.fileName,
+        coverUrl: info.coverUrl || prev.coverUrl,
+      }));
+      toast({
+        title: 'Metadata loaded',
+        description: info.title ? `Detected: ${info.title}` : 'Fields populated from the page.',
+      });
+    } catch (err) {
+      toast({
+        title: 'Load & Analyse failed',
+        description: err instanceof Error ? err.message : 'Could not fetch metadata for this URL.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsAnalysing(false);
+    }
+  };
+
 
   const isUrlLike = (s: string) => /^https?:\/\//i.test(s.trim());
 
