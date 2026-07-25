@@ -187,10 +187,8 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
     void loadThreads();
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && (view === 'list' ? onClose() : setView('list'));
     window.addEventListener('keydown', onKey);
-    document.body.style.overflow = 'hidden';
     return () => {
       window.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
     };
   }, [open, view, onClose, loadThreads]);
 

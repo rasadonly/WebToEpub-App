@@ -232,7 +232,6 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
       else if (view === 'reader' && e.key === 'ArrowLeft') openChapter(chapterIndexRef.current - 1);
     };
     window.addEventListener('keydown', onKey);
-    document.body.style.overflow = 'hidden';
     if (url) {
       setInputUrl(url);
       void loadBook(url);
@@ -241,7 +240,6 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
     }
     return () => {
       window.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
       if (supportsTTS) window.speechSynthesis.cancel();
       clearPauseTimer();
       ttsActiveRef.current = false;
