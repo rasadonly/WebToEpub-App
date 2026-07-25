@@ -39,13 +39,31 @@ export default function ChapterManager({
   const [rangeStart, setRangeStart] = useState(1);
   const [rangeEnd, setRangeEnd] = useState(chapters.length);
   const listRef = useRef<HTMLDivElement>(null);
+  const shouldFollowStreamRef = useRef(true);
 
-  // Auto-scroll to bottom while streaming so the user sees new chapters arrive.
+  const isNearBottom = (el: HTMLDivElement) =>
+    el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+
+  const handleListScroll = () => {
+    const el = listRef.current;
+    if (!el || !isStreaming) return;
+    shouldFollowStreamRef.current = isNearBottom(el);
+  };
+
+  // Follow newly streamed chapters only while the user is already at the bottom.
+  // If they scroll upward to review chapters, don't force them back down.
   useEffect(() => {
-    if (isStreaming && listRef.current) {
-      listRef.current.scrollTop = listRef.current.scrollHeight;
+    const el = listRef.current;
+    if (isStreaming && el && shouldFollowStreamRef.current) {
+      requestAnimationFrame(() => {
+        el.scrollTop = el.scrollHeight;
+      });
     }
   }, [chapters.length, isStreaming]);
+
+  useEffect(() => {
+    if (!isStreaming) shouldFollowStreamRef.current = true;
+  }, [isStreaming]);
 
   // Keep newly streamed chapters selected by default.
   useEffect(() => {
@@ -217,7 +235,11 @@ export default function ChapterManager({
       </div>
 
       {/* List */}
-      <div ref={listRef} className="max-h-[420px] overflow-y-auto rounded-lg border border-border/60 divide-y divide-border/40">
+      <div
+        ref={listRef}
+        onScroll={handleListScroll}
+        className="max-h-[420px] overflow-y-auto rounded-lg border border-border/60 divide-y divide-border/40"
+      >
         {chapters.map((c, idx) => {
           const isSelected = selected.has(c.id);
           return (
