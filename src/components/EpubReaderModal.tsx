@@ -299,8 +299,23 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
             }
           `;
           doc.head.appendChild(style);
+          // Alt-click / double-click a paragraph to jump TTS to it.
+          // Use a single click so mobile works; ignore clicks on links.
+          const onDocClick = (ev: Event) => {
+            const target = ev.target as HTMLElement | null;
+            if (!target) return;
+            if (target.closest('a')) return;
+            const p = target.closest('p, h1, h2, h3, h4, h5, h6, li, blockquote') as Element | null;
+            if (!p) return;
+            const fn = jumpToParagraphRef.current;
+            if (fn) fn(p);
+          };
+          doc.addEventListener('click', onDocClick, true);
         } catch { /* noop */ }
       });
+      // Keep clickable paragraphs visually hinted.
+      // (no-op placeholder for future cursor styling)
+      void 0;
       applyTheme(rendition, theme, fontSize, fontFamily);
 
       rendition.on('relocated', (loc: any) => {
