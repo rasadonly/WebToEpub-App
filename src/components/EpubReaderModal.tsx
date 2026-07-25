@@ -496,7 +496,33 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
     speakSentence();
   }, [supportsTTS, voices, voiceURI, rate, pitch, collectCurrentParagraphs, stopTTS]);
 
-  const startTTS = useCallback(() => {
+  const findViewportParagraphIndex = useCallback((paras: TtsPara[]): number => {
+    // Look for the paragraph closest to the top-third of the viewport,
+    // accounting for the fact that each paragraph lives inside an epub.js
+    // iframe (so its rect is iframe-local — we add the iframe's own rect top).
+    const anchorY = window.innerHeight * 0.25;
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    for (let i = 0; i < paras.length; i++) {
+      const el = paras[i].el as HTMLElement | null;
+      if (!el) continue;
+      try {
+        const doc = el.ownerDocument;
+        const iframe = doc?.defaultView?.frameElement as HTMLIFrameElement | null;
+        const iframeTop = iframe?.getBoundingClientRect().top ?? 0;
+        const r = el.getBoundingClientRect();
+        const top = r.top + iframeTop;
+        const bottom = r.bottom + iframeTop;
+        if (bottom < 0) continue; // above viewport
+        if (top > window.innerHeight) break; // below viewport, list is DOM-ordered
+        const dist = Math.abs(top - anchorY);
+        if (dist < bestDist) { bestDist = dist; bestIdx = i; }
+      } catch { /* noop */ }
+    }
+    return bestIdx;
+  }, []);
+
+  const startTTS = useCallback((fromIndex?: number) => {
     if (!supportsTTS) return;
     clearPauseTimer();
     window.speechSynthesis.cancel();
@@ -506,12 +532,32 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
       return;
     }
     ttsParasRef.current = paras;
-    ttsParaIdxRef.current = 0;
+    const startIdx =
+      typeof fromIndex === 'number'
+        ? Math.max(0, Math.min(paras.length - 1, fromIndex))
+        : findViewportParagraphIndex(paras);
+    ttsParaIdxRef.current = startIdx;
     ttsActiveRef.current = true;
     setTtsPlaying(true);
     setTtsPaused(false);
     speakLoop();
-  }, [supportsTTS, collectCurrentParagraphs, speakLoop]);
+  }, [supportsTTS, collectCurrentParagraphs, speakLoop, findViewportParagraphIndex]);
+
+  // Jump TTS to a specific paragraph element (used when user clicks a paragraph).
+  const jumpToParagraph = useCallback((el: Element) => {
+    const paras = collectCurrentParagraphs();
+    if (!paras.length) return;
+    const idx = paras.findIndex((p) => p.el === el);
+    if (idx < 0) return;
+    ttsParasRef.current = paras;
+    ttsParaIdxRef.current = idx;
+    clearPauseTimer();
+    window.speechSynthesis.cancel();
+    ttsActiveRef.current = true;
+    setTtsPlaying(true);
+    setTtsPaused(false);
+    speakLoop();
+  }, [collectCurrentParagraphs, speakLoop]);
 
   const togglePlay = () => {
     if (!supportsTTS) return;
