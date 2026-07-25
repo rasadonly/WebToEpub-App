@@ -191,7 +191,7 @@ function ensureIframe(): Promise<EngineWindow> {
 
   readyPromise = new Promise<EngineWindow>((resolve, reject) => {
     const el = document.createElement('iframe');
-    el.src = '/webtoepub/plugin/popup.html?wte=1';
+    el.src = import.meta.env.BASE_URL + 'webtoepub/plugin/popup.html?wte=1';
     el.setAttribute('aria-hidden', 'true');
     el.style.position = 'fixed';
     el.style.left = '-10000px';
