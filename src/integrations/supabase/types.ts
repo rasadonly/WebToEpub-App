@@ -14,16 +14,158 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      forum_comments: {
+        Row: {
+          author_name: string
+          avatar_url: string | null
+          body: string
+          created_at: string
+          edit_token: string
+          id: string
+          thread_id: string
+          updated_at: string
+        }
+        Insert: {
+          author_name?: string
+          avatar_url?: string | null
+          body: string
+          created_at?: string
+          edit_token: string
+          id?: string
+          thread_id: string
+          updated_at?: string
+        }
+        Update: {
+          author_name?: string
+          avatar_url?: string | null
+          body?: string
+          created_at?: string
+          edit_token?: string
+          id?: string
+          thread_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "forum_comments_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "forum_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      forum_threads: {
+        Row: {
+          author_name: string
+          avatar_url: string | null
+          body: string
+          category: Database["public"]["Enums"]["forum_category"]
+          comment_count: number
+          created_at: string
+          edit_token: string
+          id: string
+          is_pinned: boolean
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          author_name?: string
+          avatar_url?: string | null
+          body?: string
+          category?: Database["public"]["Enums"]["forum_category"]
+          comment_count?: number
+          created_at?: string
+          edit_token: string
+          id?: string
+          is_pinned?: boolean
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          author_name?: string
+          avatar_url?: string | null
+          body?: string
+          category?: Database["public"]["Enums"]["forum_category"]
+          comment_count?: number
+          created_at?: string
+          edit_token?: string
+          id?: string
+          is_pinned?: boolean
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      delete_forum_comment: {
+        Args: { p_admin?: string; p_id: string; p_token: string }
+        Returns: boolean
+      }
+      delete_forum_thread: {
+        Args: { p_admin?: string; p_id: string; p_token: string }
+        Returns: boolean
+      }
+      update_forum_comment: {
+        Args: {
+          p_admin?: string
+          p_body: string
+          p_id: string
+          p_token: string
+        }
+        Returns: {
+          author_name: string
+          avatar_url: string | null
+          body: string
+          created_at: string
+          edit_token: string
+          id: string
+          thread_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "forum_comments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      update_forum_thread: {
+        Args: {
+          p_admin?: string
+          p_body: string
+          p_category: Database["public"]["Enums"]["forum_category"]
+          p_id: string
+          p_title: string
+          p_token: string
+        }
+        Returns: {
+          author_name: string
+          avatar_url: string | null
+          body: string
+          category: Database["public"]["Enums"]["forum_category"]
+          comment_count: number
+          created_at: string
+          edit_token: string
+          id: string
+          is_pinned: boolean
+          title: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "forum_threads"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
-      [_ in never]: never
+      forum_category: "report_error" | "new_site" | "general"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +292,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      forum_category: ["report_error", "new_site", "general"],
+    },
   },
 } as const
