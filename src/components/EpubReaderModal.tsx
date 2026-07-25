@@ -33,16 +33,25 @@ interface EpubReaderModalProps {
 type Theme = 'light' | 'dark' | 'sepia';
 type ViewMode = 'single' | 'double' | 'scroll';
 
+const THEME_BG: Record<Theme, string> = {
+  light: '#ffffff',
+  dark: '#0f0f0f',
+  sepia: '#f4ecd8',
+};
+
 const THEMES: Record<Theme, Record<string, Record<string, string>>> = {
   light: {
+    html: { background: '#ffffff' },
     body: { background: '#ffffff', color: '#111111' },
     a: { color: '#c62828' },
   },
   dark: {
+    html: { background: '#0f0f0f' },
     body: { background: '#0f0f0f', color: '#e6e6e6' },
     a: { color: '#ff7676' },
   },
   sepia: {
+    html: { background: '#f4ecd8' },
     body: { background: '#f4ecd8', color: '#3b2f1e' },
     a: { color: '#8a3b1e' },
   },
@@ -220,6 +229,20 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
       r.themes.fontSize(`${size}%`);
       const familyCss = FONTS.find((f) => f.id === family)?.css || FONTS[0].css;
       r.themes.override('font-family', familyCss, true);
+      // Repaint live: overwrite any already-rendered iframe backgrounds so
+      // toggling dark mode doesn't leave white gaps between chapters.
+      const bg = THEME_BG[name];
+      try {
+        const contentsList: any[] = (r as any).getContents?.() || [];
+        contentsList.forEach((c) => {
+          try {
+            if (c?.document?.documentElement) c.document.documentElement.style.background = bg;
+            if (c?.document?.body) c.document.body.style.background = bg;
+            const iframe = c?.window?.frameElement as HTMLIFrameElement | null;
+            if (iframe) iframe.style.background = bg;
+          } catch { /* noop */ }
+        });
+      } catch { /* noop */ }
     },
     []
   );
@@ -252,10 +275,20 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
       rendition.hooks.content.register((contents: any) => {
         try {
           const doc: Document = contents.document;
+          // Force theme background on html/body immediately to prevent
+          // white flashes between chapter iframes in continuous scroll mode.
+          const bg = THEME_BG[theme];
+          if (doc.documentElement) doc.documentElement.style.background = bg;
+          if (doc.body) doc.body.style.background = bg;
+          try {
+            const iframe = contents.window?.frameElement as HTMLIFrameElement | null;
+            if (iframe) iframe.style.background = bg;
+          } catch { /* noop */ }
           if (doc.getElementById('tts-highlight-style')) return;
           const style = doc.createElement('style');
           style.id = 'tts-highlight-style';
           style.textContent = `
+            html, body { background: ${bg} !important; }
             .tts-current {
               background: rgba(239, 68, 68, 0.16) !important;
               box-shadow: -4px 0 0 rgba(239, 68, 68, 0.8) !important;
@@ -772,7 +805,7 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
 
         <div className="flex-1 relative">
           {/* Viewer is always mounted so epub.js has a container even before a book is opened */}
-          <div ref={viewerRef} className="absolute inset-0" />
+          <div ref={viewerRef} className="absolute inset-0" style={{ background: THEME_BG[theme] }} />
 
           {bookLoaded && immersive && (
             <button
