@@ -37,7 +37,7 @@ export function SupportedSites({ open, onOpenChange, hideTrigger }: { open?: boo
         </DialogTrigger>
       )}
 
-      <DialogContent className="max-w-none w-screen h-screen sm:rounded-none p-6 overflow-y-auto">
+      <DialogContent className="max-w-none w-screen h-[100dvh] sm:rounded-none p-4 sm:p-6 overflow-y-auto" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))', paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
         <DialogHeader>
           <DialogTitle>
             Supported Novel Websites{hosts.length ? ` (${hosts.length} sites)` : ''}
@@ -55,7 +55,7 @@ export function SupportedSites({ open, onOpenChange, hideTrigger }: { open?: boo
         )}
 
         {hosts.length > 0 && (
-          <div className="grid gap-2 md:grid-cols-3">
+          <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 md:grid-cols-3">
             {hosts.map(host => (
               <Card key={host} className="border-border/60">
                 <CardHeader className="p-3 pb-1">

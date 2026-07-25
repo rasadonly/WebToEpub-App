@@ -21,8 +21,8 @@ const Index = () => {
   } = useEpubConverter();
 
   return (
-    <div className="min-h-screen bg-gradient-hero">
-      <div className="container mx-auto px-4 py-8 space-y-8">
+    <div className="min-h-[100dvh] bg-gradient-hero" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-8 space-y-6 sm:space-y-8 max-w-full">
 
         {/* Header intentionally minimal — form provides the hero */}
 
