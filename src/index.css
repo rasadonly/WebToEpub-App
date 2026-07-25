@@ -108,12 +108,15 @@ All colors MUST be HSL.
     @apply border-border;
   }
 
-  html, body, #root {
+  html, body {
     overflow-x: hidden;
-    overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    touch-action: pan-y;
+    touch-action: manipulation;
   }
+  html { overflow-y: auto; }
+  body { overflow-y: visible; }
+  #root { overflow: visible; min-height: 100%; }
+
 
   body {
     @apply bg-background text-foreground;
