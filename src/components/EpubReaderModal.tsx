@@ -33,16 +33,25 @@ interface EpubReaderModalProps {
 type Theme = 'light' | 'dark' | 'sepia';
 type ViewMode = 'single' | 'double' | 'scroll';
 
+const THEME_BG: Record<Theme, string> = {
+  light: '#ffffff',
+  dark: '#0f0f0f',
+  sepia: '#f4ecd8',
+};
+
 const THEMES: Record<Theme, Record<string, Record<string, string>>> = {
   light: {
+    html: { background: '#ffffff' },
     body: { background: '#ffffff', color: '#111111' },
     a: { color: '#c62828' },
   },
   dark: {
+    html: { background: '#0f0f0f' },
     body: { background: '#0f0f0f', color: '#e6e6e6' },
     a: { color: '#ff7676' },
   },
   sepia: {
+    html: { background: '#f4ecd8' },
     body: { background: '#f4ecd8', color: '#3b2f1e' },
     a: { color: '#8a3b1e' },
   },
