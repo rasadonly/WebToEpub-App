@@ -147,6 +147,35 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
   const ttsIndexRef = useRef(-1);
   const ttsActiveRef = useRef(false);
   const pauseTimerRef = useRef<number | null>(null);
+  // Live-tunable refs so voice/speed/pitch changes take effect on the NEXT
+  // sentence utterance without restarting playback.
+  const rateRef = useRef(rate);
+  const pitchRef = useRef(pitch);
+  const voiceURIRef = useRef(voiceURI);
+  rateRef.current = rate;
+  pitchRef.current = pitch;
+  voiceURIRef.current = voiceURI;
+
+  /** Find the paragraph index closest to the current viewport center. */
+  const findParagraphInView = useCallback((): number => {
+    const vp = viewportRef.current;
+    if (!vp) return 0;
+    const vpRect = vp.getBoundingClientRect();
+    const target = vpRect.top + vpRect.height * 0.25;
+    const nodes = vp.querySelectorAll<HTMLElement>('[data-tts-idx]');
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    nodes.forEach((n) => {
+      const r = n.getBoundingClientRect();
+      // Prefer paragraphs whose top is at or just above the reading line.
+      const dist = Math.abs(r.top - target);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIdx = parseInt(n.dataset.ttsIdx || '0', 10);
+      }
+    });
+    return bestIdx;
+  }, []);
 
   const paragraphs = useMemo(() => extractParagraphs(chapterHtml), [chapterHtml]);
   const paragraphsRef = useRef<Paragraph[]>([]);
