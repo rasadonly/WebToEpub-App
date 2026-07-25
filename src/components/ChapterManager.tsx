@@ -125,7 +125,7 @@ export default function ChapterManager({
   );
 
   return (
-    <Card className="w-full max-w-2xl mx-auto p-6 bg-gradient-card shadow-card border-0 space-y-4">
+    <Card className="w-full max-w-2xl mx-auto p-4 sm:p-6 bg-gradient-card shadow-card border-0 space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h2 className="text-lg font-semibold flex items-center gap-2">

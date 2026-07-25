@@ -703,15 +703,21 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
       {/* Body */}
       <div className="flex-1 flex overflow-hidden relative">
         {bookLoaded && showToc && (
-          <aside className="w-72 border-r border-border overflow-auto bg-card/50 shrink-0">
-            <TocList
-              items={toc}
-              onSelect={(href) => {
-                renditionRef.current?.display(href);
-                setShowToc(false);
-              }}
+          <>
+            <div
+              className="sm:hidden fixed inset-0 bg-black/40 z-20"
+              onClick={() => setShowToc(false)}
             />
-          </aside>
+            <aside className="absolute sm:relative top-0 left-0 h-full w-72 max-w-[85vw] border-r border-border overflow-auto bg-card z-30 sm:z-auto shrink-0">
+              <TocList
+                items={toc}
+                onSelect={(href) => {
+                  renditionRef.current?.display(href);
+                  setShowToc(false);
+                }}
+              />
+            </aside>
+          </>
         )}
 
         <div className="flex-1 relative">

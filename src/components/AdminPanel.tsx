@@ -193,7 +193,7 @@ export function AdminPanel({ open, onOpenChange, hideTrigger }: { open?: boolean
         </DialogTrigger>
       )}
 
-      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl w-[calc(100vw-1rem)] max-h-[90dvh] sm:max-h-[85vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>Site Configuration Management</DialogTitle>
         </DialogHeader>

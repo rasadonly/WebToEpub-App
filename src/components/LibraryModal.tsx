@@ -139,20 +139,20 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] bg-background pointer-events-auto">
+    <div className="fixed inset-0 z-[100] bg-background pointer-events-auto" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
       <div className="relative w-full h-full bg-card overflow-hidden flex flex-col pointer-events-auto">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <div className="flex items-center gap-2">
-            <BookOpen className="w-5 h-5 text-primary" />
-            <h2 className="font-display text-lg font-semibold">Community Library</h2>
+        <div className="flex items-center justify-between px-3 sm:px-4 py-2 sm:py-3 border-b border-border">
+          <div className="flex items-center gap-2 min-w-0">
+            <BookOpen className="w-5 h-5 text-primary shrink-0" />
+            <h2 className="font-display text-base sm:text-lg font-semibold truncate">Community Library</h2>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close">
             <X className="w-5 h-5" />
           </Button>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 px-3 pt-3 border-b border-border">
+        {/* Tabs — horizontally scrollable on mobile */}
+        <div className="flex gap-1 px-2 sm:px-3 pt-2 sm:pt-3 border-b border-border overflow-x-auto no-scrollbar">
           {TABS.map(({ id, label, icon: Icon }) => (
             <Button
               key={id}
@@ -160,7 +160,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
               variant="ghost"
               onClick={() => setTab(id)}
               className={cn(
-                'h-auto flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-t-lg rounded-b-none transition-colors border border-b-0',
+                'h-auto flex items-center gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-t-lg rounded-b-none transition-colors border border-b-0 shrink-0',
                 tab === id
                   ? 'bg-background text-foreground border-border'
                   : 'text-muted-foreground hover:text-foreground border-transparent'
@@ -229,7 +229,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
               <div className="mb-3 text-xs text-muted-foreground">
                 Showing {visibleBooks.length} of {filtered.length} books
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
                 {visibleBooks.map((book) => (
                   <div
                     key={book.id}

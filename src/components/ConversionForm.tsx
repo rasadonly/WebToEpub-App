@@ -252,14 +252,14 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
       />
       <form onSubmit={handleSubmit} className="space-y-10">
         {/* Search-engine style hero */}
-        <div className="flex flex-col items-center justify-center gap-8 pt-6 md:pt-10">
+        <div className="flex flex-col items-center justify-center gap-5 sm:gap-8 pt-4 sm:pt-10">
           {/* Wordmark */}
-          <div className="text-center space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary/60 px-3 py-1 text-xs text-muted-foreground">
+          <div className="text-center space-y-2 sm:space-y-3 px-2">
+            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary/60 px-3 py-1 text-[11px] sm:text-xs text-muted-foreground">
               <Sparkles className="w-3.5 h-3.5 text-primary" />
               Web novels, beautifully bound
             </div>
-            <h1 className="font-display text-6xl md:text-7xl font-extrabold tracking-tight leading-none">
+            <h1 className="font-display text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight leading-none">
               <span className="text-foreground">Link</span>
               <span className="text-primary">2</span>
               <span className="text-foreground">Epub</span>
@@ -268,22 +268,26 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
           </div>
 
           {/* Pill search */}
-          <div className="w-full max-w-2xl">
+          <div className="w-full max-w-2xl px-1">
             <div className="group relative flex items-center rounded-full bg-card border border-border shadow-search transition-smooth focus-within:border-primary/40 focus-within:shadow-glow">
-              <Search className="w-5 h-5 text-muted-foreground absolute left-5 pointer-events-none" />
+              <Search className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground absolute left-4 sm:left-5 pointer-events-none" />
               <Input
                 id="toc-url"
-                type="text"
+                type="url"
+                inputMode="url"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
                 value={tocUrl}
                 onChange={(e) => setTocUrl(e.target.value)}
-                placeholder="Paste a TOC URL or search a novel by name…"
-                autoFocus
-                className="h-14 md:h-16 pl-14 pr-32 md:pr-36 text-base md:text-lg rounded-full border-0 bg-transparent shadow-none focus-visible:ring-0"
+                placeholder="Paste TOC URL or search a novel…"
+                className="h-12 sm:h-14 md:h-16 pl-11 sm:pl-14 pr-24 sm:pr-32 md:pr-36 text-base md:text-lg rounded-full border-0 bg-transparent shadow-none focus-visible:ring-0"
               />
               <Button
                 type="submit"
                 disabled={isConverting || isSearching || trimmed.length === 0}
-                className="absolute right-2 h-10 md:h-12 rounded-full px-5 md:px-6 bg-primary hover:bg-primary/90 text-primary-foreground gap-2"
+                className="absolute right-1.5 sm:right-2 h-9 sm:h-10 md:h-12 rounded-full px-3 sm:px-5 md:px-6 bg-primary hover:bg-primary/90 text-primary-foreground gap-2"
               >
                 {isConverting || isSearching ? (
                   <>
@@ -292,7 +296,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                   </>
                 ) : (
                   <>
-                    <span className="hidden md:inline">{hasQuery ? 'Search' : 'Fetch'}</span>
+                    <span className="hidden sm:inline">{hasQuery ? 'Search' : 'Fetch'}</span>
                     {hasQuery ? <Search className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
                   </>
                 )}
@@ -469,7 +473,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
 
         {/* Settings card — hidden once chapters are loaded; ChapterManager handles the rest */}
         {hasUrl && !hasFetchedChapters && (
-          <Card className="p-6 bg-gradient-card shadow-card border-0 space-y-6 animate-in fade-in slide-in-from-top-2 duration-300">
+          <Card className="p-4 sm:p-6 bg-gradient-card shadow-card border-0 space-y-5 sm:space-y-6 animate-in fade-in slide-in-from-top-2 duration-300">
             {/* Title (required, kept visible) */}
             <div className="space-y-2">
               <Label htmlFor="title">Book Title *</Label>
