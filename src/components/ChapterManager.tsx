@@ -53,27 +53,28 @@ export default function ChapterManager({
   };
 
   // On first mount (chapters just appeared), scroll the PAGE to bring the
-  // ChapterManager card into view — using window.scrollTo so we don't scroll
-  // the inner list box or fight with the page layout.
+  // ChapterManager card into view — using an instant scroll so we don't steal
+  // wheel/touch input from the user with a long smooth-scroll animation.
   useEffect(() => {
     if (!hasMountScrolledRef.current && chapters.length > 0 && cardRef.current) {
       hasMountScrolledRef.current = true;
       requestAnimationFrame(() => {
         const rect = cardRef.current!.getBoundingClientRect();
-        const scrollTarget = window.scrollY + rect.top - 16; // 16px padding from top
-        window.scrollTo({ top: Math.max(0, scrollTarget), behavior: 'smooth' });
+        const scrollTarget = window.scrollY + rect.top - 16;
+        window.scrollTo({ top: Math.max(0, scrollTarget), behavior: 'auto' });
       });
     }
   }, [chapters.length]);
 
   // Inside the chapter list box only: auto-scroll to bottom while streaming
-  // and the user hasn't manually scrolled up in the list.
+  // and the user hasn't manually scrolled up in the list. Guard with the
+  // ref so a user scroll immediately stops the follow, avoiding a snap-back
+  // that feels like a scroll lock.
   useEffect(() => {
     const el = listRef.current;
     if (isStreaming && el && shouldFollowStreamRef.current) {
-      requestAnimationFrame(() => {
-        el.scrollTop = el.scrollHeight;
-      });
+      // Use direct assignment (no smooth behavior) so it doesn't hijack wheel.
+      el.scrollTop = el.scrollHeight;
     }
   }, [chapters.length, isStreaming]);
 
