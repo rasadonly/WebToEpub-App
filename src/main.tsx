@@ -21,12 +21,26 @@ if (typeof window !== 'undefined') {
       document.body.style.overflow = '';
     }
   };
-  const observer = new MutationObserver(clearStaleBodyLocks);
-  observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
+
+  const scheduleUnlockCheck = () => {
+    clearStaleBodyLocks();
+    window.setTimeout(clearStaleBodyLocks, 80);
+    window.setTimeout(clearStaleBodyLocks, 250);
+  };
+
+  const observer = new MutationObserver(scheduleUnlockCheck);
+  observer.observe(document.body, {
+    attributes: true,
+    attributeFilter: ['style'],
+    childList: true,
+    subtree: true,
+  });
   // Safety net: also check after overlay close animations and focus changes.
-  window.addEventListener('focus', clearStaleBodyLocks);
-  window.addEventListener('click', () => window.setTimeout(clearStaleBodyLocks, 50), true);
-  document.addEventListener('visibilitychange', clearStaleBodyLocks);
+  window.addEventListener('focus', scheduleUnlockCheck);
+  window.addEventListener('click', scheduleUnlockCheck, true);
+  window.addEventListener('wheel', scheduleUnlockCheck, { passive: true, capture: true });
+  window.addEventListener('touchstart', scheduleUnlockCheck, { passive: true, capture: true });
+  document.addEventListener('visibilitychange', scheduleUnlockCheck);
 }
 
 createRoot(document.getElementById("root")!).render(<App />);
