@@ -361,6 +361,37 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                       </button>
                       <button
                         type="button"
+                        title="Convert to EPUB"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setTocUrl(r.url);
+                          const newMeta = r.title && !metadata.title
+                            ? { ...metadata, title: r.title }
+                            : metadata;
+                          if (r.title && !metadata.title) setMetadata(newMeta);
+                          clearSearch();
+                          const domain = extractDomain(r.url);
+                          if (domain) {
+                            localStorage.setItem(`epub-converter-${domain}`, JSON.stringify({ tocSelector, contentSelector }));
+                          }
+                          onSubmit({
+                            tocUrl: r.url,
+                            tocSelector,
+                            contentSelector,
+                            metadata: newMeta,
+                            chapterRange,
+                            fontFamily,
+                            includeIndex,
+                            editableUrls,
+                          });
+                        }}
+                        className="shrink-0 px-3 my-1 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-smooth inline-flex items-center gap-1 text-xs"
+                      >
+                        <Download className="w-4 h-4" />
+                        <span className="hidden sm:inline">EPUB</span>
+                      </button>
+                      <button
+                        type="button"
                         title="Read live"
                         onClick={(e) => { e.stopPropagation(); clearSearch(); openLiveReader(r.url); }}
                         className="shrink-0 px-3 my-1 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-smooth inline-flex items-center gap-1 text-xs"
