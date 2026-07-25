@@ -1907,7 +1907,7 @@ class EpubViewerUI {
         if (typeof zip === "undefined") {
             return;
         }
-        const useWorkers = EpubViewerUI._zipFileName() === "zip.min.js";
+        const useWorkers = EpubViewerUI._zipFileName() === "zip-full.min.js";
         if (useWorkers) {
             const inPluginDir = /\/plugin(?:\/|$)/.test(window.location.pathname || "/");
             const workerPath = inPluginDir ? "@zip.js/zip.js/dist/" : "plugin/@zip.js/zip.js/dist/";
