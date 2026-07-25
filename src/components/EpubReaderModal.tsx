@@ -261,10 +261,20 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
       rendition.hooks.content.register((contents: any) => {
         try {
           const doc: Document = contents.document;
+          // Force theme background on html/body immediately to prevent
+          // white flashes between chapter iframes in continuous scroll mode.
+          const bg = THEME_BG[theme];
+          if (doc.documentElement) doc.documentElement.style.background = bg;
+          if (doc.body) doc.body.style.background = bg;
+          try {
+            const iframe = contents.window?.frameElement as HTMLIFrameElement | null;
+            if (iframe) iframe.style.background = bg;
+          } catch { /* noop */ }
           if (doc.getElementById('tts-highlight-style')) return;
           const style = doc.createElement('style');
           style.id = 'tts-highlight-style';
           style.textContent = `
+            html, body { background: ${bg} !important; }
             .tts-current {
               background: rgba(239, 68, 68, 0.16) !important;
               box-shadow: -4px 0 0 rgba(239, 68, 68, 0.8) !important;
