@@ -37,9 +37,7 @@
       }
       html {
         overflow-x: hidden;
-        overflow-y: auto;
         -webkit-overflow-scrolling: touch;
-        touch-action: pan-y;
         -webkit-text-size-adjust: 100%;
         text-size-adjust: 100%;
       }
@@ -47,13 +45,12 @@
         min-height: 100vh;
         min-height: 100dvh;
         overflow-x: hidden;
-        overflow-y: auto;
         -webkit-overflow-scrolling: touch;
-        touch-action: pan-y;
         padding-left: env(safe-area-inset-left);
         padding-right: env(safe-area-inset-right);
       }
       * { -webkit-tap-highlight-color: transparent; }
+
       /* Prevent iOS auto-zoom on inputs */
       @media (max-width: 640px) {
         input, textarea, select { font-size: 16px !important; }
