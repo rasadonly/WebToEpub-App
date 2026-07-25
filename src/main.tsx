@@ -36,10 +36,16 @@ if (typeof window !== 'undefined') {
     if (isOverlayActuallyOpen()) return;
     const body = document.body;
     const html = document.documentElement;
+    // Clear inline styles set by Radix scroll lock
     if (body.style.pointerEvents === 'none') body.style.pointerEvents = '';
     if (body.style.overflow === 'hidden') body.style.overflow = '';
     if (html.style.overflow === 'hidden') html.style.overflow = '';
+    // Clear data attributes used by Radix/vaul scroll lock
     if (body.hasAttribute('data-scroll-locked')) body.removeAttribute('data-scroll-locked');
+    if (html.hasAttribute('data-scroll-locked')) html.removeAttribute('data-scroll-locked');
+    // Clear any margin-right padding injected for scrollbar compensation
+    if (body.style.marginRight) body.style.marginRight = '';
+    if (html.style.marginRight) html.style.marginRight = '';
   };
 
   let scheduled = false;
@@ -50,17 +56,22 @@ if (typeof window !== 'undefined') {
       scheduled = false;
       clearStaleBodyLocks();
     });
-    window.setTimeout(clearStaleBodyLocks, 120);
-    window.setTimeout(clearStaleBodyLocks, 400);
+    window.setTimeout(clearStaleBodyLocks, 50);
+    window.setTimeout(clearStaleBodyLocks, 150);
+    window.setTimeout(clearStaleBodyLocks, 500);
   };
 
+  // Watch both body AND html for lock attributes
   const observer = new MutationObserver(scheduleUnlockCheck);
   observer.observe(document.body, {
     attributes: true,
     attributeFilter: ['style', 'data-scroll-locked'],
-    childList: true,
-    subtree: false,
   });
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['style', 'data-scroll-locked'],
+  });
+  // Watch for modal children being added/removed
   const treeObserver = new MutationObserver(scheduleUnlockCheck);
   treeObserver.observe(document.body, { childList: true, subtree: true });
 
@@ -75,14 +86,16 @@ if (typeof window !== 'undefined') {
   // Periodic safety sweep — cheap: no work when no lock is set.
   window.setInterval(() => {
     const body = document.body;
+    const html = document.documentElement;
     if (
       body.style.overflow === 'hidden' ||
       body.style.pointerEvents === 'none' ||
-      body.hasAttribute('data-scroll-locked')
+      body.hasAttribute('data-scroll-locked') ||
+      html.hasAttribute('data-scroll-locked')
     ) {
       clearStaleBodyLocks();
     }
-  }, 800);
+  }, 300);
 }
 
 createRoot(document.getElementById("root")!).render(<App />);

@@ -113,6 +113,16 @@ All colors MUST be HSL.
     font-family: 'Figtree', ui-sans-serif, system-ui, sans-serif;
   }
 
+  /* Radix UI sometimes leaves data-scroll-locked / overflow:hidden on body
+     when a Dialog or DropdownMenu unmounts during a race condition.
+     Always keep body scrollable — modals and dialogs use their own overflow. */
+  body[data-scroll-locked],
+  body[style*="overflow: hidden"],
+  body[style*="overflow:hidden"] {
+    overflow: auto !important;
+    pointer-events: auto !important;
+  }
+
   h1, h2, h3, h4, h5, h6 {
     font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif;
     letter-spacing: -0.02em;
