@@ -141,6 +141,7 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
   const ttsParaIdxRef = useRef(0);
   const ttsParasRef = useRef<TtsPara[]>([]);
   const ttsHighlightedRef = useRef<Element | null>(null);
+  const jumpToParagraphRef = useRef<((el: Element) => void) | null>(null);
 
   const clearPauseTimer = () => {
     if (pauseTimerRef.current !== null) {
