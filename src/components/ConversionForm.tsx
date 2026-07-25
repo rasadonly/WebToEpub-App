@@ -9,10 +9,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { SUPPORTED_SITES, getSiteConfig, extractDomain } from '@/utils/siteConfigs';
 import { NovelSite, EpubMetadata } from '@/types';
-import { BookOpen, Globe, Settings, Hash, Type, List, Search, Sparkles, ArrowRight, ExternalLink, X, BookOpenCheck, MoreVertical, Library as LibraryIcon, BookMarked, Download, MessagesSquare } from 'lucide-react';
+import { BookOpen, Globe, Settings, Hash, Type, List, Search, Sparkles, ArrowRight, ExternalLink, X, BookOpenCheck, MoreVertical, Library as LibraryIcon, BookMarked, Download, MessagesSquare, Wand2 } from 'lucide-react';
 import { AdminPanel } from './AdminPanel';
 import { SupportedSites } from './SupportedSites';
-import { engineSearch, cancelSearch, EngineSearchResult } from '@/utils/webtoepub/bridge';
+import { engineSearch, cancelSearch, engineLoadMetadata, EngineSearchResult } from '@/utils/webtoepub/bridge';
 import { LiveReaderModal } from './LiveReaderModal';
 import { LibraryModal } from './LibraryModal';
 import { EpubReaderModal } from './EpubReaderModal';
@@ -82,6 +82,45 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [epubReaderOpen, setEpubReaderOpen] = useState(false);
   const [forumOpen, setForumOpen] = useState(false);
+
+  // "Load & Analyse" state — auto-fetches book metadata like WebToEpub
+  const [isAnalysing, setIsAnalysing] = useState(false);
+
+  const handleLoadAnalyse = async () => {
+    const url = tocUrl.trim();
+    if (!url || !isUrlLike(url)) {
+      toast({
+        title: 'Enter a URL first',
+        description: 'Paste the novel\'s table-of-contents URL to load its metadata.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setIsAnalysing(true);
+    try {
+      const info = await engineLoadMetadata(url);
+      setMetadata(prev => ({
+        title: info.title || prev.title,
+        author: info.author && info.author !== '<unknown>' ? info.author : prev.author,
+        language: info.language || prev.language || 'en',
+        description: info.description || prev.description || '',
+        fileName: info.fileName || prev.fileName,
+        coverUrl: info.coverUrl || prev.coverUrl,
+      }));
+      toast({
+        title: 'Metadata loaded',
+        description: info.title ? `Detected: ${info.title}` : 'Fields populated from the page.',
+      });
+    } catch (err) {
+      toast({
+        title: 'Load & Analyse failed',
+        description: err instanceof Error ? err.message : 'Could not fetch metadata for this URL.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsAnalysing(false);
+    }
+  };
 
 
   const isUrlLike = (s: string) => /^https?:\/\//i.test(s.trim());
@@ -481,6 +520,32 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
         {/* Settings card — hidden once chapters are loaded; ChapterManager handles the rest */}
         {hasUrl && !hasFetchedChapters && (
           <Card className="p-4 sm:p-6 bg-gradient-card shadow-card border-0 space-y-5 sm:space-y-6 animate-in fade-in slide-in-from-top-2 duration-300">
+            {/* Load & Analyse — auto-fetches title, author, language, cover, description */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 rounded-lg border border-dashed border-primary/30 bg-primary/5 p-3">
+              <div className="text-xs sm:text-sm text-muted-foreground">
+                Auto-fetch book details (title, author, language, cover, description) from the URL.
+              </div>
+              <Button
+                type="button"
+                onClick={handleLoadAnalyse}
+                disabled={isAnalysing || isConverting}
+                variant="secondary"
+                className="gap-2 shrink-0"
+              >
+                {isAnalysing ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-current/40 border-t-current rounded-full animate-spin" />
+                    Analysing…
+                  </>
+                ) : (
+                  <>
+                    <Wand2 className="w-4 h-4" />
+                    Load & Analyse
+                  </>
+                )}
+              </Button>
+            </div>
+
             {/* Title (required, kept visible) */}
             <div className="space-y-2">
               <Label htmlFor="title">Book Title *</Label>
@@ -625,6 +690,43 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                       onChange={(e) => setMetadata(prev => ({ ...prev, author: e.target.value }))}
                       placeholder="Author Name"
                     />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="language">Language</Label>
+                      <Input
+                        id="language"
+                        value={metadata.language}
+                        onChange={(e) => setMetadata(prev => ({ ...prev, language: e.target.value }))}
+                        placeholder="en"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="fileName">Filename</Label>
+                      <Input
+                        id="fileName"
+                        value={metadata.fileName || ''}
+                        onChange={(e) => setMetadata(prev => ({ ...prev, fileName: e.target.value }))}
+                        placeholder="novel.epub"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="coverUrl">Cover Image URL</Label>
+                    <Input
+                      id="coverUrl"
+                      value={metadata.coverUrl || ''}
+                      onChange={(e) => setMetadata(prev => ({ ...prev, coverUrl: e.target.value }))}
+                      placeholder="https://…/cover.jpg"
+                    />
+                    {metadata.coverUrl && (
+                      <img
+                        src={metadata.coverUrl}
+                        alt="Cover preview"
+                        className="mt-2 h-32 w-auto rounded border border-border object-cover"
+                        onError={(e) => ((e.currentTarget.style.display = 'none'))}
+                      />
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="description">Description (Optional)</Label>

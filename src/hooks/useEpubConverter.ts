@@ -161,7 +161,8 @@ export function useEpubConverter() {
             author: data.metadata.author || 'Unknown Author',
             description: data.metadata.description || '',
             language: data.metadata.language || 'en',
-            fileName: `${data.metadata.title || 'novel'}.epub`,
+            fileName: data.metadata.fileName || `${data.metadata.title || 'novel'}.epub`,
+            coverUrl: data.metadata.coverUrl || '',
             tocUrl: data.tocUrl,
           },
           ({ current, total, message }) => {

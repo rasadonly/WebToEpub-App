@@ -20,6 +20,7 @@ export interface EngineMetadata {
   description?: string;
   language?: string;
   fileName?: string;
+  coverUrl?: string;
   tocUrl?: string;
 }
 
@@ -485,6 +486,7 @@ export async function enginePackEpub(
   if (metadata.author) setInput(win, 'authorInput', metadata.author);
   if (metadata.description) setInput(win, 'descriptionInput', metadata.description);
   if (metadata.language) setInput(win, 'languageInput', metadata.language);
+  if (metadata.coverUrl) setInput(win, 'coverImageUrlInput', metadata.coverUrl);
   const fileName =
     metadata.fileName ||
     (metadata.title ? `${metadata.title}.epub` : 'novel.epub');
@@ -682,6 +684,8 @@ export interface EngineBookInfo {
   author: string;
   description: string;
   coverUrl: string;
+  language: string;
+  fileName: string;
 }
 
 /** Read the currently-loaded book's metadata from engine DOM inputs. */
@@ -695,7 +699,24 @@ export async function engineGetBookInfo(): Promise<EngineBookInfo> {
     author: val('authorInput'),
     description: val('descriptionInput'),
     coverUrl: val('coverImageUrlInput'),
+    language: val('languageInput'),
+    fileName: val('fileNameInput'),
   };
+}
+
+/**
+ * Run the WebToEpub "Load & Analyse" flow for a URL and return the parser's
+ * detected metadata (title, author, language, filename, cover, description).
+ * This mirrors what happens when a user clicks the button in WebToEpub.
+ */
+export async function engineLoadMetadata(url: string): Promise<EngineBookInfo> {
+  const win = await ensureIframe();
+  if (!win.main) throw new Error('Engine not ready');
+  try { win.main.resetUI(); } catch { /* ignore */ }
+  setInput(win, 'startingUrlInput', url);
+  await win.main.onLoadAndAnalyseButtonClick();
+  await waitForParser(win);
+  return engineGetBookInfo();
 }
 
 export interface EngineChapterContent {

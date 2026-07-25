@@ -28,4 +28,6 @@ export interface EpubMetadata {
   author: string;
   language: string;
   description?: string;
+  fileName?: string;
+  coverUrl?: string;
 }
