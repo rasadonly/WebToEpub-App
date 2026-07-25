@@ -456,6 +456,10 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                 <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setEpubReaderOpen(true); }}>
                   <BookMarked className="w-4 h-4 mr-2" /> EPUB Reader
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setForumOpen(true); }}>
+                  <MessagesSquare className="w-4 h-4 mr-2" /> Community Forum
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -466,6 +470,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
           <AdminPanel open={adminOpen} onOpenChange={setAdminOpen} hideTrigger />
           <LibraryModal open={libraryOpen} onClose={() => setLibraryOpen(false)} />
           <EpubReaderModal open={epubReaderOpen} onClose={() => setEpubReaderOpen(false)} />
+          <ForumModal open={forumOpen} onClose={() => setForumOpen(false)} />
 
 
         </div>
