@@ -125,10 +125,13 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
   const [pitch, setPitch] = useState(1);
   const [ttsPlaying, setTtsPlaying] = useState(false);
   const [ttsPaused, setTtsPaused] = useState(false);
+  const [ttsIndex, setTtsIndex] = useState(-1);
+  const [ttsTotal, setTtsTotal] = useState(0);
   const ttsActiveRef = useRef(false);
   const pauseTimerRef = useRef<number | null>(null);
   const ttsParaIdxRef = useRef(0);
   const ttsParasRef = useRef<TtsPara[]>([]);
+  const ttsHighlightedRef = useRef<Element | null>(null);
 
   const clearPauseTimer = () => {
     if (pauseTimerRef.current !== null) {
@@ -137,12 +140,28 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
     }
   };
 
+  const clearHighlight = () => {
+    if (ttsHighlightedRef.current) {
+      ttsHighlightedRef.current.classList.remove('tts-current');
+      ttsHighlightedRef.current = null;
+    }
+  };
+
+  const highlightParagraph = (el: Element | null) => {
+    clearHighlight();
+    if (!el) return;
+    el.classList.add('tts-current');
+    ttsHighlightedRef.current = el;
+  };
+
   const stopTTS = useCallback(() => {
     ttsActiveRef.current = false;
     clearPauseTimer();
     if (supportsTTS) window.speechSynthesis.cancel();
+    clearHighlight();
     setTtsPlaying(false);
     setTtsPaused(false);
+    setTtsIndex(-1);
   }, [supportsTTS]);
 
   // Load voices (prefer Google English)
