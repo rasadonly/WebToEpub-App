@@ -1862,12 +1862,11 @@ class EpubViewerUI {
     }
 
     static _zipFileName() {
-        const isWebsite = !!(typeof window !== "undefined" && window.WTE_WEBSITE_MODE);
         const noWorkerLoaded = typeof document !== "undefined"
             && document.querySelector("script[src*=\"zip-no-worker.min.js\"]");
         if (noWorkerLoaded) { return "zip-no-worker.min.js"; }
         return (typeof util !== "undefined" && typeof util.useWebWorkers === "function" && util.useWebWorkers())
-            ? "zip.min.js"
+            ? "zip-full.min.js"
             : "zip-no-worker.min.js";
     }
 
