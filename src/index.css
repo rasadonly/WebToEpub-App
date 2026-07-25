@@ -108,6 +108,13 @@ All colors MUST be HSL.
     @apply border-border;
   }
 
+  html, body, #root {
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+  }
+
   body {
     @apply bg-background text-foreground;
     font-family: 'Figtree', ui-sans-serif, system-ui, sans-serif;
