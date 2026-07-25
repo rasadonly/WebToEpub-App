@@ -52,19 +52,22 @@ export default function ChapterManager({
     shouldFollowStreamRef.current = isNearBottom(el);
   };
 
-  // On first mount (chapters just appeared), scroll the PAGE so the card is
-  // visible near the top — not to the bottom of the whole page.
+  // On first mount (chapters just appeared), scroll the PAGE to bring the
+  // ChapterManager card into view — using window.scrollTo so we don't scroll
+  // the inner list box or fight with the page layout.
   useEffect(() => {
     if (!hasMountScrolledRef.current && chapters.length > 0 && cardRef.current) {
       hasMountScrolledRef.current = true;
       requestAnimationFrame(() => {
-        cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const rect = cardRef.current!.getBoundingClientRect();
+        const scrollTarget = window.scrollY + rect.top - 16; // 16px padding from top
+        window.scrollTo({ top: Math.max(0, scrollTarget), behavior: 'smooth' });
       });
     }
   }, [chapters.length]);
 
-  // Inside the chapter list: follow newly streamed chapters only while the
-  // user is already at the bottom of that inner list.
+  // Inside the chapter list box only: auto-scroll to bottom while streaming
+  // and the user hasn't manually scrolled up in the list.
   useEffect(() => {
     const el = listRef.current;
     if (isStreaming && el && shouldFollowStreamRef.current) {
