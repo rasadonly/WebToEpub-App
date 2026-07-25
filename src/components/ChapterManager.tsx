@@ -38,8 +38,10 @@ export default function ChapterManager({
   );
   const [rangeStart, setRangeStart] = useState(1);
   const [rangeEnd, setRangeEnd] = useState(chapters.length);
+  const cardRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const shouldFollowStreamRef = useRef(true);
+  const hasMountScrolledRef = useRef(false);
 
   const isNearBottom = (el: HTMLDivElement) =>
     el.scrollHeight - el.scrollTop - el.clientHeight < 80;
@@ -50,8 +52,19 @@ export default function ChapterManager({
     shouldFollowStreamRef.current = isNearBottom(el);
   };
 
-  // Follow newly streamed chapters only while the user is already at the bottom.
-  // If they scroll upward to review chapters, don't force them back down.
+  // On first mount (chapters just appeared), scroll the PAGE so the card is
+  // visible near the top — not to the bottom of the whole page.
+  useEffect(() => {
+    if (!hasMountScrolledRef.current && chapters.length > 0 && cardRef.current) {
+      hasMountScrolledRef.current = true;
+      requestAnimationFrame(() => {
+        cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+  }, [chapters.length]);
+
+  // Inside the chapter list: follow newly streamed chapters only while the
+  // user is already at the bottom of that inner list.
   useEffect(() => {
     const el = listRef.current;
     if (isStreaming && el && shouldFollowStreamRef.current) {
@@ -143,7 +156,7 @@ export default function ChapterManager({
   );
 
   return (
-    <Card className="w-full max-w-2xl mx-auto p-4 sm:p-6 bg-gradient-card shadow-card border-0 space-y-4">
+    <Card ref={cardRef} className="w-full max-w-2xl mx-auto p-4 sm:p-6 bg-gradient-card shadow-card border-0 space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h2 className="text-lg font-semibold flex items-center gap-2">
