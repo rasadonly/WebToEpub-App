@@ -689,8 +689,12 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
             <Button size="sm" variant="outline" onClick={() => skipParagraph(-1)} title="Previous paragraph">
               <SkipBack className="w-3.5 h-3.5" />
             </Button>
-            <Button size="sm" onClick={togglePlay} title={ttsPlaying && !ttsPaused ? 'Pause' : 'Play'}>
-              {ttsPlaying && !ttsPaused ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+            <Button size="sm" onClick={togglePlay} className="gap-1" title={ttsPlaying && !ttsPaused ? 'Pause' : 'Play'}>
+              {ttsPlaying && !ttsPaused ? (
+                <><Pause className="w-3.5 h-3.5" /> Pause</>
+              ) : (
+                <><Play className="w-3.5 h-3.5" /> {ttsPaused ? 'Resume' : 'Play'}</>
+              )}
             </Button>
             <Button size="sm" variant="outline" onClick={stopTTS} title="Stop">
               <StopIcon className="w-3.5 h-3.5" />
@@ -698,6 +702,11 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
             <Button size="sm" variant="outline" onClick={() => skipParagraph(1)} title="Next paragraph">
               <SkipForward className="w-3.5 h-3.5" />
             </Button>
+            {ttsIndex >= 0 && ttsTotal > 0 && (
+              <span className="ml-2 text-muted-foreground tabular-nums">
+                ¶ {ttsIndex + 1} / {ttsTotal}
+              </span>
+            )}
           </div>
 
           <label className="flex items-center gap-1">
