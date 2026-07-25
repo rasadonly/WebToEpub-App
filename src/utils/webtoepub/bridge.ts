@@ -486,6 +486,7 @@ export async function enginePackEpub(
   if (metadata.author) setInput(win, 'authorInput', metadata.author);
   if (metadata.description) setInput(win, 'descriptionInput', metadata.description);
   if (metadata.language) setInput(win, 'languageInput', metadata.language);
+  if (metadata.coverUrl) setInput(win, 'coverImageUrlInput', metadata.coverUrl);
   const fileName =
     metadata.fileName ||
     (metadata.title ? `${metadata.title}.epub` : 'novel.epub');
