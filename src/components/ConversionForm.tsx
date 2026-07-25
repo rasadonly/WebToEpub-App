@@ -9,13 +9,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { SUPPORTED_SITES, getSiteConfig, extractDomain } from '@/utils/siteConfigs';
 import { NovelSite, EpubMetadata } from '@/types';
-import { BookOpen, Globe, Settings, Hash, Type, List, Search, Sparkles, ArrowRight, ExternalLink, X, BookOpenCheck, MoreVertical, Library as LibraryIcon, BookMarked, Download } from 'lucide-react';
+import { BookOpen, Globe, Settings, Hash, Type, List, Search, Sparkles, ArrowRight, ExternalLink, X, BookOpenCheck, MoreVertical, Library as LibraryIcon, BookMarked, Download, MessagesSquare } from 'lucide-react';
 import { AdminPanel } from './AdminPanel';
 import { SupportedSites } from './SupportedSites';
 import { engineSearch, cancelSearch, EngineSearchResult } from '@/utils/webtoepub/bridge';
 import { LiveReaderModal } from './LiveReaderModal';
 import { LibraryModal } from './LibraryModal';
 import { EpubReaderModal } from './EpubReaderModal';
+import { ForumModal } from './ForumModal';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 
 
@@ -80,6 +81,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
   const [adminOpen, setAdminOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [epubReaderOpen, setEpubReaderOpen] = useState(false);
+  const [forumOpen, setForumOpen] = useState(false);
 
 
   const isUrlLike = (s: string) => /^https?:\/\//i.test(s.trim());
@@ -454,6 +456,10 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                 <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setEpubReaderOpen(true); }}>
                   <BookMarked className="w-4 h-4 mr-2" /> EPUB Reader
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setForumOpen(true); }}>
+                  <MessagesSquare className="w-4 h-4 mr-2" /> Community Forum
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -464,6 +470,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
           <AdminPanel open={adminOpen} onOpenChange={setAdminOpen} hideTrigger />
           <LibraryModal open={libraryOpen} onClose={() => setLibraryOpen(false)} />
           <EpubReaderModal open={epubReaderOpen} onClose={() => setEpubReaderOpen(false)} />
+          <ForumModal open={forumOpen} onClose={() => setForumOpen(false)} />
 
 
         </div>
