@@ -410,7 +410,10 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
   const togglePlay = () => {
     if (!supportsTTS) return;
     if (!ttsPlaying) {
-      speakFrom(ttsIndexRef.current >= 0 ? ttsIndexRef.current : 0);
+      // Start from wherever the reader is currently looking, not chapter start.
+      const start =
+        ttsIndexRef.current >= 0 ? ttsIndexRef.current : findParagraphInView();
+      speakFrom(start);
       return;
     }
     if (ttsPaused) {
@@ -424,15 +427,28 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
 
   const skip = (delta: number) => {
     if (!paragraphsRef.current.length) return;
+    const base = ttsIndexRef.current >= 0 ? ttsIndexRef.current : findParagraphInView();
     const target = Math.max(
       0,
-      Math.min(
-        paragraphsRef.current.length - 1,
-        (ttsIndexRef.current >= 0 ? ttsIndexRef.current : 0) + delta
-      )
+      Math.min(paragraphsRef.current.length - 1, base + delta)
     );
     speakFrom(target);
   };
+
+  // Apply voice changes immediately: cancel the current utterance so the
+  // next sentence (started from onend) picks up the new voice via refs.
+  // Rate/pitch changes only need the ref update — they apply on the next
+  // sentence automatically without interrupting the current one.
+  useEffect(() => {
+    if (!supportsTTS || !ttsActiveRef.current) return;
+    window.speechSynthesis.cancel();
+    // speakSentence will be re-scheduled by the onend/onerror handler chain,
+    // but cancel() suppresses those events on some engines — restart from
+    // the current paragraph to be safe.
+    const idx = ttsIndexRef.current >= 0 ? ttsIndexRef.current : 0;
+    pauseTimerRef.current = window.setTimeout(() => speakFrom(idx), 60);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceURI]);
 
   // Stop TTS when modal closes
   useEffect(() => {
