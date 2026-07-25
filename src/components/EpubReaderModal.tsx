@@ -794,9 +794,30 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
             <aside className="absolute sm:relative top-0 left-0 h-full w-72 max-w-[85vw] border-r border-border overflow-auto bg-card z-30 sm:z-auto shrink-0">
               <TocList
                 items={toc}
-                onSelect={(href) => {
-                  renditionRef.current?.display(href);
+                onSelect={async (href) => {
+                  const r = renditionRef.current;
+                  const b = bookRef.current;
+                  if (!r || !b) return;
                   setShowToc(false);
+                  // Resolve TOC href against the book spine — epub.js TOC hrefs
+                  // are relative to the nav document, but display() needs a
+                  // spine-relative href, otherwise the jump silently no-ops
+                  // (especially in continuous scroll mode).
+                  let target: string = href;
+                  try {
+                    const spineItem =
+                      (b.spine as any).get(href) ||
+                      (b.spine as any).get(href.split('#')[0]);
+                    if (spineItem?.href) {
+                      const hash = href.includes('#') ? '#' + href.split('#')[1] : '';
+                      target = spineItem.href + hash;
+                    }
+                  } catch { /* noop */ }
+                  try {
+                    await r.display(target);
+                  } catch {
+                    try { await r.display(href); } catch { /* noop */ }
+                  }
                 }}
               />
             </aside>
