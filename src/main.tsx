@@ -2,25 +2,31 @@ import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
 
-// Radix Dialog occasionally leaves `pointer-events: none` on <body> after
-// closing (especially when opened from inside a DropdownMenu). That freezes
-// every button on the page. Watch <body> and clear it as soon as it appears.
+// Radix/manual fullscreen modals can occasionally leave body locks behind after
+// closing. That freezes clicks or page scroll. Watch <body> and clear stale
+// locks only when no overlay/menu/dialog is still open.
 if (typeof window !== 'undefined') {
-  const clearBodyPointerEvents = () => {
+  const clearStaleBodyLocks = () => {
+    const hasOpenOverlay = document.querySelector(
+      '[data-state="open"][role="dialog"], [data-state="open"][role="menu"], [data-state="open"][role="alertdialog"], [aria-modal="true"], [class*="fixed"][class*="inset-0"][class*="z-[100]"]'
+    );
+
+    if (hasOpenOverlay) return;
+
     if (document.body.style.pointerEvents === 'none') {
-      const hasOpenOverlay = document.querySelector(
-        '[data-state="open"][role="dialog"], [data-state="open"][role="menu"], [data-state="open"][role="alertdialog"]'
-      );
-      if (!hasOpenOverlay) {
-        document.body.style.pointerEvents = '';
-      }
+      document.body.style.pointerEvents = '';
+    }
+
+    if (document.body.style.overflow === 'hidden') {
+      document.body.style.overflow = '';
     }
   };
-  const observer = new MutationObserver(clearBodyPointerEvents);
+  const observer = new MutationObserver(clearStaleBodyLocks);
   observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
-  // Safety net: also poll on focus/visibility changes.
-  window.addEventListener('focus', clearBodyPointerEvents);
-  document.addEventListener('visibilitychange', clearBodyPointerEvents);
+  // Safety net: also check after overlay close animations and focus changes.
+  window.addEventListener('focus', clearStaleBodyLocks);
+  window.addEventListener('click', () => window.setTimeout(clearStaleBodyLocks, 50), true);
+  document.addEventListener('visibilitychange', clearStaleBodyLocks);
 }
 
 createRoot(document.getElementById("root")!).render(<App />);
