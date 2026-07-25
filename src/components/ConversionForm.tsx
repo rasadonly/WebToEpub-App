@@ -691,6 +691,43 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                       placeholder="Author Name"
                     />
                   </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="language">Language</Label>
+                      <Input
+                        id="language"
+                        value={metadata.language}
+                        onChange={(e) => setMetadata(prev => ({ ...prev, language: e.target.value }))}
+                        placeholder="en"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="fileName">Filename</Label>
+                      <Input
+                        id="fileName"
+                        value={metadata.fileName || ''}
+                        onChange={(e) => setMetadata(prev => ({ ...prev, fileName: e.target.value }))}
+                        placeholder="novel.epub"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="coverUrl">Cover Image URL</Label>
+                    <Input
+                      id="coverUrl"
+                      value={metadata.coverUrl || ''}
+                      onChange={(e) => setMetadata(prev => ({ ...prev, coverUrl: e.target.value }))}
+                      placeholder="https://…/cover.jpg"
+                    />
+                    {metadata.coverUrl && (
+                      <img
+                        src={metadata.coverUrl}
+                        alt="Cover preview"
+                        className="mt-2 h-32 w-auto rounded border border-border object-cover"
+                        onError={(e) => ((e.currentTarget.style.display = 'none'))}
+                      />
+                    )}
+                  </div>
                   <div className="space-y-2">
                     <Label htmlFor="description">Description (Optional)</Label>
                     <Textarea
