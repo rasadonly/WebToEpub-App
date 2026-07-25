@@ -575,6 +575,10 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
     speakLoop();
   }, [collectCurrentParagraphs, speakLoop]);
 
+  useEffect(() => {
+    jumpToParagraphRef.current = jumpToParagraph;
+  }, [jumpToParagraph]);
+
   const togglePlay = () => {
     if (!supportsTTS) return;
     if (!ttsPlaying) {
