@@ -645,27 +645,24 @@ export async function engineSearch(
 
   const seen = new Set<string>();
   const results: EngineSearchResult[] = [];
-  const BATCH_SIZE = 8;
 
-  for (let i = 0; i < sites.length && isLive(); i += BATCH_SIZE) {
-    const batch = sites.slice(i, i + BATCH_SIZE);
-    const batchResults = await Promise.all(
-      batch.map(async (site: any) => {
-        if (isLive()) onProgress?.(site.name, 'searching');
-        try {
-          const r = await SSE.fetchSiteResults(site, query);
-          if (isLive()) onProgress?.(site.name, `found ${r.length}`);
-          return r as EngineSearchResult[];
-        } catch {
-          if (isLive()) onProgress?.(site.name, 'failed');
-          return [] as EngineSearchResult[];
-        }
-      })
-    );
-    if (!isLive()) break;
-    const fresh: EngineSearchResult[] = [];
-    for (const list of batchResults) {
-      for (const r of list) {
+  // Fire ALL sites in parallel — each request goes to a different domain,
+  // so there's no per-host rate-limit risk. Results stream in as they arrive.
+  await Promise.all(
+    sites.map(async (site: any) => {
+      if (!isLive()) return;
+      onProgress?.(site.name, 'searching');
+      let siteResults: EngineSearchResult[] = [];
+      try {
+        siteResults = await SSE.fetchSiteResults(site, query);
+      } catch {
+        if (isLive()) onProgress?.(site.name, 'failed');
+        return;
+      }
+      if (!isLive()) return;
+      onProgress?.(site.name, `found ${siteResults.length}`);
+      const fresh: EngineSearchResult[] = [];
+      for (const r of siteResults) {
         const key = SSE.normalizeUrl(r.url);
         if (!seen.has(key)) {
           seen.add(key);
@@ -673,9 +670,9 @@ export async function engineSearch(
           fresh.push(r);
         }
       }
-    }
-    if (fresh.length && isLive()) onResults?.(fresh);
-  }
+      if (fresh.length && isLive()) onResults?.(fresh);
+    })
+  );
   if (!isLive()) throw new Error('__cancelled__');
   return results;
 }
