@@ -248,6 +248,25 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
 
       const rendition = book.renderTo(viewerRef.current, opts);
       renditionRef.current = rendition;
+      // Inject TTS highlight styling into every rendered section (iframe).
+      rendition.hooks.content.register((contents: any) => {
+        try {
+          const doc: Document = contents.document;
+          if (doc.getElementById('tts-highlight-style')) return;
+          const style = doc.createElement('style');
+          style.id = 'tts-highlight-style';
+          style.textContent = `
+            .tts-current {
+              background: rgba(239, 68, 68, 0.16) !important;
+              box-shadow: -4px 0 0 rgba(239, 68, 68, 0.8) !important;
+              padding-left: 8px !important;
+              border-radius: 3px;
+              transition: background 0.25s ease;
+            }
+          `;
+          doc.head.appendChild(style);
+        } catch { /* noop */ }
+      });
       applyTheme(rendition, theme, fontSize, fontFamily);
 
       rendition.on('relocated', (loc: any) => {
