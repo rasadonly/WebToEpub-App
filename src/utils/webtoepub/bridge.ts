@@ -20,6 +20,7 @@ export interface EngineMetadata {
   description?: string;
   language?: string;
   fileName?: string;
+  coverUrl?: string;
   tocUrl?: string;
 }
 
