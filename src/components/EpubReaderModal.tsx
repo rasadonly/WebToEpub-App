@@ -229,6 +229,20 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
       r.themes.fontSize(`${size}%`);
       const familyCss = FONTS.find((f) => f.id === family)?.css || FONTS[0].css;
       r.themes.override('font-family', familyCss, true);
+      // Repaint live: overwrite any already-rendered iframe backgrounds so
+      // toggling dark mode doesn't leave white gaps between chapters.
+      const bg = THEME_BG[name];
+      try {
+        const contentsList: any[] = (r as any).getContents?.() || [];
+        contentsList.forEach((c) => {
+          try {
+            if (c?.document?.documentElement) c.document.documentElement.style.background = bg;
+            if (c?.document?.body) c.document.body.style.background = bg;
+            const iframe = c?.window?.frameElement as HTMLIFrameElement | null;
+            if (iframe) iframe.style.background = bg;
+          } catch { /* noop */ }
+        });
+      } catch { /* noop */ }
     },
     []
   );
