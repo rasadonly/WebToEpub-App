@@ -81,6 +81,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
   const [adminOpen, setAdminOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [epubReaderOpen, setEpubReaderOpen] = useState(false);
+  const [forumOpen, setForumOpen] = useState(false);
 
 
   const isUrlLike = (s: string) => /^https?:\/\//i.test(s.trim());
