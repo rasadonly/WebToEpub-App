@@ -239,7 +239,15 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
       .single();
     setPosting(false);
     if (error || !data) {
-      toast({ title: 'Failed to post', description: error?.message, variant: 'destructive' });
+      const msg = error?.message || 'Unknown error';
+      const isPerm = msg.toLowerCase().includes('permission denied');
+      toast({
+        title: 'Failed to post thread',
+        description: isPerm
+          ? 'Database permission denied. Run the Supabase SQL setup script to grant insert permissions to public/anon users.'
+          : msg,
+        variant: 'destructive',
+      });
       return;
     }
     saveToken(data.id, token);
@@ -313,7 +321,15 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
       .single();
     setPostingComment(false);
     if (error || !data) {
-      toast({ title: 'Failed to comment', description: error?.message, variant: 'destructive' });
+      const msg = error?.message || 'Unknown error';
+      const isPerm = msg.toLowerCase().includes('permission denied');
+      toast({
+        title: 'Failed to post comment',
+        description: isPerm
+          ? 'Database permission denied. Run the Supabase SQL setup script to grant insert permissions to public/anon users.'
+          : msg,
+        variant: 'destructive',
+      });
       return;
     }
     saveToken(data.id, token);
