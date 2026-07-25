@@ -791,7 +791,7 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
 
         <div className="flex-1 relative">
           {/* Viewer is always mounted so epub.js has a container even before a book is opened */}
-          <div ref={viewerRef} className="absolute inset-0" />
+          <div ref={viewerRef} className="absolute inset-0" style={{ background: THEME_BG[theme] }} />
 
           {bookLoaded && immersive && (
             <button
