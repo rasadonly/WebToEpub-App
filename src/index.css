@@ -116,11 +116,16 @@ All colors MUST be HSL.
   /* Radix UI sometimes leaves data-scroll-locked / overflow:hidden on body
      when a Dialog or DropdownMenu unmounts during a race condition.
      Always keep body scrollable — modals and dialogs use their own overflow. */
+  html[data-scroll-locked],
+  html[style*="overflow: hidden"],
+  html[style*="overflow:hidden"],
   body[data-scroll-locked],
   body[style*="overflow: hidden"],
   body[style*="overflow:hidden"] {
     overflow: auto !important;
     pointer-events: auto !important;
+    /* Radix sometimes pushes body with margin-right to compensate scrollbar */
+    margin-right: 0 !important;
   }
 
   h1, h2, h3, h4, h5, h6 {
