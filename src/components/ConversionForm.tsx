@@ -314,8 +314,8 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
               <Search className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground absolute left-4 sm:left-5 pointer-events-none" />
               <Input
                 id="toc-url"
-                type="url"
-                inputMode="url"
+                type="text"
+                inputMode="search"
                 autoComplete="off"
                 autoCorrect="off"
                 autoCapitalize="off"
