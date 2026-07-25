@@ -12,7 +12,7 @@ import { NovelSite, EpubMetadata } from '@/types';
 import { BookOpen, Globe, Settings, Hash, Type, List, Search, Sparkles, ArrowRight, ExternalLink, X, BookOpenCheck, MoreVertical, Library as LibraryIcon, BookMarked, Download, MessagesSquare } from 'lucide-react';
 import { AdminPanel } from './AdminPanel';
 import { SupportedSites } from './SupportedSites';
-import { engineSearch, cancelSearch, EngineSearchResult } from '@/utils/webtoepub/bridge';
+import { engineSearch, cancelSearch, engineLoadMetadata, EngineSearchResult } from '@/utils/webtoepub/bridge';
 import { LiveReaderModal } from './LiveReaderModal';
 import { LibraryModal } from './LibraryModal';
 import { EpubReaderModal } from './EpubReaderModal';
