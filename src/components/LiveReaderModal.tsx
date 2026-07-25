@@ -13,6 +13,12 @@ import {
   Square,
   SkipForward,
   SkipBack,
+  Sun,
+  Moon,
+  Coffee,
+  Type as TypeIcon,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,11 +38,25 @@ interface LiveReaderModalProps {
 }
 
 type View = 'url' | 'loading' | 'details' | 'reader';
+type Theme = 'light' | 'dark' | 'sepia';
 
 interface Paragraph {
   html: string;
   text: string;
 }
+
+const THEMES: Record<Theme, { bg: string; fg: string; muted: string; accent: string }> = {
+  light: { bg: '#ffffff', fg: '#111111', muted: '#666', accent: '#c62828' },
+  dark:  { bg: '#0f0f0f', fg: '#e6e6e6', muted: '#9aa', accent: '#ff7676' },
+  sepia: { bg: '#f4ecd8', fg: '#3b2f1e', muted: '#7a6a4d', accent: '#8a3b1e' },
+};
+
+const FONTS = [
+  { id: 'serif',  label: 'Serif',  css: 'Georgia, "Times New Roman", serif' },
+  { id: 'sans',   label: 'Sans',   css: 'Inter, system-ui, sans-serif' },
+  { id: 'mono',   label: 'Mono',   css: 'ui-monospace, SFMono-Regular, Menlo, monospace' },
+  { id: 'reader', label: 'Reader', css: 'Merriweather, Georgia, serif' },
+];
 
 /** Split chapter HTML into speakable paragraphs, preserving inline formatting. */
 function extractParagraphs(html: string): Paragraph[] {
@@ -69,29 +89,19 @@ function extractParagraphs(html: string): Paragraph[] {
   return blocks;
 }
 
-/**
- * Split a paragraph into sentence-sized chunks so the browser TTS engine gets
- * frequent natural break points. Each chunk gets its own utterance which lets
- * us vary pitch/rate slightly and insert real pauses between them.
- */
 function splitSentences(text: string): string[] {
   const cleaned = text.replace(/\s+/g, ' ').trim();
   if (!cleaned) return [];
-  // Split on sentence enders followed by whitespace, keep the punctuation.
   const parts = cleaned.match(/[^.!?…]+[.!?…]+["'”’)]?|\S[^.!?…]*$/g);
   return (parts || [cleaned]).map((s) => s.trim()).filter(Boolean);
 }
 
-/**
- * Add subtle typographic pauses so the free browser voice sounds less flat.
- * Commas and semicolons get a small breath; em-dashes and colons get a beat.
- */
 function humanizeForSpeech(sentence: string): string {
   return sentence
-    .replace(/—/g, ', ') // em dash -> comma pause
+    .replace(/—/g, ', ')
     .replace(/\s*[–-]\s+/g, ', ')
     .replace(/([,;:])(?=\S)/g, '$1 ')
-    .replace(/\.{3,}/g, '… ') // ellipsis pause
+    .replace(/\.{3,}/g, '… ')
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
@@ -107,9 +117,21 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
   const [chapterHtml, setChapterHtml] = useState('');
   const [chapterTitle, setChapterTitle] = useState('');
   const [loadingChapter, setLoadingChapter] = useState(false);
+
+  // Reader preferences (mirror EpubReaderModal)
   const [fontSize, setFontSize] = useState(18);
+  const [fontFamily, setFontFamily] = useState('reader');
+  const [theme, setTheme] = useState<Theme>('dark');
+  const [immersive, setImmersive] = useState(false);
+  const [autoAdvance, setAutoAdvance] = useState(true);
+  const [progress, setProgress] = useState(0);
+
   const [showToc, setShowToc] = useState(false);
   const viewportRef = useRef<HTMLDivElement>(null);
+  const chapterIndexRef = useRef(0);
+  chapterIndexRef.current = chapterIndex;
+  const loadingChapterRef = useRef(false);
+  loadingChapterRef.current = loadingChapter;
 
   // TTS state — browser SpeechSynthesis (free, uses Google voices on Chrome)
   const supportsTTS =
@@ -130,12 +152,14 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
   const paragraphsRef = useRef<Paragraph[]>([]);
   paragraphsRef.current = paragraphs;
 
-  // Load available voices; prefer Google English voices which sound the most human.
+  const themeVars = THEMES[theme];
+  const fontCss = FONTS.find((f) => f.id === fontFamily)?.css || FONTS[0].css;
+
+  // Load available voices; prefer Google English voices which sound most human.
   useEffect(() => {
     if (!supportsTTS) return;
     const load = () => {
       const list = window.speechSynthesis.getVoices();
-      // Sort: Google voices first, then English, then rest.
       const ranked = [...list].sort((a, b) => {
         const score = (v: SpeechSynthesisVoice) =>
           (/google/i.test(v.name) ? 0 : 2) + (/^en/i.test(v.lang) ? 0 : 1);
@@ -171,7 +195,13 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
   // Reset when re-opened
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (immersive) setImmersive(false);
+        else onClose();
+      } else if (view === 'reader' && e.key === 'ArrowRight') openChapter(chapterIndexRef.current + 1);
+      else if (view === 'reader' && e.key === 'ArrowLeft') openChapter(chapterIndexRef.current - 1);
+    };
     window.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
     if (url) {
@@ -216,6 +246,7 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
     setChapterHtml('');
     setChapterTitle(chapters[index].title);
     setShowToc(false);
+    setProgress(0);
     try {
       const c = await engineFetchChapter(chapters[index].url, chapters[index].title);
       setChapterHtml(c.html);
@@ -232,13 +263,37 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
     }
   }
 
+  // Track scroll progress + auto-advance to next chapter when reaching the bottom
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el || view !== 'reader') return;
+    let advancing = false;
+    const onScroll = () => {
+      const max = el.scrollHeight - el.clientHeight;
+      const pct = max > 0 ? Math.min(100, Math.max(0, (el.scrollTop / max) * 100)) : 0;
+      setProgress(Math.round(pct));
+      if (
+        autoAdvance &&
+        !advancing &&
+        !loadingChapterRef.current &&
+        pct >= 98 &&
+        chapterIndexRef.current < chapters.length - 1
+      ) {
+        advancing = true;
+        void openChapter(chapterIndexRef.current + 1);
+      }
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, chapters.length, autoAdvance, chapterHtml]);
+
   const speakFrom = useCallback(
     (startIndex: number) => {
       if (!supportsTTS) return;
       const list = paragraphsRef.current;
       if (!list.length) return;
 
-      // Reset any prior playback
       clearPauseTimer();
       window.speechSynthesis.cancel();
       ttsActiveRef.current = true;
@@ -278,7 +333,6 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
         const speakSentence = () => {
           if (!ttsActiveRef.current) return;
           if (sIndex >= sentences.length) {
-            // Longer pause between paragraphs to feel like a breath
             pauseTimerRef.current = window.setTimeout(
               () => speakParagraph(pIndex + 1),
               420
@@ -292,13 +346,11 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
             utt.voice = chosenVoice;
             utt.lang = chosenVoice.lang;
           }
-          // Vary pitch / rate a touch per sentence for a less monotone feel.
-          const jitter = (Math.random() - 0.5) * 0.08; // ±0.04
-          const rateJit = (Math.random() - 0.5) * 0.06; // ±0.03
+          const jitter = (Math.random() - 0.5) * 0.08;
+          const rateJit = (Math.random() - 0.5) * 0.06;
           utt.pitch = Math.max(0, Math.min(2, pitch + jitter));
           utt.rate = Math.max(0.5, Math.min(2, rate + rateJit));
           utt.volume = 1;
-          // Small pause between sentences; longer after strong punctuation.
           const endsStrong = /[.!?…]["'”’)]?$/.test(raw);
           utt.onend = () => {
             if (!ttsActiveRef.current) return;
@@ -355,16 +407,28 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
   }, [open, stopTTS]);
 
   const readerStyle = useMemo(
-    () => ({ fontSize: `${fontSize}px`, lineHeight: 1.7 }),
-    [fontSize]
+    () => ({
+      fontSize: `${fontSize}px`,
+      lineHeight: 1.75,
+      fontFamily: fontCss,
+      color: themeVars.fg,
+    }),
+    [fontSize, fontCss, themeVars.fg]
   );
 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] bg-background flex flex-col animate-in fade-in duration-200">
+    <div
+      className="fixed inset-0 z-[100] flex flex-col animate-in fade-in duration-200"
+      style={{ background: themeVars.bg, color: themeVars.fg }}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-card/80">
+      {!immersive && (
+      <div
+        className="flex items-center justify-between px-4 py-2 border-b"
+        style={{ borderColor: 'rgba(127,127,127,0.25)', background: themeVars.bg }}
+      >
         <div className="flex items-center gap-2 min-w-0">
           {view === 'reader' && (
             <Button variant="ghost" size="sm" onClick={() => { stopTTS(); setView('details'); }} className="gap-1">
@@ -376,15 +440,20 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
               <ArrowLeft className="w-4 h-4" /> New URL
             </Button>
           )}
-          <BookOpen className="w-4 h-4 text-primary" />
+          <BookOpen className="w-4 h-4" style={{ color: themeVars.accent }} />
           <span className="text-sm font-semibold truncate">
             {view === 'reader' ? chapterTitle : book?.title || 'Live Reader'}
           </span>
+          {view === 'reader' && (
+            <span className="text-xs opacity-60 hidden sm:inline">
+              · {chapterIndex + 1}/{chapters.length}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1">
           {view === 'reader' && (
             <>
-              <Button variant="ghost" size="sm" onClick={() => setShowToc((v) => !v)} className="gap-1">
+              <Button variant="ghost" size="sm" onClick={() => setShowToc((v) => !v)} title="Contents">
                 <List className="w-4 h-4" />
               </Button>
               {supportsTTS && (
@@ -392,7 +461,6 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
                   variant={ttsOpen ? 'default' : 'ghost'}
                   size="sm"
                   onClick={() => setTtsOpen((v) => !v)}
-                  className="gap-1"
                   title="Text to speech"
                 >
                   <Volume2 className="w-4 h-4" />
@@ -401,32 +469,83 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setFontSize((s) => Math.max(12, s - 2))}
-                className="gap-1"
-                title="Smaller text"
+                onClick={() => setImmersive(true)}
+                title="Immersive mode"
               >
-                A-
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setFontSize((s) => Math.min(32, s + 2))}
-                className="gap-1"
-                title="Larger text"
-              >
-                A+
+                <Maximize2 className="w-4 h-4" />
               </Button>
             </>
           )}
-          <Button variant="ghost" size="sm" onClick={onClose} className="gap-1">
+          <Button variant="ghost" size="sm" onClick={onClose} title="Close">
             <X className="w-4 h-4" />
           </Button>
         </div>
       </div>
+      )}
+
+      {/* Reader toolbar (themes / fonts / size / progress) */}
+      {view === 'reader' && !immersive && (
+        <div
+          className="flex flex-wrap items-center gap-3 px-4 py-2 border-b text-xs"
+          style={{ borderColor: 'rgba(127,127,127,0.25)' }}
+        >
+          <div className="flex items-center gap-1">
+            <Button size="sm" variant={theme === 'light' ? 'default' : 'outline'} onClick={() => setTheme('light')} title="Light">
+              <Sun className="w-3.5 h-3.5" />
+            </Button>
+            <Button size="sm" variant={theme === 'sepia' ? 'default' : 'outline'} onClick={() => setTheme('sepia')} title="Sepia">
+              <Coffee className="w-3.5 h-3.5" />
+            </Button>
+            <Button size="sm" variant={theme === 'dark' ? 'default' : 'outline'} onClick={() => setTheme('dark')} title="Dark">
+              <Moon className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+
+          <label className="flex items-center gap-1">
+            <TypeIcon className="w-3.5 h-3.5" />
+            <select
+              value={fontFamily}
+              onChange={(e) => setFontFamily(e.target.value)}
+              className="bg-transparent border rounded px-2 py-1"
+              style={{ borderColor: 'rgba(127,127,127,0.4)' }}
+            >
+              {FONTS.map((f) => (
+                <option key={f.id} value={f.id}>{f.label}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex items-center gap-2">
+            Size {fontSize}
+            <input
+              type="range"
+              min={12}
+              max={32}
+              step={1}
+              value={fontSize}
+              onChange={(e) => setFontSize(parseInt(e.target.value, 10))}
+            />
+          </label>
+
+          <label className="flex items-center gap-1 select-none">
+            <input
+              type="checkbox"
+              checked={autoAdvance}
+              onChange={(e) => setAutoAdvance(e.target.checked)}
+            />
+            Auto-advance
+          </label>
+
+          <span className="ml-auto opacity-70 tabular-nums">{progress}%</span>
+        </div>
+      )}
 
       {/* TTS Panel */}
-      {view === 'reader' && ttsOpen && supportsTTS && (
-        <div className="border-b border-border bg-card/60 px-4 py-3 flex flex-wrap items-center gap-3">
+      {view === 'reader' && ttsOpen && supportsTTS && !immersive && (
+        <div
+          className="border-b px-4 py-3 flex flex-wrap items-center gap-3"
+          style={{ borderColor: 'rgba(127,127,127,0.25)' }}
+        >
           <div className="flex items-center gap-1">
             <Button size="sm" variant="outline" onClick={() => skip(-1)} title="Previous paragraph">
               <SkipBack className="w-4 h-4" />
@@ -451,7 +570,8 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
             <select
               value={voiceURI}
               onChange={(e) => setVoiceURI(e.target.value)}
-              className="bg-background border border-border rounded px-2 py-1 text-xs max-w-[260px]"
+              className="bg-transparent border rounded px-2 py-1 text-xs max-w-[260px]"
+              style={{ borderColor: 'rgba(127,127,127,0.4)' }}
             >
               {voices.length === 0 && <option value="">Default</option>}
               {voices.map((v) => (
@@ -487,7 +607,7 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
           </label>
 
           {ttsIndex >= 0 && (
-            <span className="text-xs text-muted-foreground ml-auto">
+            <span className="text-xs opacity-70 ml-auto">
               ¶ {ttsIndex + 1} / {paragraphs.length}
             </span>
           )}
@@ -500,7 +620,7 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
           <div className="text-center space-y-2">
             <div className="text-4xl">📖</div>
             <h1 className="text-2xl font-display font-bold">Live Reader</h1>
-            <p className="text-sm text-muted-foreground max-w-md">
+            <p className="text-sm opacity-70 max-w-md">
               Read any supported web novel directly here. Paste a novel URL to begin.
             </p>
           </div>
@@ -528,8 +648,8 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
       {/* Loading view */}
       {view === 'loading' && (
         <div className="flex-1 flex flex-col items-center justify-center gap-3">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">{status}</p>
+          <Loader2 className="w-8 h-8 animate-spin" style={{ color: themeVars.accent }} />
+          <p className="text-sm opacity-70">{status}</p>
         </div>
       )}
 
@@ -545,15 +665,15 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
                 onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')}
               />
             ) : (
-              <div className="w-full aspect-[2/3] rounded-lg bg-muted flex items-center justify-center text-muted-foreground">
+              <div className="w-full aspect-[2/3] rounded-lg bg-muted flex items-center justify-center opacity-60">
                 <BookOpen className="w-10 h-10" />
               </div>
             )}
             <div className="space-y-3 min-w-0">
               <h2 className="text-2xl font-display font-bold break-words">{book.title || 'Untitled'}</h2>
-              {book.author && <p className="text-sm text-muted-foreground">by {book.author}</p>}
+              {book.author && <p className="text-sm opacity-70">by {book.author}</p>}
               {book.description && (
-                <p className="text-sm text-foreground/80 whitespace-pre-line line-clamp-[12]">
+                <p className="text-sm opacity-90 whitespace-pre-line line-clamp-[12]">
                   {book.description}
                 </p>
               )}
@@ -561,24 +681,24 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
                 <Button onClick={() => openChapter(0)} disabled={!chapters.length} className="gap-2">
                   <BookOpen className="w-4 h-4" /> Start reading
                 </Button>
-                <span className="text-sm text-muted-foreground self-center">
+                <span className="text-sm opacity-70 self-center">
                   {chapters.length} chapters
                 </span>
               </div>
             </div>
           </div>
           <div className="max-w-4xl mx-auto px-6 pb-8">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+            <h3 className="text-sm font-semibold uppercase tracking-wider opacity-70 mb-2">
               Chapters
             </h3>
-            <div className="border border-border rounded-lg divide-y divide-border">
+            <div className="border rounded-lg divide-y" style={{ borderColor: 'rgba(127,127,127,0.25)' }}>
               {chapters.map((ch, i) => (
                 <button
                   key={ch.id}
                   onClick={() => openChapter(i)}
-                  className="w-full text-left px-4 py-2 hover:bg-muted transition-colors flex items-center gap-3"
+                  className="w-full text-left px-4 py-2 hover:bg-black/5 dark:hover:bg-white/5 transition-colors flex items-center gap-3"
                 >
-                  <span className="text-xs text-muted-foreground w-10 tabular-nums">{i + 1}</span>
+                  <span className="text-xs opacity-60 w-10 tabular-nums">{i + 1}</span>
                   <span className="text-sm truncate">{ch.title}</span>
                 </button>
               ))}
@@ -589,30 +709,52 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
 
       {/* Reader view */}
       {view === 'reader' && (
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex overflow-hidden relative">
           {showToc && (
-            <aside className="w-72 border-r border-border overflow-auto bg-card/50">
-              {chapters.map((ch, i) => (
-                <button
-                  key={ch.id}
-                  onClick={() => openChapter(i)}
-                  className={`w-full text-left px-3 py-2 text-sm truncate hover:bg-muted transition-colors ${
-                    i === chapterIndex ? 'bg-primary/10 text-primary font-medium' : ''
-                  }`}
-                >
-                  {i + 1}. {ch.title}
-                </button>
-              ))}
-            </aside>
+            <>
+              <div
+                className="sm:hidden fixed inset-0 bg-black/40 z-20"
+                onClick={() => setShowToc(false)}
+              />
+              <aside
+                className="absolute sm:relative top-0 left-0 h-full w-72 max-w-[85vw] border-r overflow-auto z-30 sm:z-auto shrink-0"
+                style={{ borderColor: 'rgba(127,127,127,0.25)', background: themeVars.bg }}
+              >
+                {chapters.map((ch, i) => (
+                  <button
+                    key={ch.id}
+                    onClick={() => openChapter(i)}
+                    className={`w-full text-left px-3 py-2 text-sm truncate hover:bg-black/5 dark:hover:bg-white/5 transition-colors ${
+                      i === chapterIndex ? 'font-medium' : ''
+                    }`}
+                    style={i === chapterIndex ? { color: themeVars.accent } : undefined}
+                  >
+                    {i + 1}. {ch.title}
+                  </button>
+                ))}
+              </aside>
+            </>
           )}
-          <div ref={viewportRef} className="flex-1 overflow-auto">
+          <div ref={viewportRef} className="flex-1 overflow-auto relative">
+            {immersive && (
+              <button
+                onClick={() => setImmersive(false)}
+                title="Exit immersive"
+                className="fixed top-3 right-3 z-30 p-2 rounded-full border backdrop-blur transition opacity-40 hover:opacity-100"
+                style={{ borderColor: 'rgba(127,127,127,0.3)', background: 'rgba(127,127,127,0.15)' }}
+              >
+                <Minimize2 className="w-4 h-4" />
+              </button>
+            )}
             <article
-              className="max-w-2xl mx-auto px-6 py-10 prose prose-sm dark:prose-invert"
+              className="max-w-2xl mx-auto px-6 py-10"
               style={readerStyle}
             >
-              <h1 className="font-display">{chapterTitle}</h1>
+              <h1 className="font-display text-2xl mb-6" style={{ color: themeVars.accent }}>
+                {chapterTitle}
+              </h1>
               {loadingChapter ? (
-                <div className="flex items-center gap-2 text-muted-foreground">
+                <div className="flex items-center gap-2 opacity-70">
                   <Loader2 className="w-4 h-4 animate-spin" /> Loading chapter…
                 </div>
               ) : paragraphs.length > 0 ? (
@@ -622,9 +764,21 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
                       key={i}
                       data-tts-idx={i}
                       onClick={() => supportsTTS && ttsOpen && speakFrom(i)}
-                      className={`transition-colors rounded px-2 -mx-2 ${
-                        i === ttsIndex ? 'bg-primary/15 ring-1 ring-primary/40' : ''
-                      } ${supportsTTS && ttsOpen ? 'cursor-pointer hover:bg-muted/50' : ''}`}
+                      className={`transition-colors rounded px-2 -mx-2 mb-3 ${
+                        supportsTTS && ttsOpen ? 'cursor-pointer' : ''
+                      }`}
+                      style={
+                        i === ttsIndex
+                          ? {
+                              background:
+                                theme === 'light'
+                                  ? 'rgba(239, 68, 68, 0.12)'
+                                  : 'rgba(239, 68, 68, 0.18)',
+                              boxShadow: `-4px 0 0 ${themeVars.accent}`,
+                              paddingLeft: 12,
+                            }
+                          : undefined
+                      }
                       dangerouslySetInnerHTML={{ __html: p.html }}
                     />
                   ))}
@@ -632,7 +786,10 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
               ) : (
                 <div dangerouslySetInnerHTML={{ __html: chapterHtml }} />
               )}
-              <div className="flex justify-between items-center mt-10 pt-6 border-t border-border not-prose">
+              <div
+                className="flex justify-between items-center mt-10 pt-6 border-t"
+                style={{ borderColor: 'rgba(127,127,127,0.25)' }}
+              >
                 <Button
                   variant="outline"
                   onClick={() => openChapter(chapterIndex - 1)}
@@ -641,7 +798,7 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
                 >
                   <ChevronLeft className="w-4 h-4" /> Previous
                 </Button>
-                <span className="text-xs text-muted-foreground">
+                <span className="text-xs opacity-70">
                   {chapterIndex + 1} / {chapters.length}
                 </span>
                 <Button
