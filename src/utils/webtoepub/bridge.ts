@@ -15,11 +15,12 @@ export interface EngineChapter {
 }
 
 export interface EngineMetadata {
-  title: string;
-  author: string;
-  description: string;
+  title?: string;
+  author?: string;
+  description?: string;
   language?: string;
   fileName?: string;
+  tocUrl?: string;
 }
 
 // Minimal type describing the globals we touch inside the iframe.
