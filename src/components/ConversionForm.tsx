@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { SUPPORTED_SITES, getSiteConfig, extractDomain } from '@/utils/siteConfigs';
 import { NovelSite, EpubMetadata } from '@/types';
-import { BookOpen, Globe, Settings, Hash, Type, List, Search, Sparkles, ArrowRight, ExternalLink, X, BookOpenCheck, MoreVertical, Library as LibraryIcon, BookMarked } from 'lucide-react';
+import { BookOpen, Globe, Settings, Hash, Type, List, Search, Sparkles, ArrowRight, ExternalLink, X, BookOpenCheck, MoreVertical, Library as LibraryIcon, BookMarked, Download } from 'lucide-react';
 import { AdminPanel } from './AdminPanel';
 import { SupportedSites } from './SupportedSites';
 import { engineSearch, cancelSearch, EngineSearchResult } from '@/utils/webtoepub/bridge';
@@ -358,6 +358,37 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                             <ExternalLink className="w-3 h-3" /> {r.source}
                           </span>
                         </div>
+                      </button>
+                      <button
+                        type="button"
+                        title="Convert to EPUB"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setTocUrl(r.url);
+                          const newMeta = r.title && !metadata.title
+                            ? { ...metadata, title: r.title }
+                            : metadata;
+                          if (r.title && !metadata.title) setMetadata(newMeta);
+                          clearSearch();
+                          const domain = extractDomain(r.url);
+                          if (domain) {
+                            localStorage.setItem(`epub-converter-${domain}`, JSON.stringify({ tocSelector, contentSelector }));
+                          }
+                          onSubmit({
+                            tocUrl: r.url,
+                            tocSelector,
+                            contentSelector,
+                            metadata: newMeta,
+                            chapterRange,
+                            fontFamily,
+                            includeIndex,
+                            editableUrls,
+                          });
+                        }}
+                        className="shrink-0 px-3 my-1 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-smooth inline-flex items-center gap-1 text-xs"
+                      >
+                        <Download className="w-4 h-4" />
+                        <span className="hidden sm:inline">EPUB</span>
                       </button>
                       <button
                         type="button"
