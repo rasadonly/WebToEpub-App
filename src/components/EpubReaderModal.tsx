@@ -86,8 +86,12 @@ type TtsPara = { text: string; el: Element | null };
 
 function extractParagraphsFromDoc(doc: Document | null | undefined): TtsPara[] {
   if (!doc) return [];
-  const nodes = Array.from(
+  const rawNodes = Array.from(
     doc.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote')
+  );
+  // Filter out parent container elements that contain another matched node to prevent double reading
+  const nodes = rawNodes.filter(
+    (node) => !rawNodes.some((other) => other !== node && node.contains(other))
   );
   const seen = new Set<string>();
   const out: TtsPara[] = [];
@@ -495,14 +499,19 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
       utt.volume = 1;
       const endsStrong = /[.!?…]["'”’)]?$/.test(raw);
       utt.onend = () => {
+        utt.onend = null;
+        utt.onerror = null;
         if (!ttsActiveRef.current) return;
         pauseTimerRef.current = window.setTimeout(
           speakSentence,
           endsStrong ? 260 : 140
         );
       };
-      utt.onerror = () => {
+      utt.onerror = (e: SpeechSynthesisErrorEvent) => {
+        utt.onend = null;
+        utt.onerror = null;
         if (!ttsActiveRef.current) return;
+        if (e.error === 'interrupted' || e.error === 'canceled') return;
         pauseTimerRef.current = window.setTimeout(speakSentence, 60);
       };
       window.speechSynthesis.speak(utt);
@@ -559,6 +568,8 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
 
   // Jump TTS to a specific paragraph element (used when user clicks a paragraph).
   const jumpToParagraph = useCallback((el: Element) => {
+    // ONLY jump if TTS is currently active/playing!
+    if (!ttsActiveRef.current) return;
     const paras = collectCurrentParagraphs();
     if (!paras.length) return;
     const idx = paras.findIndex((p) => p.el === el);

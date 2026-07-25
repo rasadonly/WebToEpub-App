@@ -64,27 +64,29 @@ function extractParagraphs(html: string): Paragraph[] {
   const doc = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html');
   const root = doc.body.firstElementChild;
   if (!root) return [];
-  const blocks: Paragraph[] = [];
-  const pick = (el: Element) => {
-    const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
-    if (!text) return;
-    blocks.push({ html: (el as HTMLElement).outerHTML, text });
-  };
-  const children = Array.from(root.children);
-  if (children.length === 0) {
-    const text = (root.textContent || '').trim();
-    if (text) blocks.push({ html: `<p>${text}</p>`, text });
-    return blocks;
+
+  const rawNodes = Array.from(
+    root.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote')
+  );
+  if (rawNodes.length === 0) {
+    const text = (root.textContent || '').replace(/\s+/g, ' ').trim();
+    if (!text) return [];
+    return [{ html: `<p>${text}</p>`, text }];
   }
-  for (const child of children) {
-    const tag = child.tagName.toLowerCase();
-    if (tag === 'div' || tag === 'section' || tag === 'article') {
-      const inner = extractParagraphs(child.innerHTML);
-      if (inner.length) blocks.push(...inner);
-      else pick(child);
-    } else {
-      pick(child);
-    }
+  // Filter out parent container nodes that contain other matched block elements to prevent double reading
+  const nodes = rawNodes.filter(
+    (node) => !rawNodes.some((other) => other !== node && node.contains(other))
+  );
+
+  const seen = new Set<string>();
+  const blocks: Paragraph[] = [];
+  for (const el of nodes) {
+    const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+    if (!text || text.length < 2) continue;
+    const key = text.slice(0, 120);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    blocks.push({ html: (el as HTMLElement).outerHTML, text });
   }
   return blocks;
 }
@@ -384,14 +386,19 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
           utt.volume = 1;
           const endsStrong = /[.!?…]["'”’)]?$/.test(raw);
           utt.onend = () => {
+            utt.onend = null;
+            utt.onerror = null;
             if (!ttsActiveRef.current) return;
             pauseTimerRef.current = window.setTimeout(
               speakSentence,
               endsStrong ? 260 : 140
             );
           };
-          utt.onerror = () => {
+          utt.onerror = (e: SpeechSynthesisErrorEvent) => {
+            utt.onend = null;
+            utt.onerror = null;
             if (!ttsActiveRef.current) return;
+            if (e.error === 'interrupted' || e.error === 'canceled') return;
             pauseTimerRef.current = window.setTimeout(speakSentence, 60);
           };
           window.speechSynthesis.speak(utt);
@@ -812,9 +819,10 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
                       data-tts-idx={i}
                       onClick={(e) => {
                         if (!supportsTTS) return;
-                        // Let real links navigate; jump TTS on any other click.
+                        // Let real links navigate; jump TTS ONLY if TTS is already active/playing.
                         const target = e.target as HTMLElement;
                         if (target.closest('a')) return;
+                        if (!ttsActiveRef.current) return;
                         speakFrom(i);
                       }}
                       className={`transition-colors rounded px-2 -mx-2 mb-3 ${
