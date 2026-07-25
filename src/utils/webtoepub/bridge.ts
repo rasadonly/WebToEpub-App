@@ -525,7 +525,7 @@ export async function enginePackEpub(
     // Cross-realm `instanceof Blob` fails if the Blob was created inside the iframe.
     // Instead, we duck-type check for Blob properties (size and type).
     if (!downloadIntercepted && obj && typeof (obj as Blob).size === 'number' &&
-        ((obj as Blob).type === 'application/epub+zip' || (obj as Blob).type === 'application/zip' || (obj as Blob).size > 5000)) {
+        (obj as Blob).type === 'application/epub+zip') {
       downloadIntercepted = true;
       // Restore immediately so the engine can still use it for other things.
       iframeWin.URL.createObjectURL = origCreateObjectURL;
