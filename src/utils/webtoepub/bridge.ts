@@ -638,17 +638,49 @@ export async function engineSearch(
   onProgress?: (site: string, status: string) => void
 ): Promise<EngineSearchResult[]> {
   const win = await ensureIframe();
-  if (!win.SiteSearchEngine) throw new Error('Search engine not ready');
+  const SSE: any = (win as any).SiteSearchEngine;
+  if (!SSE) throw new Error('Search engine not ready');
   const myToken = ++searchCancelToken;
   const isLive = () => myToken === searchCancelToken;
-  const { results } = await win.SiteSearchEngine.search(
-    query,
-    0,
-    20,
-    true,
-    (site, status) => { if (isLive()) onProgress?.(site, status); },
-    (partial) => { if (isLive()) onResults?.(partial); }
-  );
+
+  // Iterate ALL sites (primary + secondary) ourselves — the engine's
+  // built-in `search()` stops early after ~10 sites / 20 results.
+  const sites: any[] = [...(SSE.PRIMARY_SITES || []), ...(SSE.SECONDARY_SITES || [])];
+  if (isLive()) onProgress?.('Starting', `Searching ${sites.length} sites...`);
+
+  const seen = new Set<string>();
+  const results: EngineSearchResult[] = [];
+  const BATCH_SIZE = 8;
+
+  for (let i = 0; i < sites.length && isLive(); i += BATCH_SIZE) {
+    const batch = sites.slice(i, i + BATCH_SIZE);
+    const batchResults = await Promise.all(
+      batch.map(async (site: any) => {
+        if (isLive()) onProgress?.(site.name, 'searching');
+        try {
+          const r = await SSE.fetchSiteResults(site, query);
+          if (isLive()) onProgress?.(site.name, `found ${r.length}`);
+          return r as EngineSearchResult[];
+        } catch {
+          if (isLive()) onProgress?.(site.name, 'failed');
+          return [] as EngineSearchResult[];
+        }
+      })
+    );
+    if (!isLive()) break;
+    const fresh: EngineSearchResult[] = [];
+    for (const list of batchResults) {
+      for (const r of list) {
+        const key = SSE.normalizeUrl(r.url);
+        if (!seen.has(key)) {
+          seen.add(key);
+          results.push(r);
+          fresh.push(r);
+        }
+      }
+    }
+    if (fresh.length && isLive()) onResults?.(fresh);
+  }
   if (!isLive()) throw new Error('__cancelled__');
   return results;
 }
