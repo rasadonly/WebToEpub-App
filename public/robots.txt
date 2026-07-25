@@ -31,4 +31,5 @@ Allow: /
 User-agent: *
 Allow: /
 
+Sitemap: https://rasadonly.github.io/WebToEpub-App/sitemap.xml
 Sitemap: https://epub-novel-forge.lovable.app/sitemap.xml
