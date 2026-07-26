@@ -260,7 +260,7 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
       const siteConfig = getSiteConfig(target);
       let usedFastPath = false;
 
-      if (siteConfig?.hasLocalWorker) {
+      if (siteConfig) {
         try {
           const links = await fetchChapterLinksLive(target, siteConfig.tocSelector);
           if (links.length > 0) {
@@ -304,7 +304,7 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
       let html = '';
       let title = chapters[index].title;
 
-      if (siteConfig?.hasLocalWorker) {
+      if (siteConfig) {
         try {
           html = await fetchChapterContent(chapters[index].url, siteConfig.contentSelector);
         } catch { /* fallback */ }
