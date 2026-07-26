@@ -127,12 +127,11 @@ async function tocFreeWebNovel(
   // Fetch remaining pages dynamically to handle sites where totalPage is hidden
   let p = 2;
   let lastBatchFirstUrl = firstBatch.length > 0 ? firstBatch[0].url : '';
-  const urlObj = new URL(base);
-  const slug = urlObj.pathname.split('/').filter(Boolean).pop()?.replace(/\.html$/, '');
+  const baseUrlWithoutHtml = base.replace(/\.html$/, '');
   
   while (true) {
     try {
-      const nextUrl = `${urlObj.origin}/${slug}/${p}.html`;
+      const nextUrl = `${baseUrlWithoutHtml}/${p}.html`;
       const h = await getText(nextUrl);
       if (!h) break;
       const batch = collectPage(parseHtml(h));
@@ -364,7 +363,7 @@ function extractWithSelector(doc: Document, selectors: string): string {
 
 async function bodyFreeWebNovel(url: string): Promise<string> {
   const doc = parseHtml(await getText(url));
-  return extractWithSelector(doc, "div.txt, .txt, #article, .chapter-content, #chr-content");
+  return extractWithSelector(doc, "#article, .chapter-content, #chr-content");
 }
 
 async function bodyNovelFire(url: string): Promise<string> {
