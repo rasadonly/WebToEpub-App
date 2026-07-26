@@ -1,4 +1,5 @@
 import { CORS_PROXY_LIST } from '../localWorker';
+import { getDownHosts } from '../siteHealth';
 
 /**
  * Bridge to the vendored WebToEpub engine (public/webtoepub/index.html).
