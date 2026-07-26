@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
@@ -8,23 +9,99 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { ExternalLink, Globe } from 'lucide-react';
+import { ExternalLink, Globe, Loader2, RefreshCw } from 'lucide-react';
 import { engineListSupportedHosts } from '@/utils/webtoepub/bridge';
+import {
+  SiteHealth,
+  SiteStatus,
+  STATUS_RANK,
+  checkSites,
+  loadCache,
+  saveCache,
+} from '@/utils/siteHealth';
+
+const STATUS_LABEL: Record<SiteStatus, string> = {
+  up: 'Up',
+  parked: 'Parked',
+  down: 'Down',
+  unknown: 'Unchecked',
+};
+
+function StatusDot({ status }: { status: SiteStatus }) {
+  const color =
+    status === 'up'
+      ? 'bg-green-500'
+      : status === 'parked'
+        ? 'bg-amber-500'
+        : status === 'down'
+          ? 'bg-destructive'
+          : 'bg-muted-foreground/40';
+  return <span className={`inline-block h-2 w-2 rounded-full shrink-0 ${color}`} />;
+}
 
 export function SupportedSites({ open, onOpenChange, hideTrigger }: { open?: boolean; onOpenChange?: (o: boolean) => void; hideTrigger?: boolean } = {}) {
   const [hosts, setHosts] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [opened, setOpened] = useState(false);
+  const [health, setHealth] = useState<Record<string, SiteHealth>>(() => loadCache());
+  const [checking, setChecking] = useState(false);
+  const [checkedCount, setCheckedCount] = useState(0);
+  const stopRef = useRef(false);
+
+  const isOpen = open ?? opened;
 
   useEffect(() => {
-    const isOpen = open ?? opened;
     if (!isOpen || hosts.length > 0) return;
     setLoading(true);
     engineListSupportedHosts()
       .then(list => setHosts(list.sort()))
       .catch(() => setHosts([]))
       .finally(() => setLoading(false));
-  }, [open, opened, hosts.length]);
+  }, [isOpen, hosts.length]);
+
+  // Stop any in-flight scan when the dialog closes.
+  useEffect(() => {
+    if (!isOpen) stopRef.current = true;
+  }, [isOpen]);
+
+  const statusOf = (host: string): SiteStatus => health[host]?.status ?? 'unknown';
+
+  const sorted = useMemo(() => {
+    return [...hosts].sort((a, b) => {
+      const d = STATUS_RANK[statusOf(a)] - STATUS_RANK[statusOf(b)];
+      return d !== 0 ? d : a.localeCompare(b);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hosts, health]);
+
+  const counts = useMemo(() => {
+    const c = { up: 0, parked: 0, down: 0, unknown: 0 } as Record<SiteStatus, number>;
+    hosts.forEach(h => { c[statusOf(h)]++; });
+    return c;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hosts, health]);
+
+  const runCheck = async (onlyUnchecked: boolean) => {
+    if (checking) { stopRef.current = true; return; }
+    const targets = onlyUnchecked ? hosts.filter(h => !health[h]) : hosts;
+    if (targets.length === 0) return;
+    stopRef.current = false;
+    setChecking(true);
+    setCheckedCount(0);
+    const next: Record<string, SiteHealth> = { ...health };
+    await checkSites(
+      targets,
+      (result) => {
+        next[result.host] = result;
+        setHealth({ ...next });
+        setCheckedCount(n => n + 1);
+      },
+      8,
+      () => stopRef.current
+    );
+    saveCache(next);
+    setChecking(false);
+  };
 
   return (
     <Dialog open={open} onOpenChange={(o) => { setOpened(o); onOpenChange?.(o); }}>
@@ -44,6 +121,25 @@ export function SupportedSites({ open, onOpenChange, hideTrigger }: { open?: boo
           </DialogTitle>
         </DialogHeader>
 
+        {hosts.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><StatusDot status="up" /> Up {counts.up}</span>
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><StatusDot status="parked" /> Parked/fake {counts.parked}</span>
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><StatusDot status="down" /> Down {counts.down}</span>
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><StatusDot status="unknown" /> Unchecked {counts.unknown}</span>
+
+            <div className="ml-auto flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => runCheck(true)}>
+                {checking ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-2 h-3.5 w-3.5" />}
+                {checking ? `Checking… ${checkedCount} (tap to stop)` : 'Check status'}
+              </Button>
+              {!checking && counts.unknown === 0 && (
+                <Button size="sm" variant="ghost" onClick={() => runCheck(false)}>Recheck all</Button>
+              )}
+            </div>
+          </div>
+        )}
+
         {loading && (
           <p className="text-sm text-muted-foreground">Loading the engine…</p>
         )}
@@ -56,27 +152,36 @@ export function SupportedSites({ open, onOpenChange, hideTrigger }: { open?: boo
 
         {hosts.length > 0 && (
           <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 md:grid-cols-3">
-            {hosts.map(host => (
-              <Card key={host} className="border-border/60">
-                <CardHeader className="p-3 pb-1">
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <Globe className="h-4 w-4 text-primary" />
-                    {host}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-3 pt-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-auto p-1 text-xs"
-                    onClick={() => window.open(`https://${host}`, '_blank')}
-                  >
-                    <ExternalLink className="mr-1 h-3 w-3" />
-                    Visit
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
+            {sorted.map(host => {
+              const status = statusOf(host);
+              return (
+                <Card key={host} className={`border-border/60 ${status === 'down' || status === 'parked' ? 'opacity-70' : ''}`}>
+                  <CardHeader className="p-3 pb-1">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <StatusDot status={status} />
+                      <span className="truncate">{host}</span>
+                      <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0">
+                        {STATUS_LABEL[status]}
+                      </Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-3 pt-1 flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-auto p-1 text-xs"
+                      onClick={() => window.open(`https://${host}`, '_blank')}
+                    >
+                      <ExternalLink className="mr-1 h-3 w-3" />
+                      Visit
+                    </Button>
+                    {health[host]?.note && (
+                      <span className="text-[10px] text-muted-foreground truncate">{health[host].note}</span>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
 
