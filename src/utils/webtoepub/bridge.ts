@@ -515,37 +515,47 @@ export async function enginePackEpub(
   // ── Intercept the engine's Download.save() so the blob is triggered from
   // the main window, not the hidden iframe. Some browsers refuse to allow
   // programmatic downloads initiated from an offscreen/hidden iframe.
-  // We patch URL.createObjectURL inside the iframe: when the engine calls it
-  // with an EPUB blob we capture it, revoke the original URL, and trigger the
-  // download from the parent window instead.
-  const iframeWin = win as unknown as Window & { URL: typeof URL };
+  // We replace Download.save entirely so the engine never performs its own
+  // anchor click (which produced a second, empty file).
+  const iframeWin = win as unknown as Window & { URL: typeof URL; Download?: any };
   const origCreateObjectURL = iframeWin.URL.createObjectURL.bind(iframeWin.URL);
   let downloadIntercepted = false;
-  iframeWin.URL.createObjectURL = (obj: Blob | MediaSource): string => {
-    // Cross-realm `instanceof Blob` fails if the Blob was created inside the iframe.
-    // Instead, we duck-type check for Blob properties (size and type).
-    if (!downloadIntercepted && obj && typeof (obj as Blob).size === 'number' &&
-        (obj as Blob).type === 'application/epub+zip') {
-      downloadIntercepted = true;
-      // Restore immediately so the engine can still use it for other things.
-      iframeWin.URL.createObjectURL = origCreateObjectURL;
-      // Trigger the download from the main window context.
-      const blob = obj as Blob;
-      setTimeout(() => {
-        const a = document.createElement('a');
-        const url = URL.createObjectURL(new Blob([blob], { type: blob.type || 'application/epub+zip' }));
-        a.href = url;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url), 5000);
-      }, 0);
-      // Return a dummy URL so the engine's own anchor click doesn't error.
-      return origCreateObjectURL(new Blob([], { type: 'text/plain' }));
-    }
-    return origCreateObjectURL(obj);
+
+  const triggerParentDownload = (blob: Blob) => {
+    const a = document.createElement('a');
+    const url = URL.createObjectURL(new Blob([blob], { type: 'application/epub+zip' }));
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
   };
+
+  const engineDownload = iframeWin.Download;
+  const origSave = engineDownload?.save;
+  if (engineDownload && typeof origSave === 'function') {
+    engineDownload.save = (blob: Blob) => {
+      downloadIntercepted = true;
+      triggerParentDownload(blob);
+      return Promise.resolve();
+    };
+  } else {
+    // Fallback: capture via createObjectURL and suppress the engine's anchor click.
+    iframeWin.URL.createObjectURL = (obj: Blob | MediaSource): string => {
+      if (!downloadIntercepted && obj && typeof (obj as Blob).size === 'number' &&
+          (obj as Blob).type === 'application/epub+zip') {
+        downloadIntercepted = true;
+        iframeWin.URL.createObjectURL = origCreateObjectURL;
+        const blob = obj as Blob;
+        setTimeout(() => triggerParentDownload(blob), 0);
+        // Return a non-downloadable URL so the engine's anchor click is a no-op.
+        return 'about:blank';
+      }
+      return origCreateObjectURL(obj);
+    };
+  }
+
 
   // Poll the engine's <progress id="fetchProgress"> element and forward it.
   let pollTimer: number | null = null;
