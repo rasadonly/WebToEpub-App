@@ -1,4 +1,5 @@
 import { CORS_PROXY_LIST } from '@/utils/localWorker';
+import { supabase } from '@/integrations/supabase/client';
 
 export type SiteStatus = 'up' | 'parked' | 'down' | 'unknown';
 
