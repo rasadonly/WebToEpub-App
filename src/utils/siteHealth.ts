@@ -123,3 +123,76 @@ export async function checkSites(
   });
   await Promise.all(workers);
 }
+
+/* ------------------------------------------------------------------ *
+ * Shared backend status store — checked once, reused by everyone.
+ * ------------------------------------------------------------------ */
+
+const REMOTE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Load every saved site status from the backend. */
+export async function loadRemoteHealth(): Promise<Record<string, SiteHealth>> {
+  try {
+    const { data, error } = await supabase
+      .from('site_health')
+      .select('host,status,note,checked_at');
+    if (error || !data) return {};
+    const out: Record<string, SiteHealth> = {};
+    for (const row of data) {
+      out[row.host] = {
+        host: row.host,
+        status: (row.status as SiteStatus) || 'unknown',
+        note: row.note ?? undefined,
+        checkedAt: new Date(row.checked_at).getTime(),
+      };
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/** Persist a batch of results so other users never re-check them. */
+export async function saveRemoteHealth(results: SiteHealth[]): Promise<void> {
+  if (results.length === 0) return;
+  try {
+    await supabase.from('site_health').upsert(
+      results.map(r => ({
+        host: r.host,
+        status: r.status,
+        note: r.note ?? null,
+        checked_at: new Date(r.checkedAt).toISOString(),
+        updated_at: new Date().toISOString(),
+      })),
+      { onConflict: 'host' }
+    );
+  } catch {
+    /* offline — local cache still applies */
+  }
+}
+
+let downHostsPromise: Promise<Set<string>> | null = null;
+
+/** Hosts known to be dead or parked — used to skip them while searching. */
+export function getDownHosts(): Promise<Set<string>> {
+  if (!downHostsPromise) {
+    downHostsPromise = (async () => {
+      const remote = await loadRemoteHealth();
+      const local = loadCache();
+      const merged = { ...remote, ...local };
+      const now = Date.now();
+      const set = new Set<string>();
+      for (const [host, h] of Object.entries(merged)) {
+        if ((h.status === 'down' || h.status === 'parked') && now - h.checkedAt < REMOTE_TTL_MS) {
+          set.add(host.toLowerCase());
+        }
+      }
+      return set;
+    })();
+  }
+  return downHostsPromise;
+}
+
+export function resetDownHostsCache() {
+  downHostsPromise = null;
+}
