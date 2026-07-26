@@ -30,6 +30,8 @@ import {
   type EngineChapter,
   type EngineBookInfo,
 } from '@/utils/webtoepub/bridge';
+import { fetchChapterLinksLive, fetchChapterContent } from '@/utils/localWorker';
+import { getSiteConfig } from '@/utils/siteConfigs';
 
 interface LiveReaderModalProps {
   url?: string;
@@ -254,7 +256,28 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
     setView('loading');
     setStatus('Loading novel page…');
     try {
-      const toc = await engineFetchToc(target);
+      let toc: EngineChapter[] = [];
+      const siteConfig = getSiteConfig(target);
+      let usedFastPath = false;
+
+      if (siteConfig?.hasLocalWorker) {
+        try {
+          const links = await fetchChapterLinksLive(target, siteConfig.tocSelector);
+          if (links.length > 0) {
+            toc = links.map((l, i) => ({
+              id: `${i}-${l.url}`,
+              url: l.url,
+              title: l.title || `Chapter ${i + 1}`,
+            }));
+            usedFastPath = true;
+          }
+        } catch { /* fallback */ }
+      }
+
+      if (!usedFastPath) {
+        toc = await engineFetchToc(target);
+      }
+
       setStatus('Reading metadata…');
       const info = await engineGetBookInfo();
       setChapters(toc);
@@ -277,9 +300,24 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
     setShowToc(false);
     setProgress(0);
     try {
-      const c = await engineFetchChapter(chapters[index].url, chapters[index].title);
-      setChapterHtml(c.html);
-      setChapterTitle(c.title || chapters[index].title);
+      const siteConfig = getSiteConfig(chapters[index].url);
+      let html = '';
+      let title = chapters[index].title;
+
+      if (siteConfig?.hasLocalWorker) {
+        try {
+          html = await fetchChapterContent(chapters[index].url, siteConfig.contentSelector);
+        } catch { /* fallback */ }
+      }
+
+      if (!html) {
+        const c = await engineFetchChapter(chapters[index].url, chapters[index].title);
+        html = c.html;
+        title = c.title || title;
+      }
+
+      setChapterHtml(html);
+      setChapterTitle(title);
       viewportRef.current?.scrollTo({ top: 0 });
     } catch (e) {
       setChapterHtml(
