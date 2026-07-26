@@ -94,6 +94,40 @@ class FreeWebNovelComParser extends FreeWebNovelParser {
     constructor() {
         super();
     }
+
+    async getChapterUrls(dom, chapterUrlsUI) {
+        return this.getChapterUrlsFromMultipleTocPages(dom,
+            this.extractPartialChapterList.bind(this),
+            this.getUrlsOfTocPages.bind(this),
+            chapterUrlsUI
+        );
+    }
+
+    extractPartialChapterList(dom) {
+        let menu = dom.querySelector("ul#idData") || dom.querySelector("div.m-newest2 ul.ul-list5") || dom.querySelector("div.m-newest2");
+        if (menu) {
+            return [...menu.querySelectorAll("li a")].map(a => util.hyperLinkToChapter(a));
+        }
+        return [];
+    }
+
+    getUrlsOfTocPages(dom) {
+        let urls = [];
+        let select = dom.querySelector("select#indexselect");
+        if (select) {
+            let options = [...select.querySelectorAll("option")];
+            // The first option is the current page, skip it or include it?
+            // getChapterUrlsFromMultipleTocPages assumes these are the *other* pages
+            for (let i = 1; i < options.length; i++) {
+                let val = options[i].getAttribute("value");
+                if (val) {
+                    urls.push(SiteSearchEngine.resolveUrl(dom.baseURI || "https://freewebnovel.com", val));
+                }
+            }
+        }
+        return urls;
+    }
+
     removeUnwantedElementsFromContentElement(content) {
         util.removeChildElementsMatchingSelector(content, "p sub");
         super.removeUnwantedElementsFromContentElement(content);
