@@ -127,10 +127,12 @@ async function tocFreeWebNovel(
   // Fetch remaining pages dynamically to handle sites where totalPage is hidden
   let p = 2;
   let lastBatchFirstUrl = firstBatch.length > 0 ? firstBatch[0].url : '';
+  const baseUrlWithoutHtml = base.replace(/\.html$/, '');
   
   while (true) {
     try {
-      const h = await getText(`${base}?page=${p}`);
+      const nextUrl = `${baseUrlWithoutHtml}/${p}.html`;
+      const h = await getText(nextUrl);
       if (!h) break;
       const batch = collectPage(parseHtml(h));
       
