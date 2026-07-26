@@ -598,11 +598,15 @@ export async function enginePackEpub(
     }
   } finally {
     if (pollTimer !== null) window.clearInterval(pollTimer);
-    // Always restore the original URL.createObjectURL
+    // Always restore the patched engine internals
+    if (engineDownload && typeof origSave === 'function') {
+      engineDownload.save = origSave;
+    }
     if (iframeWin.URL.createObjectURL !== origCreateObjectURL) {
       iframeWin.URL.createObjectURL = origCreateObjectURL;
     }
   }
+
 }
 
 /**
