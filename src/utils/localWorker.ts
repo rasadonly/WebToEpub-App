@@ -363,7 +363,7 @@ function extractWithSelector(doc: Document, selectors: string): string {
 
 async function bodyFreeWebNovel(url: string): Promise<string> {
   const doc = parseHtml(await getText(url));
-  return extractWithSelector(doc, "#article, .chapter-content, #chr-content");
+  return extractWithSelector(doc, "div.txt, .txt, #article, .chapter-content, #chr-content");
 }
 
 async function bodyNovelFire(url: string): Promise<string> {
