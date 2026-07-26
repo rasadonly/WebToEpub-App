@@ -97,6 +97,33 @@ export type Database = {
         }
         Relationships: []
       }
+      site_health: {
+        Row: {
+          checked_at: string
+          created_at: string
+          host: string
+          note: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          checked_at?: string
+          created_at?: string
+          host: string
+          note?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          checked_at?: string
+          created_at?: string
+          host?: string
+          note?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

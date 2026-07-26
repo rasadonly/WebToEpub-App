@@ -1,4 +1,5 @@
 import { CORS_PROXY_LIST } from '../localWorker';
+import { getDownHosts } from '../siteHealth';
 
 /**
  * Bridge to the vendored WebToEpub engine (public/webtoepub/index.html).
@@ -656,8 +657,15 @@ export async function engineSearch(
 
   // Iterate ALL sites (primary + secondary) ourselves — the engine's
   // built-in `search()` stops early after ~10 sites / 20 results.
-  const sites: any[] = [...(SSE.PRIMARY_SITES || []), ...(SSE.SECONDARY_SITES || [])];
+  // Sites already known to be down or parked are skipped entirely.
+  const allSites: any[] = [...(SSE.PRIMARY_SITES || []), ...(SSE.SECONDARY_SITES || [])];
+  let downHosts = new Set<string>();
+  try { downHosts = await getDownHosts(); } catch { /* ignore */ }
+  const sites = downHosts.size
+    ? allSites.filter((s: any) => !downHosts.has(String(s.hostname || '').toLowerCase()))
+    : allSites;
   if (isLive()) onProgress?.('Starting', `Searching ${sites.length} sites...`);
+
 
   const seen = new Set<string>();
   const results: EngineSearchResult[] = [];

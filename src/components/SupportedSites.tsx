@@ -18,6 +18,9 @@ import {
   checkSites,
   loadCache,
   saveCache,
+  loadRemoteHealth,
+  saveRemoteHealth,
+  resetDownHostsCache,
 } from '@/utils/siteHealth';
 
 const STATUS_LABEL: Record<SiteStatus, string> = {
@@ -59,6 +62,21 @@ export function SupportedSites({ open, onOpenChange, hideTrigger }: { open?: boo
       .finally(() => setLoading(false));
   }, [isOpen, hosts.length]);
 
+  // Pull statuses saved by previous visitors — no re-checking needed.
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    loadRemoteHealth().then(remote => {
+      if (cancelled || Object.keys(remote).length === 0) return;
+      setHealth(prev => {
+        const merged = { ...remote, ...prev };
+        saveCache(merged);
+        return merged;
+      });
+    });
+    return () => { cancelled = true; };
+  }, [isOpen]);
+
   // Stop any in-flight scan when the dialog closes.
   useEffect(() => {
     if (!isOpen) stopRef.current = true;
@@ -89,19 +107,31 @@ export function SupportedSites({ open, onOpenChange, hideTrigger }: { open?: boo
     setChecking(true);
     setCheckedCount(0);
     const next: Record<string, SiteHealth> = { ...health };
+    const fresh: SiteHealth[] = [];
+    let pending: SiteHealth[] = [];
     await checkSites(
       targets,
       (result) => {
         next[result.host] = result;
+        fresh.push(result);
+        pending.push(result);
         setHealth({ ...next });
         setCheckedCount(n => n + 1);
+        // Flush to the backend in batches so results survive a stop/refresh.
+        if (pending.length >= 20) {
+          void saveRemoteHealth(pending);
+          pending = [];
+        }
       },
       8,
       () => stopRef.current
     );
+    if (pending.length) void saveRemoteHealth(pending);
     saveCache(next);
+    resetDownHostsCache();
     setChecking(false);
   };
+
 
   return (
     <Dialog open={open} onOpenChange={(o) => { setOpened(o); onOpenChange?.(o); }}>
