@@ -100,12 +100,7 @@ async function tocFreeWebNovel(
   const html = await getText(base);
   const doc = parseHtml(html);
 
-  const options = doc.querySelectorAll('#indexselect option');
-  let totalPage = options.length > 0 ? options.length : 1;
-  if (totalPage === 1) {
-    const m = html.match(/window\.chapterPagination\.totalPage\s*=\s*(\d+)/);
-    if (m) totalPage = parseInt(m[1]);
-  }
+
 
   const collectPage = (d: Document): ChapterLink[] => {
     const items: ChapterLink[] = [];
@@ -129,16 +124,30 @@ async function tocFreeWebNovel(
   firstBatch.forEach(c => results.push(c.url));
   if (onBatch && firstBatch.length > 0) onBatch(firstBatch);
 
-  // Fetch remaining pages one-by-one so each batch streams into the UI.
-  for (let p = 2; p <= totalPage; p++) {
+  // Fetch remaining pages dynamically to handle sites where totalPage is hidden
+  let p = 2;
+  let lastBatchFirstUrl = firstBatch.length > 0 ? firstBatch[0].url : '';
+  
+  while (true) {
     try {
       const h = await getText(`${base}?page=${p}`);
-      if (h) {
-        const batch = collectPage(parseHtml(h));
-        batch.forEach(c => results.push(c.url));
-        if (onBatch && batch.length > 0) onBatch(batch);
-      }
-    } catch { /* skip failed page */ }
+      if (!h) break;
+      const batch = collectPage(parseHtml(h));
+      
+      if (batch.length === 0) break;
+      // Prevent infinite loop if out-of-bounds page returns the first page again
+      if (batch[0].url === lastBatchFirstUrl) break;
+      
+      lastBatchFirstUrl = batch[0].url;
+      batch.forEach(c => results.push(c.url));
+      if (onBatch && batch.length > 0) onBatch(batch);
+      
+      p++;
+      // Safety limit
+      if (p > 2000) break;
+    } catch {
+      break;
+    }
   }
 
   return results;
