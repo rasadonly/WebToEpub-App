@@ -386,7 +386,14 @@ export async function engineFetchTocLive(
   } catch { /* ignore */ }
 
   // Start the engine click WITHOUT blocking — we will poll in parallel.
-  const enginePromise = win.main.onLoadAndAnalyseButtonClick();
+  let engineDone = false;
+  let engineError: unknown = null;
+  const enginePromise = win.main.onLoadAndAnalyseButtonClick()
+    .then(() => { engineDone = true; })
+    .catch((error) => {
+      engineDone = true;
+      engineError = error;
+    });
 
   const seen = new Set<string>();
   const all: EngineChapter[] = [];
@@ -432,19 +439,26 @@ export async function engineFetchTocLive(
         onBatch(batch);
       }
 
-      // Stable = size unchanged for 3 consecutive polls (~900ms). Engine is done.
+      // Stable = size unchanged after the engine has finished. Do not stop just
+      // because the first TOC page is stable; paginated sites such as
+      // FreeWebNovel intentionally wait between AJAX TOC pages.
       if (size === lastSize) {
         stableTicks++;
-        if (stableTicks >= 3) break;
+        if (engineDone && stableTicks >= 2) break;
       } else {
         stableTicks = 0;
         lastSize = size;
       }
+    } else if (engineDone) {
+      break;
     }
   }
 
   // Await the engine promise so any thrown errors surface.
-  try { await enginePromise; } catch { /* errors already captured above */ }
+  await enginePromise;
+  if (engineError && all.length === 0) {
+    throw engineError instanceof Error ? engineError : new Error(String(engineError));
+  }
 
   if (all.length === 0) {
     throw new Error(
