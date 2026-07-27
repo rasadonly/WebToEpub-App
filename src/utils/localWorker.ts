@@ -113,13 +113,12 @@ async function tocFreeWebNovel(
     const items: ChapterLink[] = [];
     const seenPageUrls = new Set<string>();
     const chapterPath = `${new URL(base).pathname}/chapter-`;
-    const selectors = [
-      '#idData li > a[href]',
-      `li > a.con[href*="${chapterPath}"]`,
-      `a.con[href*="${chapterPath}"]`,
-      `a[href*="${chapterPath}"]`,
-    ];
-    d.querySelectorAll(selectors.join(',')).forEach((a) => {
+    const chapterRoot = d.querySelector('#idData');
+    const scope: ParentNode = chapterRoot || d;
+    const selector = chapterRoot
+      ? 'li > a[href]'
+      : [`li > a.con[href*="${chapterPath}"]`, `a.con[href*="${chapterPath}"]`, `a[href*="${chapterPath}"]`].join(',');
+    scope.querySelectorAll(selector).forEach((a) => {
       const href = a.getAttribute('href');
       const title = (a.textContent || '').trim() || a.getAttribute('title') || '';
       if (href) {
