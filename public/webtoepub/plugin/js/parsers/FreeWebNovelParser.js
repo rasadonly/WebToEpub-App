@@ -41,24 +41,49 @@ class FreeWebNovelParser extends Parser {
             urlObj.hash = "";
             let baseNovelUrl = urlObj.toString();
 
-            for (let page = 2; page <= totalPage; ++page) {
-                await this.rateLimitDelay();
-                let url = `${baseNovelUrl}?ajax=chapters&page=${page}`;
+            let fetchTocPage = async (url) => {
+                // Some proxies mangle JSON responses, so try both paths.
                 try {
                     let response = await HttpClient.fetchJson(url);
                     if (response?.json?.html) {
-                        let tempDom = new DOMParser().parseFromString(response.json.html, "text/html");
-                        util.setBaseTag(url, tempDom);
-                        let partialChapters = util.hyperlinksToChapterList(tempDom);
-                        if (0 < partialChapters.length) {
-                            chapterUrlsUI?.showTocProgress?.(partialChapters);
-                            chapters = chapters.concat(partialChapters);
-                        }
+                        return response.json.html;
                     }
                 } catch (e) {
-                    console.error("Failed to fetch TOC page: " + page, e);
+                    // fall through to raw fetch
+                }
+                let xhr = await HttpClient.wrapFetch(url);
+                let raw = xhr.responseText ?? "";
+                try {
+                    let parsed = JSON.parse(raw);
+                    return parsed?.html || "";
+                } catch (e) {
+                    return raw.includes("<li") ? raw : "";
+                }
+            };
+
+            for (let page = 2; page <= totalPage; ++page) {
+                await this.rateLimitDelay();
+                let url = `${baseNovelUrl}?ajax=chapters&page=${page}`;
+                let html = null;
+                for (let attempt = 0; attempt < 3 && !html; ++attempt) {
+                    try {
+                        html = await fetchTocPage(url);
+                    } catch (e) {
+                        console.error("Failed to fetch TOC page: " + page, e);
+                    }
+                }
+                if (!html) {
+                    continue;
+                }
+                let tempDom = new DOMParser().parseFromString(html, "text/html");
+                util.setBaseTag(url, tempDom);
+                let partialChapters = util.hyperlinksToChapterList(tempDom);
+                if (0 < partialChapters.length) {
+                    chapterUrlsUI?.showTocProgress?.(partialChapters);
+                    chapters = chapters.concat(partialChapters);
                 }
             }
+
         }
         return chapters;
     }
