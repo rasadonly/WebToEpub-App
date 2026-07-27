@@ -16,10 +16,53 @@ class FreeWebNovelParser extends Parser {
         this.minimumThrottle = 1000;
     }
 
-    async getChapterUrls(dom) {
+    async getChapterUrls(dom, chapterUrlsUI) {
         let menu = dom.querySelector("ul#idData");
-        return util.hyperlinksToChapterList(menu);
+        let chapters = util.hyperlinksToChapterList(menu);
+
+        let totalPage = 1;
+        let indexSelect = dom.querySelector("#indexselect");
+        if (indexSelect) {
+            totalPage = indexSelect.querySelectorAll("option").length;
+        } else {
+            for (let script of [...dom.querySelectorAll("script")]) {
+                let match = /totalPage:\s*(\d+)/.exec(script.textContent);
+                if (match) {
+                    totalPage = parseInt(match[1]);
+                    break;
+                }
+            }
+        }
+
+        if (1 < totalPage) {
+            chapterUrlsUI?.showTocProgress?.(chapters);
+            let urlObj = new URL(dom.baseURI);
+            urlObj.search = "";
+            urlObj.hash = "";
+            let baseNovelUrl = urlObj.toString();
+
+            for (let page = 2; page <= totalPage; ++page) {
+                await this.rateLimitDelay();
+                let url = `${baseNovelUrl}?ajax=chapters&page=${page}`;
+                try {
+                    let response = await HttpClient.fetchJson(url);
+                    if (response?.json?.html) {
+                        let tempDom = new DOMParser().parseFromString(response.json.html, "text/html");
+                        util.setBaseTag(url, tempDom);
+                        let partialChapters = util.hyperlinksToChapterList(tempDom);
+                        if (0 < partialChapters.length) {
+                            chapterUrlsUI?.showTocProgress?.(partialChapters);
+                            chapters = chapters.concat(partialChapters);
+                        }
+                    }
+                } catch (e) {
+                    console.error("Failed to fetch TOC page: " + page, e);
+                }
+            }
+        }
+        return chapters;
     }
+
 
     extractTitleImpl(dom) {
         return dom.querySelector("h1.tit");

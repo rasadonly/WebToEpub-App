@@ -142,8 +142,12 @@ class NovelfullParser extends Parser {
     }
 
     findChapterTitle(dom) {
-        return dom.querySelector("h2").textContent;
+        return dom.querySelector("a.chr-title")?.textContent
+            ?? dom.querySelector("h2")?.textContent
+            ?? dom.querySelector("h1")?.textContent
+            ?? null;
     }
+
 
     findCoverImageUrl(dom) {
         return util.getFirstImgSrc(dom, "div.book");
