@@ -51,12 +51,19 @@ const CORS_PROXIES: Array<(url: string) => string> = CORS_PROXY_LIST.map(
 async function httpGet(url: string, extra: Record<string, string> = {}): Promise<Response> {
   let lastErr: unknown = null;
   for (const build of CORS_PROXIES) {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 7_000);
     try {
-      const r = await fetch(build(url), { headers: { ...DEFAULT_HEADERS, ...extra } });
+      const r = await fetch(build(url), {
+        headers: { ...DEFAULT_HEADERS, ...extra },
+        signal: controller.signal,
+      });
       if (r.ok) return r;
       lastErr = new Error(`HTTP ${r.status}`);
     } catch (e) {
       lastErr = e;
+    } finally {
+      window.clearTimeout(timer);
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error("All CORS proxies failed");
@@ -104,16 +111,35 @@ async function tocFreeWebNovel(
 
   const collectPage = (d: Document): ChapterLink[] => {
     const items: ChapterLink[] = [];
-    d.querySelectorAll('#idData li > a').forEach((a) => {
+    const seenPageUrls = new Set<string>();
+    const chapterPath = `${new URL(base).pathname}/chapter-`;
+    const chapterRoot = d.querySelector('#idData');
+    const scope: ParentNode = chapterRoot || d;
+    const selector = chapterRoot
+      ? 'li > a[href]'
+      : [`li > a.con[href*="${chapterPath}"]`, `a.con[href*="${chapterPath}"]`, `a[href*="${chapterPath}"]`].join(',');
+    scope.querySelectorAll(selector).forEach((a) => {
       const href = a.getAttribute('href');
       const title = (a.textContent || '').trim() || a.getAttribute('title') || '';
-      if (href) items.push({ url: absoluteUrl(base, href), title });
+      if (href) {
+        const abs = absoluteUrl(base, href);
+        if (abs.includes(chapterPath) && !seenPageUrls.has(abs)) {
+          seenPageUrls.add(abs);
+          items.push({ url: abs, title });
+        }
+      }
     });
     if (items.length === 0) {
       d.querySelectorAll('.m-newest2 a, .chapter-list a').forEach((a) => {
         const href = a.getAttribute('href');
         const title = (a.textContent || '').trim();
-        if (href) items.push({ url: absoluteUrl(base, href), title });
+        if (href) {
+          const abs = absoluteUrl(base, href);
+          if (abs.includes(chapterPath) && !seenPageUrls.has(abs)) {
+            seenPageUrls.add(abs);
+            items.push({ url: abs, title });
+          }
+        }
       });
     }
     return items;
