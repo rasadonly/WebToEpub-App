@@ -124,33 +124,50 @@ async function tocFreeWebNovel(
   firstBatch.forEach(c => results.push(c.url));
   if (onBatch && firstBatch.length > 0) onBatch(firstBatch);
 
-  // Fetch remaining pages dynamically to handle sites where totalPage is hidden
-  let p = 2;
-  let lastBatchFirstUrl = firstBatch.length > 0 ? firstBatch[0].url : '';
-  const baseUrlWithoutHtml = base.replace(/\.html$/, '');
-  
-  while (true) {
+  // FreeWebNovel paginates the TOC via an AJAX endpoint: ?ajax=chapters&page=N
+  let totalPage = 1;
+  const indexSelect = doc.querySelector('#indexselect');
+  if (indexSelect) {
+    totalPage = indexSelect.querySelectorAll('option').length || 1;
+  } else {
+    const m = /totalPage:\s*(\d+)/.exec(html);
+    if (m) totalPage = parseInt(m[1]);
+  }
+
+  const seen = new Set<string>(results);
+  for (let p = 2; p <= totalPage; p++) {
     try {
-      const nextUrl = `${baseUrlWithoutHtml}/${p}.html`;
-      const h = await getText(nextUrl);
-      if (!h) break;
-      const batch = collectPage(parseHtml(h));
-      
-      if (batch.length === 0) break;
-      // Prevent infinite loop if out-of-bounds page returns the first page again
-      if (batch[0].url === lastBatchFirstUrl) break;
-      
-      lastBatchFirstUrl = batch[0].url;
-      batch.forEach(c => results.push(c.url));
-      if (onBatch && batch.length > 0) onBatch(batch);
-      
-      p++;
-      // Safety limit
-      if (p > 2000) break;
+      const ajaxUrl = `${base}?ajax=chapters&page=${p}`;
+      let pageHtml = '';
+      try {
+        const json = await getJson(ajaxUrl);
+        if (json?.html) pageHtml = json.html;
+      } catch {
+        pageHtml = '';
+      }
+      if (!pageHtml) {
+        const raw = await getText(ajaxUrl);
+        if (!raw) continue;
+        try {
+          const j = JSON.parse(raw);
+          pageHtml = j?.html || '';
+        } catch {
+          pageHtml = raw;
+        }
+      }
+      if (!pageHtml) continue;
+      const batch = collectPage(parseHtml(pageHtml)).filter((c) => !seen.has(c.url));
+      if (batch.length === 0) continue;
+      batch.forEach((c) => {
+        seen.add(c.url);
+        results.push(c.url);
+      });
+      if (onBatch) onBatch(batch);
     } catch {
-      break;
+      /* skip page */
     }
   }
+
 
   return results;
 }
