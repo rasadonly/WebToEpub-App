@@ -771,31 +771,30 @@ export async function engineFetchChapter(
   const win = await ensureIframe();
   if (!win.parserFactory || !win.HttpClient) throw new Error('Engine not ready');
 
-  // 1) Fetch the raw page (HttpClient handles the proxy chain).
-  const xhr = await win.HttpClient.wrapFetch(url);
-  let dom: Document | null = xhr.responseXML || null;
-  if (!dom && xhr.responseText) {
-    dom = new DOMParser().parseFromString(xhr.responseText, 'text/html');
+  let parser: any = null;
+  try {
+    parser = win.parserFactory.fetch?.(url);
+  } catch {
+    /* ignore */
+  }
+  if (!parser) parser = (win as any).parser;
+  if (!parser) throw new Error('No parser found for chapter');
+
+  let dom: Document | null = null;
+  if (typeof parser.fetchChapter === 'function') {
+    try {
+      dom = await parser.fetchChapter(url);
+    } catch (e) {
+      throw new Error(`Failed to load chapter via parser: ${(e as Error).message}`);
+    }
+  } else {
+    const xhr = await win.HttpClient.wrapFetch(url);
+    dom = xhr.responseXML || null;
+    if (!dom && xhr.responseText) {
+      dom = new DOMParser().parseFromString(xhr.responseText, 'text/html');
+    }
   }
   if (!dom) throw new Error('Failed to load chapter');
-
-  // 2) Pick a parser for this URL and extract the content element.
-  type ParserLike = {
-    findContent?: (d: Document) => Element | null;
-    removeUnwantedElementsFromContentElement?: (el: Element) => void;
-    findChapterTitle?: (d: Document) => Element | string | null;
-  };
-  let parser: ParserLike | null = null;
-  try {
-    parser = win.parserFactory.fetch?.(url, dom) as ParserLike;
-  } catch {
-    /* fall through */
-  }
-  // Some sites (e.g. Novelfull) serve chapters from rotating hostname aliases,
-  // so the factory can't match a parser for the chapter URL. Fall back to the
-  // parser that was used for the table of contents.
-  const tocParser = (win as unknown as { parser?: ParserLike }).parser;
-  if (!parser?.findContent && tocParser?.findContent) parser = tocParser;
 
   let contentEl: Element | null = null;
   if (parser?.findContent) {

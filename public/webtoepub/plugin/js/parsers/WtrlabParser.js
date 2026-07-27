@@ -74,7 +74,8 @@ class WtrlabParser extends Parser {
 
         let serie_id = chapters.chapters[0].serie_id;
         try {
-            let terms = (await HttpClient.fetchJson("https://wtr-lab.com/api/v2/user/config", { bypassProxy: true })).json;
+            if (window.WTE_WEBSITE_MODE) throw new Error("Skip user config in website mode");
+            let terms = (await HttpClient.fetchJson("https://wtr-lab.com/api/v2/user/config")).json;
             terms = (terms?.config?.terms ?? []).filter(a => (a[4] == null) || (a[4].includes(serie_id)));
             terms = terms.map(a => ({ from: a[2].split("|"), to: a[1] }));
             let index = 0;
@@ -205,21 +206,22 @@ class WtrlabParser extends Parser {
             body: JSON.stringify(aiFormData),
             headers: header,
             credentials: "include",
-            parser: this
+            timeout: 30000
+            // Intentionally no parser: this to prevent 1401 from triggering proxy retry loops
         };
 
         let aiResp;
-        try {
-            aiResp = (await HttpClient.fetchJson(fetchUrl, aiOptions)).json;
-            if (aiResp?.code !== 1401) {
-                return this.buildChapter(aiResp, url);
-            }
-        } catch (e) {
-            // If it's a login-required error thrown by our custom handler, fall through
-            // to webplus. Any other error re-throw.
-            let errMsg = e.errorMessage || e.message || "";
-            if (!errMsg.includes("requires you to be logged in")) {
-                throw e;
+        if (!this.aiLimitReached) {
+            try {
+                aiResp = (await HttpClient.fetchJson(fetchUrl, aiOptions)).json;
+                if (aiResp?.code !== 1401) {
+                    return await this.buildChapter(aiResp, url);
+                } else {
+                    this.aiLimitReached = true;
+                }
+            } catch (e) {
+                console.error("AI translation fetch failed:", e);
+                // Fall through to webplus on network error
             }
         }
 
@@ -236,8 +238,9 @@ class WtrlabParser extends Parser {
             method: "POST",
             body: JSON.stringify(wpFormData),
             headers: header,
-            credentials: "include"
-            // No parser: skip custom error handler for webplus (different response format)
+            credentials: "include",
+            timeout: 30000,
+            parser: this
         };
         let wpJson = (await HttpClient.fetchJson(fetchUrl, wpOptions)).json;
         return this.buildChapterFromWebPlus(wpJson, url);
@@ -300,8 +303,16 @@ class WtrlabParser extends Parser {
             let flushBatch = async () => {
                 if (currentBatch.length === 0) return;
                 let text = currentBatch.join("\n\n");
-                let url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=" + encodeURIComponent(text);
-                let resp = await HttpClient.fetchJson(url);
+                // Add random jitter to prevent 5 concurrent workers from hitting Google Translate at the exact same millisecond and triggering a 429 Too Many Requests.
+                let jitter = Math.floor(Math.random() * 1000) + 500;
+                await new Promise(r => setTimeout(r, jitter));
+                let url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t";
+                let fetchOptions = {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: "q=" + encodeURIComponent(text)
+                };
+                let resp = await HttpClient.fetchJson(url, fetchOptions);
                 let data = resp.json;
                 let translatedText = "";
                 for (let part of data[0]) {
@@ -456,19 +467,33 @@ class WtrlabParser extends Parser {
         return "https://wtr-lab.com/" + language + "/novel/" + raw_id + "/" + this.slug + "/chapter-" + chapter_no + "?service=" + translate;
     }
 
-    buildChapter(json, url) {
+    async buildChapter(json, url) {
         let leaves = url.split("/");
         let chapter = leaves[leaves.length - 1].split("?")[0].replace("chapter-", "");
         let newDoc = Parser.makeEmptyDocForContent(url);
         let title = newDoc.dom.createElement("h1");
-        title.textContent = (this.shouldRemoveChapterNumber() ? "" : chapter + ": ") + json.chapter.title;
+        title.textContent = (this.shouldRemoveChapterNumber() ? "" : chapter + ": ") + (json.chapter?.title ?? "");
         newDoc.content.appendChild(title);
         let br = newDoc.dom.createElement("br");
         let imagecounter = 0;
-        for (let element of json.data.data.body) {
+        
+        let body = json.data?.data?.body ?? [];
+        if (typeof body === "string") {
+            try {
+                body = await WtrlabParser.decryptWtrlabBody(body);
+            } catch (e) {
+                console.error("Failed to decrypt AI body:", e);
+                body = [body];
+            }
+        }
+        if (!Array.isArray(body)) {
+            body = [body];
+        }
+
+        for (let element of body) {
             if (element == "[image]") {
                 let imgnode = newDoc.dom.createElement("img");
-                let imghref = json.data.data?.images?.[imagecounter++] ?? "";
+                let imghref = json.data?.data?.images?.[imagecounter++] ?? "";
                 if (imghref == "") {
                     continue;
                 }
@@ -510,7 +535,7 @@ class WtrlabParser extends Parser {
                 pnode.textContent = newtext;
                 newDoc.content.appendChild(pnode);
             }
-            newDoc.content.appendChild(br);
+            newDoc.content.appendChild(br.cloneNode());
         }
         return newDoc.dom;
     }

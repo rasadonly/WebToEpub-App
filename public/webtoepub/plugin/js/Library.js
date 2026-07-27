@@ -288,6 +288,7 @@ class Library { // eslint-disable-line no-unused-vars
             }
         } else {
             LibArray = await Library.LibGetFromStorage("LibArray");
+            if (!LibArray) LibArray = [];
             if (LibArray.filter(a => a == AppendID).length > 0) {
                 return;
             }
