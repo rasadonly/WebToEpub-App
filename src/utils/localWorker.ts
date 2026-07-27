@@ -130,43 +130,55 @@ async function tocFreeWebNovel(
   if (indexSelect) {
     totalPage = indexSelect.querySelectorAll('option').length || 1;
   } else {
-    const m = /totalPage:\s*(\d+)/.exec(html);
-    if (m) totalPage = parseInt(m[1]);
+    for (const script of Array.from(doc.querySelectorAll('script'))) {
+      const m = /totalPage:\s*(\d+)/.exec(script.textContent || '');
+      if (m) { totalPage = parseInt(m[1]); break; }
+    }
+    if (totalPage === 1) {
+      const m = /totalPage:\s*(\d+)/.exec(html);
+      if (m) totalPage = parseInt(m[1]);
+    }
   }
+
+  // Some proxies mangle JSON responses, so try JSON first then raw HTML.
+  const fetchTocPage = async (pageUrl: string): Promise<string> => {
+    try {
+      const json = await getJson(pageUrl);
+      if (json?.html) return json.html;
+    } catch {
+      /* fall through */
+    }
+    const raw = await getText(pageUrl);
+    if (!raw) return '';
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed?.html || '';
+    } catch {
+      return raw.includes('<li') ? raw : '';
+    }
+  };
 
   const seen = new Set<string>(results);
   for (let p = 2; p <= totalPage; p++) {
-    try {
-      const ajaxUrl = `${base}?ajax=chapters&page=${p}`;
-      let pageHtml = '';
+    const ajaxUrl = `${base}?ajax=chapters&page=${p}`;
+    let pageHtml = '';
+    for (let attempt = 0; attempt < 3 && !pageHtml; attempt++) {
       try {
-        const json = await getJson(ajaxUrl);
-        if (json?.html) pageHtml = json.html;
+        pageHtml = await fetchTocPage(ajaxUrl);
       } catch {
-        pageHtml = '';
+        /* retry */
       }
-      if (!pageHtml) {
-        const raw = await getText(ajaxUrl);
-        if (!raw) continue;
-        try {
-          const j = JSON.parse(raw);
-          pageHtml = j?.html || '';
-        } catch {
-          pageHtml = raw;
-        }
-      }
-      if (!pageHtml) continue;
-      const batch = collectPage(parseHtml(pageHtml)).filter((c) => !seen.has(c.url));
-      if (batch.length === 0) continue;
-      batch.forEach((c) => {
-        seen.add(c.url);
-        results.push(c.url);
-      });
-      if (onBatch) onBatch(batch);
-    } catch {
-      /* skip page */
     }
+    if (!pageHtml) continue;
+    const batch = collectPage(parseHtml(pageHtml)).filter((c) => !seen.has(c.url));
+    if (batch.length === 0) continue;
+    batch.forEach((c) => {
+      seen.add(c.url);
+      results.push(c.url);
+    });
+    if (onBatch) onBatch(batch);
   }
+
 
 
   return results;
