@@ -111,6 +111,7 @@ async function tocFreeWebNovel(
 
   const collectPage = (d: Document): ChapterLink[] => {
     const items: ChapterLink[] = [];
+    const seenPageUrls = new Set<string>();
     const chapterPath = `${new URL(base).pathname}/chapter-`;
     const selectors = [
       '#idData li > a[href]',
@@ -123,7 +124,10 @@ async function tocFreeWebNovel(
       const title = (a.textContent || '').trim() || a.getAttribute('title') || '';
       if (href) {
         const abs = absoluteUrl(base, href);
-        if (abs.includes(chapterPath)) items.push({ url: abs, title });
+        if (abs.includes(chapterPath) && !seenPageUrls.has(abs)) {
+          seenPageUrls.add(abs);
+          items.push({ url: abs, title });
+        }
       }
     });
     if (items.length === 0) {
@@ -132,7 +136,10 @@ async function tocFreeWebNovel(
         const title = (a.textContent || '').trim();
         if (href) {
           const abs = absoluteUrl(base, href);
-          if (abs.includes(chapterPath)) items.push({ url: abs, title });
+          if (abs.includes(chapterPath) && !seenPageUrls.has(abs)) {
+            seenPageUrls.add(abs);
+            items.push({ url: abs, title });
+          }
         }
       });
     }
