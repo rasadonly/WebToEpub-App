@@ -777,12 +777,29 @@ export async function engineFetchChapter(
   } catch {
     /* fall through */
   }
+  // Some sites (e.g. Novelfull) serve chapters from rotating hostname aliases,
+  // so the factory can't match a parser for the chapter URL. Fall back to the
+  // parser that was used for the table of contents.
+  const tocParser = (win as unknown as { parser?: ParserLike }).parser;
+  if (!parser?.findContent && tocParser?.findContent) parser = tocParser;
 
   let contentEl: Element | null = null;
   if (parser?.findContent) {
     try { contentEl = parser.findContent(dom); } catch { /* ignore */ }
   }
+  if (!contentEl) {
+    const GENERIC = [
+      '#chr-content', '#chapter-content', '.chapter-content', '.chapter-c',
+      '#chapterContent', '#article', 'div.txt', '#content', '.content-inner',
+      'article',
+    ];
+    for (const sel of GENERIC) {
+      const el = dom.querySelector(sel);
+      if (el && (el.textContent || '').trim().length > 100) { contentEl = el; break; }
+    }
+  }
   if (!contentEl) contentEl = dom.body;
+
 
   // 3) Extract title from parser or dom.
   let title = chapterTitle || '';
