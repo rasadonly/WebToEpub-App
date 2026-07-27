@@ -104,13 +104,13 @@ async function tocFreeWebNovel(
 
   const collectPage = (d: Document): ChapterLink[] => {
     const items: ChapterLink[] = [];
-    d.querySelectorAll('#idData li > a').forEach((a) => {
+    d.querySelectorAll('#idData li > a, li > a.con, li > a[href], a.con[href]').forEach((a) => {
       const href = a.getAttribute('href');
       const title = (a.textContent || '').trim() || a.getAttribute('title') || '';
       if (href) items.push({ url: absoluteUrl(base, href), title });
     });
     if (items.length === 0) {
-      d.querySelectorAll('.m-newest2 a, .chapter-list a').forEach((a) => {
+      d.querySelectorAll('.m-newest2 a, .chapter-list a, a[href*="/chapter-"]').forEach((a) => {
         const href = a.getAttribute('href');
         const title = (a.textContent || '').trim();
         if (href) items.push({ url: absoluteUrl(base, href), title });
