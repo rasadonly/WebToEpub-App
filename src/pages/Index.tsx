@@ -134,7 +134,7 @@ const Index = () => {
         {/* SEO / Info Section */}
         <div className="max-w-4xl mx-auto mt-16 p-6 sm:p-8 bg-card rounded-xl border shadow-sm space-y-8 text-card-foreground">
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold tracking-tight">How to turn a web page link into an EPUB</h2>
+            <h2 className="text-2xl font-semibold tracking-tight">How to turn any novel from a light novel site into an EPUB</h2>
             <p className="text-muted-foreground leading-relaxed">
               LinkToEpub is a powerful tool designed to convert web novels, online books, and web page links into clean, device-ready EPUB files. It automatically extracts the table of contents and chapter content, skipping ads and clutter.
             </p>
