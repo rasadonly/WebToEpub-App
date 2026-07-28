@@ -64,10 +64,6 @@ class FetchErrorHandler {
     }
 
     promptUserForRetry(url, wrapOptions, response, failError) {
-        if (window.self !== window.top) {
-            failError.isUserCancel = true;
-            return Promise.reject(failError);
-        }
         let msg;
         if (wrapOptions.retry.HTTP === 403) {
             msg = new Error(UIText.Warning.warning403ErrorResponse(new URL(response.url).hostname) + this.makeFailCanRetryMessage(url, response.status));
@@ -284,14 +280,6 @@ class HttpClient {
                         
                         if (!proxyWrapOptions.parser?.isCustomError(ret)) {
                             return ret;
-                        } else {
-                            let CustomErrorResponse = proxyWrapOptions.parser.setCustomErrorResponse(url, proxyWrapOptions, ret);
-                            return proxyWrapOptions.errorHandler.onResponseError(
-                                CustomErrorResponse.url,
-                                CustomErrorResponse.wrapOptions,
-                                CustomErrorResponse.response,
-                                CustomErrorResponse.errorMessage
-                            );
                         }
                     } else {
                         throw new Error(`status: ${response.status}`);

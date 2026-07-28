@@ -211,18 +211,14 @@ class WtrlabParser extends Parser {
         };
 
         let aiResp;
-        if (!this.aiLimitReached) {
-            try {
-                aiResp = (await HttpClient.fetchJson(fetchUrl, aiOptions)).json;
-                if (aiResp?.code !== 1401) {
-                    return await this.buildChapter(aiResp, url);
-                } else {
-                    this.aiLimitReached = true;
-                }
-            } catch (e) {
-                console.error("AI translation fetch failed:", e);
-                // Fall through to webplus on network error
+        try {
+            aiResp = (await HttpClient.fetchJson(fetchUrl, aiOptions)).json;
+            if (aiResp?.code !== 1401) {
+                return await this.buildChapter(aiResp, url);
             }
+        } catch (e) {
+            console.error("AI translation fetch failed:", e);
+            // Fall through to webplus on network error
         }
 
         // AI requires login for this chapter — fall back to webplus (free, AES-GCM encrypted raw text)
@@ -239,8 +235,8 @@ class WtrlabParser extends Parser {
             body: JSON.stringify(wpFormData),
             headers: header,
             credentials: "include",
-            timeout: 30000,
-            parser: this
+            timeout: 30000
+            // No parser: skip custom error handler for webplus (different response format)
         };
         let wpJson = (await HttpClient.fetchJson(fetchUrl, wpOptions)).json;
         return this.buildChapterFromWebPlus(wpJson, url);
@@ -303,14 +299,12 @@ class WtrlabParser extends Parser {
             let flushBatch = async () => {
                 if (currentBatch.length === 0) return;
                 let text = currentBatch.join("\n\n");
-                // Add random jitter to prevent 5 concurrent workers from hitting Google Translate at the exact same millisecond and triggering a 429 Too Many Requests.
-                let jitter = Math.floor(Math.random() * 1000) + 500;
-                await new Promise(r => setTimeout(r, jitter));
                 let url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t";
                 let fetchOptions = {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: "q=" + encodeURIComponent(text)
+                    body: "q=" + encodeURIComponent(text),
+                    bypassProxy: true
                 };
                 let resp = await HttpClient.fetchJson(url, fetchOptions);
                 let data = resp.json;
