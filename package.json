@@ -1,0 +1,19 @@
+{
+  "name": "link-to-epub-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "20.x"
+  },
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "compression": "^1.7.4",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "jszip": "^3.10.1",
+    "linkedom": "^0.18.5"
+  }
+}
