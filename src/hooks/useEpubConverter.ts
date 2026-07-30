@@ -333,7 +333,18 @@ export function useEpubConverter() {
   }, []);
 
   const stopConversion = useCallback(async () => {
-    addLog('Stop requested — aborting engine…');
+    addLog('Stop requested — aborting…');
+    stopPollRef.current?.();
+    stopPollRef.current = null;
+    if (jobIdRef.current) {
+      try {
+        await backendCancelJob(jobIdRef.current);
+      } catch {
+        /* ignore */
+      }
+      jobIdRef.current = null;
+      setServerJob(null);
+    }
     await engineAbort();
     updateProgress({ status: 'error', message: 'Stopped by user.' });
     toast({
@@ -342,6 +353,14 @@ export function useEpubConverter() {
       duration: 4000,
     });
   }, [addLog, updateProgress, toast]);
+
+  /** Manually re-download a finished server job (e.g. after reopening the page). */
+  const downloadServerJob = useCallback(async () => {
+    if (!serverJob || !serverJob.ready) return;
+    await backendDownload(serverJob);
+    clearActiveJobId();
+  }, [serverJob]);
+
 
   const isFetchingToc = progress.status === 'fetching-toc';
   const isGenerating =
