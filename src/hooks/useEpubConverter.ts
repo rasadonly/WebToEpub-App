@@ -147,7 +147,7 @@ export function useEpubConverter() {
           }
         }
 
-        if (isKnownSite) {
+        if (!usedFastPath && isKnownSite) {
           try {
             addLog(`Fast-fetching via direct parser (${siteConfig!.name})…`);
             await fetchChapterLinksLive(data.tocUrl, data.tocSelector, onBatch);
