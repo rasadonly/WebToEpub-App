@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { ConversionProgress } from '@/types';
 import { ConversionFormData } from '@/components/ConversionForm';
 import { useToast } from '@/hooks/use-toast';
@@ -10,6 +10,18 @@ import {
 } from '@/utils/webtoepub/bridge';
 import { fetchChapterLinksLive, ChapterLink } from '@/utils/localWorker';
 import { getSiteConfig } from '@/utils/siteConfigs';
+import {
+  isBackendEnabled,
+  backendToc,
+  backendStartJob,
+  backendCancelJob,
+  backendDownload,
+  pollJob,
+  getActiveJobId,
+  clearActiveJobId,
+  BackendJob,
+} from '@/utils/backend';
+
 
 export interface ChapterItem {
   id: string;
