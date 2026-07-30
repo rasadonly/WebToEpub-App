@@ -378,5 +378,8 @@ export function useEpubConverter() {
     isFetchingToc,
     isGenerating,
     isConverting: isFetchingToc || isGenerating,
+    serverJob,
+    downloadServerJob,
   };
+
 }
