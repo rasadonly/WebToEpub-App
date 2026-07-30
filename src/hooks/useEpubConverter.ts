@@ -216,6 +216,56 @@ export function useEpubConverter() {
           throw new Error('No chapters selected.');
         }
 
+        const meta = {
+          title: data.metadata.title || 'Novel',
+          author: data.metadata.author || 'Unknown Author',
+          description: data.metadata.description || '',
+          language: data.metadata.language || 'en',
+          fileName: data.metadata.fileName || `${data.metadata.title || 'novel'}.epub`,
+          coverUrl: data.metadata.coverUrl || '',
+          tocUrl: data.tocUrl,
+        };
+
+        // --- Server-side conversion (keeps running if the page is closed) ---
+        if (isBackendEnabled()) {
+          try {
+            updateProgress({
+              status: 'processing-chapters',
+              currentChapter: 0,
+              totalChapters: orderedChapters.length,
+              message: 'Starting server conversion…',
+            });
+            addLog(`Sending ${orderedChapters.length} chapters to the server…`);
+            const job = await backendStartJob({
+              tocUrl: data.tocUrl,
+              chapters: orderedChapters.map(c => ({ url: c.url, title: c.title })),
+              metadata: meta,
+            });
+            jobIdRef.current = job.id;
+            addLog(`Server job started (${job.id}). You can close this page safely.`);
+            stopPollRef.current?.();
+            stopPollRef.current = pollJob(job.id, j => {
+              applyJob(j);
+              if (j.status === 'done') {
+                addLog('Server finished — downloading EPUB…');
+                backendDownload(j)
+                  .then(() => clearActiveJobId())
+                  .catch(err => addLog(`Download failed: ${(err as Error).message}`));
+                toast({
+                  title: 'Success!',
+                  description: `Converted ${j.completed} chapters on the server.`,
+                  duration: 5000,
+                });
+              }
+            });
+            return;
+          } catch (serverErr) {
+            addLog(
+              `Server conversion unavailable (${(serverErr as Error).message}) — converting in browser…`
+            );
+          }
+        }
+
         updateProgress({
           status: 'processing-chapters',
           currentChapter: 0,
@@ -225,6 +275,7 @@ export function useEpubConverter() {
         addLog(
           `Handing ${orderedChapters.length} chapters to the engine for fetch + pack`
         );
+
 
         await enginePackEpub(
           orderedChapters,
