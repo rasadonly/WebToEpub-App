@@ -2,6 +2,7 @@
 // Runs on Node, so it fetches sites DIRECTLY (no CORS proxy) — much faster.
 // CORS proxies are kept only as a fallback when a site blocks the dyno IP.
 import { parseHTML } from "linkedom";
+import crypto from "node:crypto";
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
@@ -328,6 +329,232 @@ async function tocWtrLab(url) {
   }));
 }
 
+// ---------------------------------------------------------------------------
+// wtr-lab chapter bodies
+//
+// The page HTML is a Next.js shell with no text, so chapter text must come from
+// POST /api/reader/get. The "ai" translation needs a login, so we use the free
+// "webplus" service, which returns AES-256-GCM encrypted raw (Chinese) text.
+// Reads are metered per IP behind Cloudflare Turnstile, so requests carry
+// browser-like headers and rotate through the proxy pool when challenged.
+// ---------------------------------------------------------------------------
+
+const WTRLAB_AI_LOCKED = new Set();
+const WTRLAB_KEY = "IJAFUUxjM25hyzL2AZrn0wl7cESED6Ru";
+
+function decryptWtrlabBody(encrypted) {
+  if (typeof encrypted !== "string") return encrypted;
+  let isArray = false;
+  let dataStr = encrypted;
+  if (dataStr.startsWith("arr:")) {
+    isArray = true;
+    dataStr = dataStr.slice(4);
+  } else if (dataStr.startsWith("str:")) {
+    dataStr = dataStr.slice(4);
+  } else {
+    return encrypted;
+  }
+  const parts = dataStr.split(":");
+  if (parts.length < 3) return encrypted;
+  const iv = Buffer.from(parts[0], "base64");
+  const tag = Buffer.from(parts[1], "base64");
+  const cipher = Buffer.from(parts.slice(2).join(":"), "base64");
+  const decipher = crypto.createDecipheriv("aes-256-gcm", Buffer.from(WTRLAB_KEY), iv);
+  decipher.setAuthTag(tag);
+  const out = Buffer.concat([decipher.update(cipher), decipher.final()]).toString("utf8");
+  return isArray ? JSON.parse(out) : out;
+}
+
+const WTRLAB_HEADERS = {
+  "Content-Type": "application/json",
+  Accept: "application/json, text/plain, */*",
+  "Accept-Language": "en-US,en;q=0.9",
+  "User-Agent": UA,
+  Origin: "https://wtr-lab.com",
+  Referer: "https://wtr-lab.com/",
+  "Sec-Fetch-Site": "same-origin",
+  "Sec-Fetch-Mode": "cors",
+  "Sec-Fetch-Dest": "empty",
+  "sec-ch-ua": '"Chromium";v="123", "Not:A-Brand";v="8"',
+  "sec-ch-ua-mobile": "?0",
+  "sec-ch-ua-platform": '"Windows"',
+};
+
+/** POSTs to /api/reader/get, rotating egress routes when Turnstile blocks one. */
+async function wtrlabReaderGet(payload) {
+  const body = JSON.stringify(payload);
+  const target = "https://wtr-lab.com/api/reader/get";
+  let lastErr = null;
+  // Direct first (fastest); proxies act as extra egress IPs with their own quota.
+  for (const proxy of PROXIES) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 25000);
+        let res;
+        try {
+          res = await fetch(buildUrl(proxy, target), {
+            method: "POST",
+            headers: WTRLAB_HEADERS,
+            body,
+            signal: ctrl.signal,
+          });
+        } finally {
+          clearTimeout(timer);
+        }
+        if (!res.ok) {
+          lastErr = new Error(`HTTP ${res.status}`);
+          continue;
+        }
+        const json = await res.json();
+        if (json?.requireTurnstile) {
+          lastErr = new Error("Cloudflare Turnstile challenge");
+          break; // this egress IP is burned — move to the next route
+        }
+        return json;
+      } catch (e) {
+        lastErr = e;
+      }
+      await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+    }
+  }
+  throw lastErr || new Error("wtr-lab reader request failed");
+}
+
+/** Translates raw paragraphs to English via the public Google translate endpoint. */
+async function translateToEnglish(paragraphs) {
+  if (!paragraphs.length) return paragraphs;
+  const sample = paragraphs.slice(0, 5).join(" ");
+  const latin = (sample.match(/[a-zA-Z]/g) || []).length;
+  if (latin > sample.length * 0.5) return paragraphs; // already English
+
+  const out = [];
+  const SEP = "\n\n";
+  let batch = [];
+  let size = 0;
+  const flush = async () => {
+    if (!batch.length) return;
+    const text = batch.join(SEP);
+    try {
+      const res = await fetch(
+        "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded;charset=utf-8",
+            "User-Agent": UA,
+          },
+          body: "q=" + encodeURIComponent(text),
+        }
+      );
+      const json = await res.json();
+      let translated = "";
+      for (const part of json?.[0] || []) if (part?.[0]) translated += part[0];
+      const pieces = translated.split(SEP).map((s) => s.trim());
+      out.push(...(pieces.length === batch.length ? pieces : [translated]));
+    } catch {
+      out.push(...batch); // fall back to the raw text rather than failing the chapter
+    }
+    batch = [];
+    size = 0;
+  };
+  for (const p of paragraphs) {
+    if (size + p.length > 1800) await flush();
+    batch.push(p);
+    size += p.length + SEP.length;
+  }
+  await flush();
+  return out.length ? out : paragraphs;
+}
+
+async function bodyWtrLab(chapterUrl) {
+  const u = new URL(chapterUrl);
+  const parts = u.pathname.split("/").filter(Boolean);
+  const language = parts[0] || "en";
+  const seriePart = parts.find((p) => p.startsWith("serie-"));
+  let rawId = seriePart?.slice(6);
+  if (!rawId) {
+    const idx = parts.indexOf("novel");
+    if (idx >= 0 && /^\d+$/.test(parts[idx + 1] || "")) rawId = parts[idx + 1];
+  }
+  const last = parts[parts.length - 1].replace("chapter-", "").split("?")[0];
+  const chapterNo = Number(last);
+  if (!rawId || !Number.isFinite(chapterNo)) {
+    throw new Error("wtr-lab: could not read serie id / chapter number from URL");
+  }
+
+  const base = {
+    language,
+    raw_id: Number(rawId),
+    chapter_no: chapterNo,
+    retry: false,
+    force_retry: false,
+  };
+
+  // AI translation is best quality but needs a logged-in account (code 1401).
+  // Each request counts against the per-IP Turnstile meter, so once a novel has
+  // answered 1401 we stop asking and go straight to webplus for later chapters.
+  let paragraphs = null;
+  let title = "";
+  let glossary = null;
+  let patch = null;
+  if (!WTRLAB_AI_LOCKED.has(rawId)) {
+    try {
+      const ai = await wtrlabReaderGet({ ...base, translate: "ai" });
+      title = ai?.chapter?.title || title;
+      if (ai?.code === 1401) {
+        WTRLAB_AI_LOCKED.add(rawId);
+      } else {
+        let aiBody = ai?.data?.data?.body;
+        if (typeof aiBody === "string") aiBody = decryptWtrlabBody(aiBody);
+        if (Array.isArray(aiBody) && aiBody.length) {
+          paragraphs = aiBody;
+          glossary = ai?.data?.data?.glossary_data?.terms || null;
+          patch = ai?.data?.data?.patch || null;
+        }
+      }
+    } catch {
+      /* fall through to webplus */
+    }
+  }
+
+
+  if (!paragraphs) {
+    const wp = await wtrlabReaderGet({ ...base, translate: "webplus" });
+    title = wp?.chapter?.title || title;
+    const enc = wp?.data?.data?.body;
+    if (typeof enc !== "string" || !enc.length) {
+      throw new Error(`wtr-lab returned no content for chapter ${chapterNo}`);
+    }
+    const decrypted = decryptWtrlabBody(enc);
+    paragraphs = Array.isArray(decrypted) ? decrypted : [decrypted];
+    paragraphs = await translateToEnglish(paragraphs.filter((p) => String(p).trim()));
+  }
+
+  // AI bodies use ※n⛬ placeholders that map into the chapter glossary.
+  if (glossary?.length || patch?.length) {
+    paragraphs = paragraphs.map((raw) => {
+      let text = String(raw);
+      for (let i = 0; i < (glossary?.length || 0); i++) {
+        const term = glossary[i]?.[0] ?? `※${i}⛬`;
+        text = text.replaceAll(`※${i}⛬`, term).replaceAll(`※${i}〓`, term);
+      }
+      for (const p of patch || []) {
+        if (p?.zh) text = text.replaceAll(p.zh, ` ${p.en ?? ""}`);
+      }
+      return text;
+    });
+  }
+
+  const esc = (s) =>
+    String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const heading = title ? `<h1>${esc(chapterNo)}: ${esc(title)}</h1>` : "";
+  return heading + paragraphs.map((p) => `<p>${esc(p)}</p>`).join("\n");
+
+}
+
+
+
 function wattpadStoryId(url) {
   return url.match(/(?:\/story\/|story\/)([0-9]+)/)?.[1] || url.match(/wattpad\.com\/([0-9]+)/)?.[1] || null;
 }
@@ -470,6 +697,9 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
         return bodyNovelArrow(chapterUrl);
       case "wattpad":
         return bodyWattpad(chapterUrl);
+      case "wtrlab":
+        return bodyWtrLab(chapterUrl);
+
       default:
         return bodyGeneric(chapterUrl, contentSelector);
     }
