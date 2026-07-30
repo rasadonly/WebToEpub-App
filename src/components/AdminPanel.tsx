@@ -217,6 +217,67 @@ export function AdminPanel({ open, onOpenChange, hideTrigger }: { open?: boolean
         </DialogHeader>
         
         <div className="space-y-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Server className="h-4 w-4" />
+                Server backend (Heroku)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between gap-4">
+                <div className="text-xs text-muted-foreground">
+                  When on, conversions run on the server and keep going even if the page is
+                  closed. When off, everything runs in the browser exactly as before.
+                </div>
+                <Switch
+                  checked={serverOn}
+                  onCheckedChange={(v) => {
+                    setServerOn(v);
+                    setBackendEnabled(v);
+                    toast({ title: v ? 'Server backend enabled' : 'Server backend disabled' });
+                  }}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="backendUrl">Backend URL</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="backendUrl"
+                    value={serverUrl}
+                    onChange={(e) => setServerUrl(e.target.value)}
+                    placeholder={DEFAULT_BACKEND_URL}
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      setBackendUrl(serverUrl);
+                      setServerStatus('checking');
+                      const ok = await backendHealthy();
+                      setServerStatus(ok ? 'up' : 'down');
+                      toast({
+                        title: ok ? 'Backend reachable' : 'Backend unreachable',
+                        variant: ok ? undefined : 'destructive',
+                      });
+                    }}
+                  >
+                    Save & Test
+                  </Button>
+                </div>
+                {serverStatus !== 'unknown' && (
+                  <p className="text-xs text-muted-foreground">
+                    Status:{' '}
+                    {serverStatus === 'checking'
+                      ? 'checking…'
+                      : serverStatus === 'up'
+                        ? 'online'
+                        : 'offline (app falls back to browser mode)'}
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
           <Button
             onClick={() => setIsAddingNew(true)}
             className="w-full"
@@ -224,6 +285,7 @@ export function AdminPanel({ open, onOpenChange, hideTrigger }: { open?: boolean
             <Plus className="mr-2 h-4 w-4" />
             Add New Site
           </Button>
+
 
           <div className="grid gap-4">
             {sites.map((site) => (
