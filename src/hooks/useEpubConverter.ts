@@ -279,15 +279,8 @@ export function useEpubConverter() {
 
         await enginePackEpub(
           orderedChapters,
-          {
-            title: data.metadata.title || 'Novel',
-            author: data.metadata.author || 'Unknown Author',
-            description: data.metadata.description || '',
-            language: data.metadata.language || 'en',
-            fileName: data.metadata.fileName || `${data.metadata.title || 'novel'}.epub`,
-            coverUrl: data.metadata.coverUrl || '',
-            tocUrl: data.tocUrl,
-          },
+          meta,
+
           ({ current, total, message }) => {
             updateProgress({
               currentChapter: current,
