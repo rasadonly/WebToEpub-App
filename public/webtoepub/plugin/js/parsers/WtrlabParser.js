@@ -190,80 +190,100 @@ class WtrlabParser extends Parser {
         }
 
         let fetchUrl = "https://wtr-lab.com/api/reader/get";
-        let header = { "Content-Type": "application/json;charset=UTF-8" };
 
         // Try AI translation first (best quality — English output)
-        let aiFormData = {
+        let aiResp = await this.readerGet({
             "translate": "ai",
             "language": language,
             "raw_id": id,
             "chapter_no": chapter,
             "retry": false,
             "force_retry": false
-        };
-        let aiOptions = {
-            method: "POST",
-            body: JSON.stringify(aiFormData),
-            headers: header,
-            credentials: "include",
-            timeout: 30000
-            // Intentionally no parser: this to prevent 1401 from triggering proxy retry loops
-        };
-
-        let aiResp;
-        try {
-            aiResp = (await HttpClient.fetchJson(fetchUrl, aiOptions)).json;
+        }, fetchUrl);
+        if (aiResp && aiResp.code !== 1401) {
             let aiBody = aiResp?.data?.data?.body;
             let hasAiBody = (Array.isArray(aiBody) && aiBody.length > 0)
                 || (typeof aiBody === "string" && aiBody.length > 0);
-            if (aiResp?.code !== 1401 && hasAiBody) {
+            if (hasAiBody) {
                 return await this.buildChapter(aiResp, url);
             }
-        } catch (e) {
-            console.error("AI translation fetch failed:", e);
-            // Fall through to webplus on network error
         }
 
         // AI requires login for this chapter — fall back to webplus (free, AES-GCM encrypted raw text)
-        let wpFormData = {
+        let wpJson = await this.readerGet({
             "translate": "webplus",
             "language": language,
             "raw_id": id,
             "chapter_no": chapter,
             "retry": false,
             "force_retry": false
-        };
-        let wpOptions = {
-            method: "POST",
-            body: JSON.stringify(wpFormData),
-            headers: header,
-            credentials: "include",
-            timeout: 30000
-            // No parser: skip custom error handler for webplus (different response format)
-        };
-        // Chapters after the public AI preview limit use webplus. Its endpoint
-        // occasionally returns an empty/incomplete response through a CORS
-        // proxy; a single rejection used to stop EPUB collection at that
-        // chapter even though Live Reader worked when the chapter was retried.
-        let lastError;
-        for (let attempt = 0; attempt < 3; attempt++) {
+        }, fetchUrl);
+        let encryptedBody = wpJson?.data?.data?.body;
+        if (typeof encryptedBody === "string" && encryptedBody.length > 0) {
+            return await this.buildChapterFromWebPlus(wpJson, url);
+        }
+
+        if (WtrlabParser.turnstileBlocked) {
+            throw new Error("wtr-lab is asking for a Cloudflare Turnstile challenge "
+                + "(free anonymous limit reached for every available network route). "
+                + "Chapter " + chapter + " and later chapters cannot be downloaded right now — "
+                + "wait a while and resume, or download in smaller batches.");
+        }
+        throw new Error("wtr-lab failed to load chapter " + chapter);
+    }
+
+    /**
+     * POST to /api/reader/get, rotating CORS proxies.
+     *
+     * wtr-lab meters anonymous reads per source IP (threshold 15) and then
+     * answers every further request with `requireTurnstile`. Each CORS proxy
+     * exits from a different IP, so when one starts returning the challenge we
+     * move to the next proxy instead of failing the whole EPUB at that chapter.
+     */
+    async readerGet(formData, fetchUrl) {
+        let header = { "Content-Type": "application/json;charset=UTF-8" };
+        let body = JSON.stringify(formData);
+        let proxies = (HttpClient.CORS_PROXIES || []).map(p => p.url);
+        WtrlabParser.blockedProxies = WtrlabParser.blockedProxies || new Set();
+        let usable = proxies.filter(u => !WtrlabParser.blockedProxies.has(u));
+        if (usable.length === 0) {
+            // Everything is challenged — give them one more chance in case the
+            // per-IP counter has rolled over since we last tried.
+            WtrlabParser.blockedProxies.clear();
+            usable = proxies;
+        }
+
+        let lastJson = null;
+        for (let i = 0; i < usable.length; i++) {
+            let proxyUrl = usable[(WtrlabParser.proxyCursor + i) % usable.length];
             try {
-                let wpJson = (await HttpClient.fetchJson(fetchUrl, wpOptions)).json;
-                let encryptedBody = wpJson?.data?.data?.body;
-                if (typeof encryptedBody !== "string" || encryptedBody.length === 0) {
-                    throw new Error("wtr-lab webplus returned an empty response");
+                let response = await fetch(proxyUrl + encodeURIComponent(fetchUrl), {
+                    method: "POST",
+                    headers: header,
+                    body: body
+                });
+                let text = await response.text();
+                let json = null;
+                try { json = JSON.parse(text); } catch (e) { json = null; }
+                if (json === null) continue;
+
+                if (json.requireTurnstile) {
+                    WtrlabParser.blockedProxies.add(proxyUrl);
+                    WtrlabParser.turnstileBlocked = true;
+                    continue;
                 }
-                return await this.buildChapterFromWebPlus(wpJson, url);
-            } catch (error) {
-                lastError = error;
-                if (attempt < 2) {
-                    await util.sleep(2000 * (attempt + 1));
-                }
+                // This proxy still has quota — keep using it for the next chapter.
+                WtrlabParser.proxyCursor = (WtrlabParser.proxyCursor + i) % usable.length;
+                WtrlabParser.turnstileBlocked = false;
+                lastJson = json;
+                return json;
+            } catch (e) {
+                /* try the next proxy */
             }
         }
-        throw new Error("wtr-lab failed to load chapter " + chapter + " after 3 attempts: " +
-            (lastError?.message || lastError));
+        return lastJson;
     }
+
 
     static async decryptWtrlabBody(encryptedStr) {
         if (typeof encryptedStr !== "string") {
