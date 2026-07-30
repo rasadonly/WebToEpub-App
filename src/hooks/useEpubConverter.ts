@@ -131,6 +131,22 @@ export function useEpubConverter() {
         };
 
         let usedFastPath = false;
+
+        // Server backend first: it fetches directly (no CORS proxy), so it's fastest.
+        if (isBackendEnabled()) {
+          try {
+            addLog('Fetching chapter list from the server…');
+            const { chapters } = await backendToc(data.tocUrl, data.tocSelector);
+            if (chapters?.length) {
+              onBatch(chapters as ChapterLink[]);
+              usedFastPath = true;
+              addLog(`Server returned ${chapters.length} chapters`);
+            }
+          } catch (e) {
+            addLog(`Server TOC fetch failed (${(e as Error).message}), falling back…`);
+          }
+        }
+
         if (isKnownSite) {
           try {
             addLog(`Fast-fetching via direct parser (${siteConfig!.name})…`);
