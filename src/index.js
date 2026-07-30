@@ -137,7 +137,13 @@ async function runJob(job, { tocUrl, providedChapters, metadata, options, select
   job.phase = `Downloading ${list.length} chapters`;
   touch();
 
-  const results = await mapPool(list, CONCURRENCY, async (c, i) => {
+  // wtr-lab meters anonymous reads per IP behind Cloudflare Turnstile, so it
+  // must be crawled gently; other sites can use the full pool.
+  const gentle = /wtr-lab\.com/i.test(list[0]?.url || "");
+  const poolSize = gentle ? 2 : CONCURRENCY;
+
+  const results = await mapPool(list, poolSize, async (c, i) => {
+
     if (job.cancelled) return null;
     try {
       const content = await fetchChapterContent(c.url, selector);
