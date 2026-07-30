@@ -213,7 +213,10 @@ class WtrlabParser extends Parser {
         let aiResp;
         try {
             aiResp = (await HttpClient.fetchJson(fetchUrl, aiOptions)).json;
-            if (aiResp?.code !== 1401) {
+            let aiBody = aiResp?.data?.data?.body;
+            let hasAiBody = (Array.isArray(aiBody) && aiBody.length > 0)
+                || (typeof aiBody === "string" && aiBody.length > 0);
+            if (aiResp?.code !== 1401 && hasAiBody) {
                 return await this.buildChapter(aiResp, url);
             }
         } catch (e) {
@@ -238,8 +241,28 @@ class WtrlabParser extends Parser {
             timeout: 30000
             // No parser: skip custom error handler for webplus (different response format)
         };
-        let wpJson = (await HttpClient.fetchJson(fetchUrl, wpOptions)).json;
-        return this.buildChapterFromWebPlus(wpJson, url);
+        // Chapters after the public AI preview limit use webplus. Its endpoint
+        // occasionally returns an empty/incomplete response through a CORS
+        // proxy; a single rejection used to stop EPUB collection at that
+        // chapter even though Live Reader worked when the chapter was retried.
+        let lastError;
+        for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+                let wpJson = (await HttpClient.fetchJson(fetchUrl, wpOptions)).json;
+                let encryptedBody = wpJson?.data?.data?.body;
+                if (typeof encryptedBody !== "string" || encryptedBody.length === 0) {
+                    throw new Error("wtr-lab webplus returned an empty response");
+                }
+                return await this.buildChapterFromWebPlus(wpJson, url);
+            } catch (error) {
+                lastError = error;
+                if (attempt < 2) {
+                    await util.sleep(2000 * (attempt + 1));
+                }
+            }
+        }
+        throw new Error("wtr-lab failed to load chapter " + chapter + " after 3 attempts: " +
+            (lastError?.message || lastError));
     }
 
     static async decryptWtrlabBody(encryptedStr) {
