@@ -391,14 +391,23 @@ async function tocNovelBin(
 async function tocWtrLab(url: string): Promise<string[]> {
   const u = new URL(url);
   const parts = u.pathname.split("/").filter(Boolean);
-  const seriePart = parts.find((p) => p.startsWith("serie-"));
-  const language = parts[0];
+  const language = parts[0] || "en";
   const slug = parts[parts.length - 1].split("?")[0];
-  const id = seriePart?.slice(6);
+  // Two URL shapes exist:
+  //   /en/serie-12345/slug            -> id in the "serie-" segment
+  //   /en/novel/12345/slug            -> id is the numeric segment after "novel"
+  const seriePart = parts.find((p) => p.startsWith("serie-"));
+  let id = seriePart?.slice(6);
+  if (!id) {
+    const novelIdx = parts.indexOf("novel");
+    if (novelIdx >= 0 && /^\d+$/.test(parts[novelIdx + 1] || "")) id = parts[novelIdx + 1];
+  }
+  if (!id) id = parts.find((p) => /^\d+$/.test(p));
   if (!id) throw new Error("wtr-lab: serie id missing");
   const json = await getJson(`https://wtr-lab.com/api/chapters/${id}`);
-  return (json.chapters || []).map(
-    (a: any) => `https://wtr-lab.com/${language}/serie-${id}/${slug}/${a.order}`
+  const chapters = json.chapters || json.data?.chapters || [];
+  return chapters.map(
+    (a: any) => `https://wtr-lab.com/${language}/serie-${id}/${slug}/${a.order ?? a.id}`
   );
 }
 
