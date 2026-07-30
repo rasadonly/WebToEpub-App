@@ -113,7 +113,7 @@ CREATE TRIGGER forum_comments_count_del
 
 -- === Token-guarded edit/delete RPCs ===
 -- Admin password is intentionally hard-coded to match the existing app-wide
--- admin panel password ("prasadonly").
+-- admin panel password (reads from current_setting).
 
 CREATE OR REPLACE FUNCTION public.update_forum_thread(
   p_id uuid,
@@ -136,7 +136,7 @@ BEGIN
          body = p_body,
          category = p_category
    WHERE id = p_id
-     AND (edit_token = p_token OR p_admin = 'prasadonly')
+     AND (edit_token = p_token OR p_admin = current_setting('app.settings.admin_password', true))
   RETURNING * INTO row;
 
   IF NOT FOUND THEN
@@ -162,7 +162,7 @@ DECLARE
 BEGIN
   DELETE FROM public.forum_threads
    WHERE id = p_id
-     AND (edit_token = p_token OR p_admin = 'prasadonly');
+     AND (edit_token = p_token OR p_admin = current_setting('app.settings.admin_password', true));
   GET DIAGNOSTICS affected = ROW_COUNT;
   IF affected = 0 THEN
     RAISE EXCEPTION 'Not authorized to delete this thread';
@@ -188,7 +188,7 @@ BEGIN
   UPDATE public.forum_comments
      SET body = p_body
    WHERE id = p_id
-     AND (edit_token = p_token OR p_admin = 'prasadonly')
+     AND (edit_token = p_token OR p_admin = current_setting('app.settings.admin_password', true))
   RETURNING * INTO row;
 
   IF NOT FOUND THEN
@@ -214,7 +214,7 @@ DECLARE
 BEGIN
   DELETE FROM public.forum_comments
    WHERE id = p_id
-     AND (edit_token = p_token OR p_admin = 'prasadonly');
+     AND (edit_token = p_token OR p_admin = current_setting('app.settings.admin_password', true));
   GET DIAGNOSTICS affected = ROW_COUNT;
   IF affected = 0 THEN
     RAISE EXCEPTION 'Not authorized to delete this comment';
