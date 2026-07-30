@@ -4,11 +4,20 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Settings, Plus, Edit, Save, Trash2 } from 'lucide-react';
+import { Settings, Plus, Edit, Save, Trash2, Server } from 'lucide-react';
 import { NovelSite } from '@/types';
 import { SUPPORTED_SITES } from '@/utils/siteConfigs';
 import { useToast } from '@/hooks/use-toast';
+import {
+  isBackendEnabled,
+  setBackendEnabled,
+  getBackendUrl,
+  setBackendUrl,
+  backendHealthy,
+  DEFAULT_BACKEND_URL,
+} from '@/utils/backend';
 
 export function AdminPanel({ open, onOpenChange, hideTrigger }: { open?: boolean; onOpenChange?: (o: boolean) => void; hideTrigger?: boolean } = {}) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -16,7 +25,16 @@ export function AdminPanel({ open, onOpenChange, hideTrigger }: { open?: boolean
   const [sites, setSites] = useState<NovelSite[]>(SUPPORTED_SITES);
   const [editingSite, setEditingSite] = useState<NovelSite | null>(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
+  const [serverOn, setServerOn] = useState(true);
+  const [serverUrl, setServerUrl] = useState(DEFAULT_BACKEND_URL);
+  const [serverStatus, setServerStatus] = useState<'unknown' | 'checking' | 'up' | 'down'>('unknown');
   const { toast } = useToast();
+
+  useEffect(() => {
+    setServerOn(isBackendEnabled());
+    setServerUrl(getBackendUrl());
+  }, []);
+
 
   useEffect(() => {
     const saved = localStorage.getItem('customSites');
