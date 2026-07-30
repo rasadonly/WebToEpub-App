@@ -316,8 +316,9 @@ export function useEpubConverter() {
         });
       }
     },
-    [pendingData, addLog, updateProgress, toast]
+    [pendingData, addLog, updateProgress, toast, applyJob]
   );
+
 
   const resetConverter = useCallback(() => {
     setProgress({
