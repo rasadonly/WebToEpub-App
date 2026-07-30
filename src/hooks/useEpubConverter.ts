@@ -42,6 +42,10 @@ export function useEpubConverter() {
   const [pendingData, setPendingData] = useState<ConversionFormData | null>(null);
   // Accumulates chapters across async batches without stale-closure issues.
   const liveChaptersRef = useRef<ChapterItem[]>([]);
+  // Server-side job (Heroku backend) — survives closing the page.
+  const jobIdRef = useRef<string | null>(null);
+  const stopPollRef = useRef<null | (() => void)>(null);
+  const [serverJob, setServerJob] = useState<BackendJob | null>(null);
 
   const addLog = useCallback((message: string) => {
     setLogs(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`]);
@@ -50,6 +54,46 @@ export function useEpubConverter() {
   const updateProgress = useCallback((update: Partial<ConversionProgress>) => {
     setProgress(prev => ({ ...prev, ...update }));
   }, []);
+
+  /** Reflects a server job into the local progress UI. */
+  const applyJob = useCallback(
+    (job: BackendJob) => {
+      setServerJob(job);
+      if (job.status === 'done') {
+        updateProgress({
+          status: 'complete',
+          currentChapter: job.completed,
+          totalChapters: job.total,
+          message: 'Conversion completed on the server — ready to download.',
+        });
+      } else if (job.status === 'error') {
+        updateProgress({ status: 'error', message: `Error: ${job.error || 'server job failed'}` });
+        clearActiveJobId();
+      } else if (job.status === 'cancelled') {
+        updateProgress({ status: 'error', message: 'Stopped by user.' });
+        clearActiveJobId();
+      } else {
+        updateProgress({
+          status: 'processing-chapters',
+          currentChapter: job.completed,
+          totalChapters: job.total,
+          message: `${job.phase} (${job.completed}/${job.total || '…'})`,
+        });
+      }
+    },
+    [updateProgress]
+  );
+
+  // Resume an unfinished server job after a reload / reopened tab.
+  useEffect(() => {
+    if (!isBackendEnabled()) return;
+    const id = getActiveJobId();
+    if (!id) return;
+    jobIdRef.current = id;
+    stopPollRef.current = pollJob(id, applyJob);
+    return () => stopPollRef.current?.();
+  }, [applyJob]);
+
 
   const fetchChapters = useCallback(
     async (data: ConversionFormData) => {
