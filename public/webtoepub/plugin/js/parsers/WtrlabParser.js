@@ -577,3 +577,6 @@ class WtrlabParser extends Parser {
         return newDoc.dom;
     }
 }
+WtrlabParser.blockedProxies = new Set();
+WtrlabParser.proxyCursor = 0;
+WtrlabParser.turnstileBlocked = false;
