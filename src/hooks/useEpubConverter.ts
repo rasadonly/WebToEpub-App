@@ -135,10 +135,11 @@ export function useEpubConverter() {
         // Server backend first: it fetches directly (no CORS proxy), so it's fastest.
         if (isBackendEnabled()) {
           try {
-            addLog('Fetching chapter list from the server…');
-            const { chapters } = await backendToc(data.tocUrl, data.tocSelector);
+            addLog('Fetching chapter list from the server (streaming)…');
+            const { chapters } = await backendToc(data.tocUrl, data.tocSelector, (items) => {
+              if (items.length > 0) onBatch(items as ChapterLink[]);
+            });
             if (chapters?.length) {
-              onBatch(chapters as ChapterLink[]);
               usedFastPath = true;
               addLog(`Server returned ${chapters.length} chapters`);
             }

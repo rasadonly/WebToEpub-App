@@ -72,13 +72,64 @@ export async function backendHealthy(): Promise<boolean> {
 
 export async function backendToc(
   tocUrl: string,
-  selector = ''
+  selector = '',
+  onBatch?: (items: BackendChapter[], meta?: Record<string, string>) => void
 ): Promise<{ chapters: BackendChapter[]; meta: Record<string, string> }> {
-  return api(
-    `/api/toc?url=${encodeURIComponent(tocUrl)}&selector=${encodeURIComponent(selector)}`,
-    undefined,
-    120_000
-  );
+  const streamUrl = `${getBackendUrl()}/api/toc/stream?url=${encodeURIComponent(tocUrl)}&selector=${encodeURIComponent(selector)}`;
+  const allChapters: BackendChapter[] = [];
+  let meta: Record<string, string> = {};
+
+  try {
+    const ctrl = new AbortController();
+    const timer = window.setTimeout(() => ctrl.abort(), 120_000);
+    let r: Response;
+    try {
+      r = await fetch(streamUrl, { signal: ctrl.signal });
+    } finally {
+      window.clearTimeout(timer);
+    }
+    if (!r.ok || !r.body) throw new Error(`Stream error ${r.status}`);
+
+    const reader = r.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop() ?? '';
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const obj = JSON.parse(line);
+          if (obj.type === 'chapters' && Array.isArray(obj.items)) {
+            allChapters.push(...obj.items);
+            onBatch?.(obj.items);
+          } else if (obj.type === 'meta') {
+            const { type: _t, ...rest } = obj;
+            meta = rest;
+            onBatch?.([], meta);
+          } else if (obj.type === 'error') {
+            throw new Error(obj.message);
+          }
+        } catch {
+          /* skip malformed line */
+        }
+      }
+    }
+    return { chapters: allChapters, meta };
+  } catch {
+    // Fallback: legacy buffered endpoint
+    const result = await api<{ chapters: BackendChapter[]; meta: Record<string, string> }>(
+      `/api/toc?url=${encodeURIComponent(tocUrl)}&selector=${encodeURIComponent(selector)}`,
+      undefined,
+      120_000
+    );
+    onBatch?.(result.chapters, result.meta);
+    return result;
+  }
 }
 
 export async function backendStartJob(payload: {
