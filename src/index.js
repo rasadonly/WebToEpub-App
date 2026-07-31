@@ -42,7 +42,45 @@ setInterval(cleanup, 10 * 60 * 1000).unref();
 
 app.get("/health", (_req, res) => res.json({ ok: true, jobs: jobs.size, uptime: process.uptime() }));
 
-// Fast TOC listing (used by the UI before starting a job)
+// Fast TOC listing — streams chapter batches via NDJSON so Heroku's 30 s
+// router timeout is never hit. Each line is a JSON object:
+//   {"type":"chapters", "items":[{url,title},...]}  — zero or more times
+//   {"type":"meta",     ...}                          — once
+//   {"type":"done"}                                   — always last
+// The legacy GET /api/toc still works but buffers all chapters first (kept
+// for backward-compat with older front-end versions).
+app.get("/api/toc/stream", async (req, res) => {
+  const url = String(req.query.url || "");
+  if (!url) {
+    res.status(400).json({ error: "url required" });
+    return;
+  }
+  res.setHeader("Content-Type", "application/x-ndjson");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  const flush = (obj) => res.write(JSON.stringify(obj) + "\n");
+
+  try {
+    const [chapters, meta] = await Promise.all([
+      fetchChapterLinks(url, String(req.query.selector || "")),
+      fetchBookMeta(url),
+    ]);
+    // Send in batches of 100 so the client can start showing chapters early.
+    const BATCH = 100;
+    for (let i = 0; i < chapters.length; i += BATCH) {
+      flush({ type: "chapters", items: chapters.slice(i, i + BATCH) });
+    }
+    flush({ type: "meta", ...meta });
+  } catch (e) {
+    flush({ type: "error", message: e.message });
+  }
+  flush({ type: "done" });
+  res.end();
+});
+
+// Legacy buffered endpoint (kept for compat — times out on very large TOCs).
 app.get("/api/toc", async (req, res) => {
   try {
     const url = String(req.query.url || "");
