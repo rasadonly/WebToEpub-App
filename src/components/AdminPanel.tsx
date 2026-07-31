@@ -10,6 +10,7 @@ import { Settings, Plus, Edit, Save, Trash2, Server } from 'lucide-react';
 import { NovelSite } from '@/types';
 import { SUPPORTED_SITES } from '@/utils/siteConfigs';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 import {
   isBackendEnabled,
   setBackendEnabled,
@@ -44,18 +45,19 @@ export function AdminPanel({ open, onOpenChange, hideTrigger }: { open?: boolean
   }, []);
 
   const handleLogin = async () => {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(password);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    
-    if (hashHex === '05121c21e342fc71cf5f2fde16e97f24ef3a36766e58228a4874886515e7529b') {
-      setIsAuthenticated(true);
-      setPassword('');
-      toast({ title: "Admin access granted" });
-    } else {
-      toast({ title: "Invalid password", variant: "destructive" });
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-login', {
+        body: { password },
+      });
+      if (!error && data?.ok) {
+        setIsAuthenticated(true);
+        setPassword('');
+        toast({ title: 'Admin access granted' });
+      } else {
+        toast({ title: 'Invalid password', variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'Could not verify password', variant: 'destructive' });
     }
   };
 
