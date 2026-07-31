@@ -20,14 +20,22 @@ class NovelhallParser extends Parser {
     }
 
     findContent(dom) {
-        return dom.querySelector("article div.entry-content") ||
+        return dom.querySelector("div#htmlContent") ||
+            dom.querySelector("article div.entry-content") ||
             dom.querySelector("div.entry-content") ||
             dom.querySelector("div.read-content") ||
             dom.querySelector("div.chapter-content") ||
             dom.querySelector("div.content") ||
-            dom.querySelector("div#htmlContent") ||
             dom.querySelector("article");
     }
+
+    removeUnwantedElementsFromContentElement(element) {
+        util.removeChildElementsMatchingSelector(element,
+            "div.chapter-nav, div.mnt, div#volumelist, center, ins, script, style"
+        );
+        super.removeUnwantedElementsFromContentElement(element);
+    }
+
 
     extractTitleImpl(dom) {
         return dom.querySelector("div.book-info h1");

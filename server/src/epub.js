@@ -33,43 +33,41 @@ const FONT_STACKS = {
 function css(fontFamily = "Georgia") {
   const stack = FONT_STACKS[fontFamily] || FONT_STACKS.Georgia;
   return `@charset "UTF-8";
-body { font-family: ${stack}; line-height: 1.7; margin: 0; padding: 2em; color: #2c3e50; background-color: #fdfdfd; }
-@media screen and (max-width: 600px) { body { padding: 1em; line-height: 1.6; } }
-h1 { font-size: 2em; font-weight: 700; margin: 1.5em 0 1em 0; text-align: center; color: #34495e; border-bottom: 3px solid #3498db; padding-bottom: 0.5em; line-height: 1.3; }
-h2 { font-size: 1.5em; font-weight: 600; margin: 2em 0 1em 0; color: #34495e; }
-h3 { font-size: 1.2em; font-weight: 600; margin: 1.5em 0 0.5em 0; color: #34495e; }
-p { margin: 0 0 1.2em 0; text-align: justify; text-indent: 1.5em; orphans: 2; widows: 2; }
-h1 + p, h2 + p, h3 + p { text-indent: 0; margin-top: 0.5em; }
-.chapter-content { max-width: 45em; margin: 0 auto; overflow-wrap: break-word; }
-blockquote { margin: 1.5em 2em; padding: 1em; border-left: 4px solid #3498db; background-color: #f8f9fa; font-style: italic; }
-ul, ol { margin: 1em 0; padding-left: 2em; }
-li { margin: 0.5em 0; }
-a { color: #3498db; text-decoration: underline; }
-hr { border: none; border-top: 1px solid #bdc3c7; margin: 2em 0; }
-@media (prefers-color-scheme: dark) {
-  body { background-color: #1a1a1a; color: #e8e8e8; }
-  h1, h2, h3 { color: #f0f0f0; }
-  h1 { border-bottom-color: #4a90e2; }
-  blockquote { background-color: #2a2a2a; border-left-color: #4a90e2; }
-  hr { border-top-color: #404040; }
-}`;
+body { font-family: ${stack}; line-height: 1.6; margin: 0; padding: 1em; }
+h1 { font-size: 1.5em; font-weight: bold; margin: 1em 0; text-align: center; }
+h2 { font-size: 1.2em; margin: 1em 0 0.5em 0; }
+p { margin: 0 0 1em 0; text-indent: 0; }
+blockquote { margin: 1em 2em; font-style: italic; }
+hr { border: none; border-top: 1px solid #ccc; margin: 1.5em 0; }`;
+}
+
+const VOID_TAGS = "br|hr|img|input|meta|link|source|track|area|base|col|embed|param|wbr";
+
+// Make markup XHTML-safe: self-close void tags and drop scripts/styles.
+function toXhtml(html = "") {
+  return String(html)
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(new RegExp(`<(${VOID_TAGS})((?:\\s[^<>]*?)?)\\s*/?>`, "gi"), (_m, tag, attrs) => {
+      const cleaned = String(attrs).replace(/\s+(on\w+|data-[\w-]+)\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi, "");
+      return `<${tag}${cleaned} />`;
+    })
+    .replace(/<\/(?:br|hr|img)\s*>/gi, "")
+    .replace(/&(?!(?:[a-zA-Z][a-zA-Z0-9]*|#\d+|#x[0-9a-fA-F]+);)/g, "&amp;");
 }
 
 function chapterXhtml(chapter) {
   return `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
 <head>
-  <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8"/>
   <title>${escapeXml(chapter.title)}</title>
   <link rel="stylesheet" type="text/css" href="style.css"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 </head>
 <body>
-  <div class="chapter-content">
-    <h1>${escapeXml(chapter.title)}</h1>
-    ${chapter.content}
-  </div>
+  <h1>${escapeXml(chapter.title)}</h1>
+  ${toXhtml(chapter.content)}
 </body>
 </html>`;
 }

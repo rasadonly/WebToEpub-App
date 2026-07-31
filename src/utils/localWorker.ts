@@ -490,7 +490,27 @@ async function tocNovelhall(url: string): Promise<string[]> {
 
 async function bodyNovelhall(url: string): Promise<string> {
   const doc = parseHtml(await getText(url));
-  return extractWithSelector(doc, "#htmlContent, .entry-content, .content");
+  const el =
+    doc.querySelector("div#htmlContent") ||
+    doc.querySelector("article div.entry-content") ||
+    doc.querySelector("div.entry-content") ||
+    doc.querySelector("div.read-content") ||
+    doc.querySelector("div.content");
+  if (!el) return "";
+  stripInside(
+    el,
+    "script, style, ins, iframe, .ad, .ads, .advertisement, .chapter-nav, .nav, center, a[href*='novelhall.com/'], div.mnt, div#volumelist"
+  );
+  // Novelhall separates paragraphs with <br> tags only — turn them into <p>.
+  const html = el.innerHTML;
+  if (!/<p[\s>]/i.test(html) && /<br/i.test(html)) {
+    const parts = html
+      .split(/(?:\s*<br\s*\/?>\s*)+/i)
+      .map((s) => s.trim())
+      .filter((s) => s && s.replace(/<[^>]+>/g, "").trim().length > 0);
+    if (parts.length) return parts.map((p) => `<p>${p}</p>`).join("\n");
+  }
+  return html;
 }
 
 // ---- Wattpad ----
