@@ -777,8 +777,9 @@ function extractTitleFromUrl(url: string): string {
   try {
     const pathname = new URL(url).pathname;
     const segments = pathname.split('/').filter(Boolean);
-    const lastSegment = segments[segments.length - 1];
-    
+    const lastSegment = (segments[segments.length - 1] || '')
+      .replace(/\.(x?html?|php|aspx?|jsp)$/i, '');
+
     // Clean up the segment
     return lastSegment
       .replace(/[-_]/g, ' ')
