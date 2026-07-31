@@ -10,6 +10,7 @@ import { Settings, Plus, Edit, Save, Trash2, Server } from 'lucide-react';
 import { NovelSite } from '@/types';
 import { SUPPORTED_SITES } from '@/utils/siteConfigs';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 import {
   isBackendEnabled,
   setBackendEnabled,
