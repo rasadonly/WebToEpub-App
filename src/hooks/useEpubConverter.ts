@@ -230,7 +230,7 @@ export function useEpubConverter() {
         };
 
         // --- Server-side conversion (keeps running if the page is closed) ---
-        if (isBackendEnabled()) {
+        if (isBackendEnabled() && isBackendSupportedUrl(data.tocUrl)) {
           try {
             updateProgress({
               status: 'processing-chapters',
