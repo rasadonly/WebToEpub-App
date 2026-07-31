@@ -42,6 +42,82 @@ setInterval(cleanup, 10 * 60 * 1000).unref();
 
 app.get("/health", (_req, res) => res.json({ ok: true, jobs: jobs.size, uptime: process.uptime() }));
 
+// ── CORS proxy ────────────────────────────────────────────────────────────────
+// The browser can't fetch most novel sites directly due to CORS restrictions.
+// This endpoint forwards the raw response so the browser's WebToEpub engine
+// (with all 386 parsers) can process the HTML/JSON locally.
+// Replaces the need for third-party public CORS proxies.
+app.get("/api/proxy", async (req, res) => {
+  const target = String(req.query.url || "");
+  if (!target) return res.status(400).json({ error: "url required" });
+  try {
+    const url = new URL(target); // validate
+    if (!["http:", "https:"].includes(url.protocol)) {
+      return res.status(400).json({ error: "only http/https allowed" });
+    }
+  } catch {
+    return res.status(400).json({ error: "invalid url" });
+  }
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 25000);
+  try {
+    const upstream = await fetch(target, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,application/json;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        ...(req.headers["x-proxy-cookie"] ? { Cookie: String(req.headers["x-proxy-cookie"]) } : {}),
+      },
+      redirect: "follow",
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    // Forward content-type so browser parses correctly
+    const ct = upstream.headers.get("content-type") || "text/html";
+    res.setHeader("Content-Type", ct);
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.status(upstream.status);
+    upstream.body.pipe(res);
+  } catch (e) {
+    clearTimeout(timer);
+    res.status(502).json({ error: e.message });
+  }
+});
+
+// Also handle POST proxying (needed for wtr-lab and similar API endpoints)
+app.post("/api/proxy", express.raw({ type: "*/*", limit: "2mb" }), async (req, res) => {
+  const target = String(req.query.url || "");
+  if (!target) return res.status(400).json({ error: "url required" });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 25000);
+  try {
+    const upstream = await fetch(target, {
+      method: "POST",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+        "Content-Type": req.headers["content-type"] || "application/json",
+        Accept: "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.9",
+        ...(req.headers["x-proxy-cookie"] ? { Cookie: String(req.headers["x-proxy-cookie"]) } : {}),
+        ...(req.headers["x-proxy-origin"] ? { Origin: String(req.headers["x-proxy-origin"]), Referer: String(req.headers["x-proxy-origin"]) + "/" } : {}),
+      },
+      body: req.body,
+      redirect: "follow",
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    const ct = upstream.headers.get("content-type") || "application/json";
+    res.setHeader("Content-Type", ct);
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.status(upstream.status);
+    upstream.body.pipe(res);
+  } catch (e) {
+    clearTimeout(timer);
+    res.status(502).json({ error: e.message });
+  }
+});
+
 // Fast TOC listing — streams chapter batches via NDJSON so Heroku's 30 s
 // router timeout is never hit. Each line is a JSON object:
 //   {"type":"chapters", "items":[{url,title},...]}  — zero or more times

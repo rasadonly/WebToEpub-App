@@ -12,6 +12,38 @@ const JOB_KEY = 'backendJobId';
 
 export const DEFAULT_BACKEND_URL = 'https://link-to-epub-37130-dfa858b712fc.herokuapp.com';
 
+/**
+ * Hostnames that have a dedicated server-side parser in fetcher.js.
+ * For everything else the browser engine (WebToEpub, 386 parsers) handles it.
+ */
+export const BACKEND_SUPPORTED_HOSTS: readonly string[] = [
+  'novelhall.com',
+  'freewebnovel.com',
+  'novelfire.net', 'novelfire.com', 'novelfire.io',
+  'novgo.com',
+  'novelbuddy.com', 'novelbuddy.io',
+  'novelarrow.com',
+  'novelfull.com', 'novelfull.net',
+  'novelbin.com', 'novelbin.net', 'novlove.com',
+  'wtr-lab.com',
+  'wattpad.com',
+];
+
+/** Returns true when the backend has a dedicated parser for this URL. */
+export function isBackendSupportedUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, '');
+    return BACKEND_SUPPORTED_HOSTS.some(h => host === h || host.endsWith('.' + h));
+  } catch {
+    return false;
+  }
+}
+
+/** URL format for the Heroku CORS proxy — use as a drop-in CORS proxy. */
+export function backendProxyUrl(): string {
+  return `${getBackendUrl()}/api/proxy?url=`;
+}
+
 export function getBackendUrl(): string {
   return (localStorage.getItem(URL_KEY) || DEFAULT_BACKEND_URL).replace(/\/$/, '');
 }

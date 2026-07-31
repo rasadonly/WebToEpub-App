@@ -23,6 +23,8 @@ const DEFAULT_HEADERS: Record<string, string> = {
 
 // CORS proxy list ported from WebToEpub (public/webtoepub/plugin/js/HttpClient.js).
 // Kept in sync with the engine so both fetch paths share the same fallback chain.
+// The Heroku backend proxy is prepended at runtime (if backend is enabled) so it
+// gets tried first — it's faster and more reliable than public proxies.
 export const CORS_PROXY_LIST: Array<{ name: string; url: string }> = [
   { name: "corsproxy.io (with key)", url: "https://corsproxy.io/?key=ab3170e1&url=" },
   { name: "allOrigins (raw)", url: "https://api.allorigins.win/raw?url=" },
@@ -35,6 +37,21 @@ export const CORS_PROXY_LIST: Array<{ name: string; url: string }> = [
   { name: "Lovable Proxy", url: "https://loveable-proxy-forwebtoepub.lovable.app/api/proxy?url=" },
 ];
 
+const BACKEND_URL_KEY = 'backendUrl';
+const BACKEND_ENABLED_KEY = 'backendEnabled';
+const DEFAULT_BACKEND = 'https://link-to-epub-37130-dfa858b712fc.herokuapp.com';
+
+/** Returns the Heroku proxy entry if backend is enabled, null otherwise. */
+function getHerokuProxy(): { name: string; url: string } | null {
+  try {
+    if (localStorage.getItem(BACKEND_ENABLED_KEY) === 'false') return null;
+    const base = (localStorage.getItem(BACKEND_URL_KEY) || DEFAULT_BACKEND).replace(/\/$/, '');
+    return { name: 'Heroku Proxy', url: `${base}/api/proxy?url=` };
+  } catch {
+    return null;
+  }
+}
+
 // Proxies that take the target URL as a query param need encodeURIComponent;
 // path-style proxies (CORS.SH, ThingProxy) just prefix the raw URL.
 const ENCODED_PROXY_SUFFIXES = ["?url=", "?quest=", "&url="];
@@ -44,13 +61,20 @@ function buildProxyUrl(proxyBase: string, targetUrl: string): string {
   return needsEncoding ? proxyBase + encodeURIComponent(targetUrl) : proxyBase + targetUrl;
 }
 
+function getActiveCorsProxies(): Array<(url: string) => string> {
+  const heroku = getHerokuProxy();
+  const list = heroku ? [heroku, ...CORS_PROXY_LIST] : CORS_PROXY_LIST;
+  return list.map((p) => (url: string) => buildProxyUrl(p.url, url));
+}
+
 const CORS_PROXIES: Array<(url: string) => string> = CORS_PROXY_LIST.map(
   (p) => (url: string) => buildProxyUrl(p.url, url)
 );
 
+
 async function httpGet(url: string, extra: Record<string, string> = {}): Promise<Response> {
   let lastErr: unknown = null;
-  for (const build of CORS_PROXIES) {
+  for (const build of getActiveCorsProxies()) {
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 7_000);
     try {

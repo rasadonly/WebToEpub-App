@@ -12,6 +12,7 @@ import { fetchChapterLinksLive, ChapterLink } from '@/utils/localWorker';
 import { getSiteConfig } from '@/utils/siteConfigs';
 import {
   isBackendEnabled,
+  isBackendSupportedUrl,
   backendToc,
   backendStartJob,
   backendCancelJob,
@@ -132,8 +133,9 @@ export function useEpubConverter() {
 
         let usedFastPath = false;
 
-        // Server backend first: it fetches directly (no CORS proxy), so it's fastest.
-        if (isBackendEnabled()) {
+        // Server backend: only for sites that have a dedicated server-side parser.
+        // Everything else goes straight to the browser engine (386 parsers).
+        if (isBackendEnabled() && isBackendSupportedUrl(data.tocUrl)) {
           try {
             addLog('Fetching chapter list from the server (streaming)…');
             const { chapters } = await backendToc(data.tocUrl, data.tocSelector, (items) => {
