@@ -137,6 +137,7 @@ export type Database = {
         Args: { p_admin?: string; p_id: string; p_token: string }
         Returns: boolean
       }
+      is_forum_admin: { Args: { p_admin: string }; Returns: boolean }
       update_forum_comment: {
         Args: {
           p_admin?: string
