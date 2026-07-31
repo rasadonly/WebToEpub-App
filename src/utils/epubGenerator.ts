@@ -121,144 +121,42 @@ ${navPoints}
 
 function generateCss(fontFamily: string = 'Georgia'): string {
   const fontStack = getFontStack(fontFamily);
-  
+
   return `@charset "UTF-8";
 
-/* Beautiful EPUB styles for all devices */
 body {
   font-family: ${fontStack};
-  line-height: 1.7;
+  line-height: 1.6;
   margin: 0;
-  padding: 2em;
-  color: #2c3e50;
-  background-color: #fdfdfd;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-}
-
-/* Responsive margins */
-@media screen and (max-width: 600px) {
-  body {
-    padding: 1em;
-    line-height: 1.6;
-  }
+  padding: 1em;
 }
 
 h1 {
-  font-size: 2em;
-  font-weight: 700;
-  margin: 1.5em 0 1em 0;
+  font-size: 1.5em;
+  font-weight: bold;
+  margin: 1em 0;
   text-align: center;
-  color: #34495e;
-  border-bottom: 3px solid #3498db;
-  padding-bottom: 0.5em;
-  line-height: 1.3;
 }
 
 h2 {
-  font-size: 1.5em;
-  font-weight: 600;
-  margin: 2em 0 1em 0;
-  color: #34495e;
-  line-height: 1.4;
-}
-
-h3 {
   font-size: 1.2em;
-  font-weight: 600;
-  margin: 1.5em 0 0.5em 0;
-  color: #34495e;
+  margin: 1em 0 0.5em 0;
 }
 
 p {
-  margin: 0 0 1.2em 0;
-  text-align: justify;
-  text-indent: 1.5em;
-  orphans: 2;
-  widows: 2;
-}
-
-/* First paragraph after headers shouldn't be indented */
-h1 + p, h2 + p, h3 + p {
+  margin: 0 0 1em 0;
   text-indent: 0;
-  margin-top: 0.5em;
 }
 
-.chapter-content {
-  max-width: 45em;
-  margin: 0 auto;
-  overflow-wrap: break-word;
-}
-
-/* Better typography */
-em, i {
-  font-style: italic;
-}
-
-strong, b {
-  font-weight: 700;
-}
-
-/* Quote styling */
 blockquote {
-  margin: 1.5em 2em;
-  padding: 1em;
-  border-left: 4px solid #3498db;
-  background-color: #f8f9fa;
+  margin: 1em 2em;
   font-style: italic;
 }
 
-/* Lists */
-ul, ol {
-  margin: 1em 0;
-  padding-left: 2em;
-}
-
-li {
-  margin: 0.5em 0;
-}
-
-/* Links */
-a {
-  color: #3498db;
-  text-decoration: underline;
-}
-
-/* Horizontal rules */
 hr {
   border: none;
-  border-top: 1px solid #bdc3c7;
-  margin: 2em 0;
-}
-
-/* Page breaks for print/export */
-.page-break {
-  page-break-before: always;
-}
-
-/* Dark mode support */
-@media (prefers-color-scheme: dark) {
-  body {
-    background-color: #1a1a1a;
-    color: #e8e8e8;
-  }
-  
-  h1, h2, h3 {
-    color: #f0f0f0;
-  }
-  
-  h1 {
-    border-bottom-color: #4a90e2;
-  }
-  
-  blockquote {
-    background-color: #2a2a2a;
-    border-left-color: #4a90e2;
-  }
-  
-  hr {
-    border-top-color: #404040;
-  }
+  border-top: 1px solid #ccc;
+  margin: 1.5em 0;
 }`;
 }
 
@@ -274,21 +172,64 @@ function getFontStack(fontFamily: string): string {
   return fontStacks[fontFamily as keyof typeof fontStacks] || fontStacks.Georgia;
 }
 
+/**
+ * Convert arbitrary (possibly malformed / HTML4-style) markup into well-formed
+ * XHTML so EPUB readers don't choke on things like unclosed <br> or <img> tags.
+ * Falls back to escaped plain text if serialization fails.
+ */
+function toXhtml(html: string): string {
+  try {
+    const doc = new DOMParser().parseFromString(
+      `<div id="__wrap__">${html}</div>`,
+      'text/html'
+    );
+    const wrap = doc.getElementById('__wrap__');
+    if (!wrap) return escapeXml(html);
+
+    // Drop things that are never valid/wanted inside an EPUB chapter.
+    wrap
+      .querySelectorAll('script, style, iframe, ins, form, input, button, noscript, svg, canvas, video, audio')
+      .forEach((el) => el.remove());
+
+    // Strip event handlers and other non-XHTML attributes.
+    wrap.querySelectorAll('*').forEach((el) => {
+      [...el.attributes].forEach((attr) => {
+        const name = attr.name.toLowerCase();
+        if (name.startsWith('on') || name.startsWith('data-') || name === 'contenteditable') {
+          el.removeAttribute(attr.name);
+        }
+      });
+    });
+
+    const serialized = new XMLSerializer().serializeToString(wrap);
+    // Remove the wrapper element itself, keep its children.
+    const inner = serialized
+      .replace(/^<div[^>]*>/, '')
+      .replace(/<\/div>$/, '')
+      .replace(/ xmlns="http:\/\/www\.w3\.org\/1999\/xhtml"/g, '');
+
+    // Verify the result actually parses as XML; if not, fall back to text.
+    const check = new DOMParser().parseFromString(`<r>${inner}</r>`, 'application/xml');
+    if (check.getElementsByTagName('parsererror').length > 0) {
+      return escapeXml(wrap.textContent || '');
+    }
+    return inner;
+  } catch {
+    return escapeXml(html);
+  }
+}
+
 function generateChapterXhtml(chapter: ChapterData, fontFamily?: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
 <head>
-  <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8"/>
   <title>${escapeXml(chapter.title)}</title>
   <link rel="stylesheet" type="text/css" href="style.css"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 </head>
 <body>
-  <div class="chapter-content">
-    <h1>${escapeXml(chapter.title)}</h1>
-    ${chapter.content}
-  </div>
+  <h1>${escapeXml(chapter.title)}</h1>
+  ${toXhtml(chapter.content)}
 </body>
 </html>`;
 }
