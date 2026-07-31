@@ -229,6 +229,19 @@ function ensureIframe(): Promise<EngineWindow> {
       const poll = () => {
         const ready = (win as unknown as { __WTE_READY?: boolean }).__WTE_READY;
         if (ready && win.main && win.parserFactory) {
+          try {
+            const backendEnabled = localStorage.getItem('backendEnabled') !== 'false';
+            if (backendEnabled && (win as any).HttpClient) {
+              const base = (localStorage.getItem('backendUrl') || 'https://link-to-epub-37130-dfa858b712fc.herokuapp.com').replace(/\/$/, '');
+              const herokuProxy = { name: 'Heroku Proxy', url: `${base}/api/proxy?url=` };
+              const HttpClient = (win as any).HttpClient;
+              if (HttpClient.CORS_PROXIES) {
+                HttpClient.CORS_PROXIES = HttpClient.CORS_PROXIES.filter((p: any) => p.name !== 'Heroku Proxy');
+                HttpClient.CORS_PROXIES.unshift(herokuProxy);
+                HttpClient.corsProxyUrl = herokuProxy.url;
+              }
+            }
+          } catch { /* ignore */ }
           window.clearTimeout(failTimer);
           resolve(win);
           return;
@@ -248,7 +261,11 @@ function ensureIframe(): Promise<EngineWindow> {
     iframe = el;
   });
 
-  return readyPromise;
+  const win = await readyPromise;
+  if (win.util && win.util.sleepController?.signal?.aborted) {
+    win.util.sleepController = new AbortController();
+  }
+  return win;
 }
 
 function setInput(win: EngineWindow, id: string, value: string) {
