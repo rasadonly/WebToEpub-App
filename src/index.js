@@ -7,7 +7,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
-import { fetchChapterLinks, fetchChapterContent, fetchBookMeta, mapPool } from "./fetcher.js";
+import {
+  fetchChapterLinks,
+  fetchChapterContent,
+  fetchBookMeta,
+  mapPool,
+  supportedDomains,
+  lookupSiteConfig,
+} from "./fetcher.js";
 import { buildEpub, sanitizeFilename } from "./epub.js";
 
 const app = express();
