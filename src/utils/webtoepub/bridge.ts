@@ -188,9 +188,7 @@ function base64ToBlob(base64: string, mimeType: string): Blob {
 }
 
 async function ensureIframe(): Promise<EngineWindow> {
-  if (readyPromise) return readyPromise;
-
-
+  if (!readyPromise) {
   readyPromise = new Promise<EngineWindow>((resolve, reject) => {
     const el = document.createElement('iframe');
     el.src = import.meta.env.BASE_URL + 'webtoepub/plugin/popup.html?wte=1';
