@@ -78,7 +78,7 @@ app.get("/api/proxy", async (req, res) => {
     res.setHeader("Content-Type", ct);
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.status(upstream.status);
-    upstream.body.pipe(res);
+    res.send(Buffer.from(await upstream.arrayBuffer()));
   } catch (e) {
     clearTimeout(timer);
     res.status(502).json({ error: e.message });
@@ -111,7 +111,7 @@ app.post("/api/proxy", express.raw({ type: "*/*", limit: "2mb" }), async (req, r
     res.setHeader("Content-Type", ct);
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.status(upstream.status);
-    upstream.body.pipe(res);
+    res.send(Buffer.from(await upstream.arrayBuffer()));
   } catch (e) {
     clearTimeout(timer);
     res.status(502).json({ error: e.message });
