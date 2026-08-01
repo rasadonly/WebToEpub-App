@@ -3,6 +3,7 @@
 // CORS proxies are kept only as a fallback when a site blocks the dyno IP.
 import { parseHTML } from "linkedom";
 import crypto from "node:crypto";
+import fs from "node:fs";
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
@@ -614,14 +615,208 @@ async function bodyWattpad(url) {
     ".part-content, pre.part-content, [data-field='text']"
   );
 }
+/**
+ * Chapter body for any site without a hand-written parser: user selector first,
+ * then the selectors extracted from that site's WebToEpub parser, then common
+ * container names as a final fallback.
+ */
 async function bodyGeneric(url, selector) {
-  return extractWithSelector(
-    parseHtml(await getText(url)),
-    selector || "#chapter-content, .chapter-content, #content, article, .content"
-  );
+  let config = null;
+  try {
+    config = lookupSiteConfig(new URL(url).hostname);
+  } catch {
+    /* ignore */
+  }
+  const doc = parseHtml(await getText(url));
+  const candidates = [
+    ...(selector ? [selector] : []),
+    ...(config?.content || []),
+    "#chapter-content",
+    ".chapter-content",
+    "#chr-content",
+    "#content",
+    "div.entry-content",
+    "div.post-content",
+    "div.reading-content",
+    "article",
+    ".content",
+  ];
+  for (const sel of candidates) {
+    const html = extractWithSelector(doc, sel);
+    if (html && html.replace(/<[^>]+>/g, "").trim().length >= 20) return html;
+  }
+  return "";
 }
 
-// ---------------- Dispatch ----------------
+
+// ---------------- Generic site table ----------------
+//
+// siteConfigs.json is generated from the ~380 vendored WebToEpub parsers
+// (see scripts/extract-site-configs.mjs). Each entry maps a domain to the TOC
+// link selectors and chapter-content selectors that parser uses, which lets the
+// Node backend handle hundreds of sites without hand-porting every parser.
+
+const SITE_CONFIGS = JSON.parse(
+  fs.readFileSync(new URL("./siteConfigs.json", import.meta.url), "utf8")
+);
+
+/** Domain lookup that tolerates www./m. prefixes and sub-domains. */
+export function lookupSiteConfig(hostname) {
+  let host = String(hostname || "").toLowerCase().replace(/^www\./, "");
+  if (SITE_CONFIGS[host]) return SITE_CONFIGS[host];
+  if (SITE_CONFIGS[`www.${host}`]) return SITE_CONFIGS[`www.${host}`];
+  const parts = host.split(".");
+  for (let i = 1; i < parts.length - 1; i++) {
+    const suffix = parts.slice(i).join(".");
+    if (SITE_CONFIGS[suffix]) return SITE_CONFIGS[suffix];
+  }
+  return null;
+}
+
+/** Every domain the backend knows how to handle. */
+export function supportedDomains() {
+  return [
+    "novelhall.com",
+    "freewebnovel.com",
+    "novelfire.net",
+    "novgo.me",
+    "novelbuddy.com",
+    "novelarrow.com",
+    "novelfull.com",
+    "novelbin.com",
+    "wtr-lab.com",
+    "wattpad.com",
+    ...Object.keys(SITE_CONFIGS),
+  ].sort();
+}
+
+const NON_CHAPTER = /\/(login|register|signup|search|tag|genre|author|category|user|profile|contact|about|privacy|terms|feed|rss)\b/i;
+
+/** Turns anchors matched by a config's TOC selectors into chapter entries. */
+function collectTocLinks(doc, pageUrl, selectors) {
+  const out = [];
+  const seen = new Set();
+  const origin = (() => {
+    try {
+      return new URL(pageUrl).origin;
+    } catch {
+      return "";
+    }
+  })();
+  for (const sel of selectors) {
+    let nodes;
+    try {
+      nodes = doc.querySelectorAll(sel.endsWith(" a") || /\ba\b/.test(sel) ? sel : `${sel} a`);
+    } catch {
+      continue;
+    }
+    nodes.forEach((a) => {
+      const href = a.getAttribute?.("href") || a.getAttribute?.("value");
+      if (!href || href.startsWith("#") || href.startsWith("javascript:")) return;
+      const abs = absoluteUrl(pageUrl, href);
+      if (origin && !abs.startsWith(origin)) return;
+      if (NON_CHAPTER.test(abs) || seen.has(abs)) return;
+      seen.add(abs);
+      out.push({
+        url: abs,
+        title: (a.textContent || "").trim() || a.getAttribute?.("title") || "",
+      });
+    });
+    if (out.length) break; // first selector that matches wins
+  }
+  return out;
+}
+
+/** Finds extra TOC pages from a standard pagination block. */
+function tocPageUrls(doc, pageUrl) {
+  const urls = new Set();
+  let maxPage = 1;
+  doc
+    .querySelectorAll(".pagination a[href], .paging a[href], ul.pager a[href], .page-nav a[href]")
+    .forEach((a) => {
+      const href = a.getAttribute("href");
+      if (!href) return;
+      const abs = absoluteUrl(pageUrl, href);
+      const n = Number(
+        new URL(abs).searchParams.get("page") || /[?&/](?:page[=/-])(\d+)/i.exec(abs)?.[1] || 0
+      );
+      if (n > maxPage) maxPage = n;
+    });
+  if (maxPage > 1) {
+    const u = new URL(pageUrl);
+    for (let p = 2; p <= Math.min(maxPage, 200); p++) {
+      u.searchParams.set("page", String(p));
+      urls.add(u.href);
+    }
+  }
+  return [...urls];
+}
+
+/** TOC extraction driven purely by the generated config table. */
+async function tocFromConfig(url, config, linkSelector) {
+  const selectors = [
+    ...(linkSelector ? [linkSelector] : []),
+    ...(config?.toc || []),
+    "ul.chapter-list a",
+    ".chapter-list a",
+    "#chapterlist a",
+    "#list a",
+    ".listchapter a",
+    "#chapters a",
+  ];
+  // Many sites keep the chapter list on a dedicated sub-page rather than the
+  // novel landing page, so try those variants when the landing page is empty.
+  const clean = url.split(/[?#]/)[0].replace(/\/$/, "");
+  const variants = [url];
+  if (!/\/(chapters?|toc|chapter-list)$/i.test(clean)) {
+    variants.push(`${clean}/chapters`, `${clean}/chapter-list`, `${clean}/toc`);
+  }
+
+  let doc = null;
+  let results = [];
+  let sourceUrl = url;
+  for (const candidate of variants) {
+    try {
+      const d = parseHtml(await getText(candidate));
+      const items = collectTocLinks(d, candidate, selectors);
+      if (items.length) {
+        doc = d;
+        results = items;
+        sourceUrl = candidate;
+        break;
+      }
+      doc = doc || d;
+    } catch {
+      /* try the next variant */
+    }
+  }
+  if (!doc) return [];
+  url = sourceUrl;
+
+
+
+  const pages = tocPageUrls(doc, url);
+  if (pages.length) {
+    const htmls = await mapPool(pages, 8, async (u) => {
+      try {
+        return await getText(u);
+      } catch {
+        return "";
+      }
+    });
+    const seen = new Set(results.map((r) => r.url));
+    htmls.forEach((h) => {
+      if (!h) return;
+      for (const item of collectTocLinks(parseHtml(h), url, selectors)) {
+        if (!seen.has(item.url)) {
+          seen.add(item.url);
+          results.push(item);
+        }
+      }
+    });
+  }
+  return results;
+}
 
 function siteKey(hostname) {
   if (hostname.includes("novelhall.com")) return "novelhall";
@@ -636,6 +831,7 @@ function siteKey(hostname) {
   if (hostname.includes("wattpad.com")) return "wattpad";
   return "generic";
 }
+
 
 /** Returns [{ url, title }]. */
 export async function fetchChapterLinks(tocUrl, linkSelector = "") {
@@ -662,14 +858,14 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
     case "wattpad":
       return tocWattpad(tocUrl);
     default: {
+      const config = lookupSiteConfig(new URL(tocUrl).hostname);
+      const items = await tocFromConfig(tocUrl, config, linkSelector);
+      if (items.length) return items;
+      // Last resort: scrape every same-origin link on the page.
       const doc = parseHtml(await getText(tocUrl));
-      const out = [];
-      doc.querySelectorAll(linkSelector || "a[href]").forEach((a) => {
-        const href = a.getAttribute("href");
-        if (href) out.push({ url: absoluteUrl(tocUrl, href), title: (a.textContent || "").trim() });
-      });
-      return out;
+      return collectTocLinks(doc, tocUrl, [linkSelector || "a[href]"]);
     }
+
   }
 }
 
