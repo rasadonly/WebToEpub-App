@@ -10,7 +10,13 @@ const ENABLED_KEY = 'backendEnabled';
 const URL_KEY = 'backendUrl';
 const JOB_KEY = 'backendJobId';
 
-export const DEFAULT_BACKEND_URL = 'https://link-to-epub-37130-dfa858b712fc.herokuapp.com';
+export const HEROKU_BACKEND_URL = 'https://link-to-epub-37130-dfa858b712fc.herokuapp.com';
+/** Hugging Face Space running the identical Express server (Docker, port 7860). */
+export const HF_BACKEND_URL = 'https://prasadonly-web-to-epub-bot.hf.space';
+export const DEFAULT_BACKEND_URL = HEROKU_BACKEND_URL;
+
+/** Every known backend, tried in order when the active one is unreachable. */
+export const BACKEND_URLS: readonly string[] = [HEROKU_BACKEND_URL, HF_BACKEND_URL];
 
 /**
  * Hostnames that have a dedicated server-side parser in fetcher.js.
@@ -93,13 +99,37 @@ async function api<T>(path: string, init?: RequestInit, timeoutMs = 60_000): Pro
   }
 }
 
-export async function backendHealthy(): Promise<boolean> {
+async function pingBackend(base: string, timeoutMs = 15_000): Promise<boolean> {
+  const ctrl = new AbortController();
+  const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    await api<{ ok: boolean }>('/health', undefined, 15_000);
-    return true;
+    const r = await fetch(`${base.replace(/\/$/, '')}/health`, { signal: ctrl.signal });
+    return r.ok;
   } catch {
     return false;
+  } finally {
+    window.clearTimeout(timer);
   }
+}
+
+/**
+ * Health check with automatic failover: if the active backend is down, try the
+ * other known backends (Heroku ⇄ Hugging Face) and switch to the first that
+ * answers, so a sleeping/dead host never takes the app down.
+ */
+export async function backendHealthy(): Promise<boolean> {
+  const active = getBackendUrl();
+  if (await pingBackend(active)) return true;
+
+  for (const alt of BACKEND_URLS) {
+    if (alt === active) continue;
+    // HF Spaces sleep — the first request wakes them, so allow more time.
+    if (await pingBackend(alt, 45_000)) {
+      setBackendUrl(alt);
+      return true;
+    }
+  }
+  return false;
 }
 
 export async function backendToc(
