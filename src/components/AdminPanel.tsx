@@ -18,6 +18,8 @@ import {
   setBackendUrl,
   backendHealthy,
   DEFAULT_BACKEND_URL,
+  HEROKU_BACKEND_URL,
+  HF_BACKEND_URL,
 } from '@/utils/backend';
 
 export function AdminPanel({ open, onOpenChange, hideTrigger }: { open?: boolean; onOpenChange?: (o: boolean) => void; hideTrigger?: boolean } = {}) {
@@ -229,7 +231,7 @@ export function AdminPanel({ open, onOpenChange, hideTrigger }: { open?: boolean
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
                 <Server className="h-4 w-4" />
-                Server backend (Heroku)
+                Server backend
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -249,6 +251,24 @@ export function AdminPanel({ open, onOpenChange, hideTrigger }: { open?: boolean
               </div>
               <div className="space-y-1">
                 <Label htmlFor="backendUrl">Backend URL</Label>
+                <div className="flex flex-wrap gap-2 pb-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={serverUrl === HEROKU_BACKEND_URL ? 'default' : 'outline'}
+                    onClick={() => setServerUrl(HEROKU_BACKEND_URL)}
+                  >
+                    Heroku
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={serverUrl === HF_BACKEND_URL ? 'default' : 'outline'}
+                    onClick={() => setServerUrl(HF_BACKEND_URL)}
+                  >
+                    Hugging Face
+                  </Button>
+                </div>
                 <div className="flex gap-2">
                   <Input
                     id="backendUrl"
