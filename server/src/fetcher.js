@@ -615,12 +615,39 @@ async function bodyWattpad(url) {
     ".part-content, pre.part-content, [data-field='text']"
   );
 }
+/**
+ * Chapter body for any site without a hand-written parser: user selector first,
+ * then the selectors extracted from that site's WebToEpub parser, then common
+ * container names as a final fallback.
+ */
 async function bodyGeneric(url, selector) {
-  return extractWithSelector(
-    parseHtml(await getText(url)),
-    selector || "#chapter-content, .chapter-content, #content, article, .content"
-  );
+  let config = null;
+  try {
+    config = lookupSiteConfig(new URL(url).hostname);
+  } catch {
+    /* ignore */
+  }
+  const doc = parseHtml(await getText(url));
+  const candidates = [
+    ...(selector ? [selector] : []),
+    ...(config?.content || []),
+    "#chapter-content",
+    ".chapter-content",
+    "#chr-content",
+    "#content",
+    "div.entry-content",
+    "div.post-content",
+    "div.reading-content",
+    "article",
+    ".content",
+  ];
+  for (const sel of candidates) {
+    const html = extractWithSelector(doc, sel);
+    if (html && html.replace(/<[^>]+>/g, "").trim().length >= 20) return html;
+  }
+  return "";
 }
+
 
 // ---------------- Generic site table ----------------
 //
