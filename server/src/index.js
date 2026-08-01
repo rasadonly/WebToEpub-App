@@ -49,6 +49,26 @@ setInterval(cleanup, 10 * 60 * 1000).unref();
 
 app.get("/health", (_req, res) => res.json({ ok: true, jobs: jobs.size, uptime: process.uptime() }));
 
+// Every domain the backend can parse (hand-written parsers + the generated
+// selector table extracted from the WebToEpub parser library).
+app.get("/api/sites", (_req, res) => {
+  const domains = supportedDomains();
+  res.json({ count: domains.length, domains });
+});
+
+// Selector config for one host, useful for debugging an unsupported site.
+app.get("/api/sites/lookup", (req, res) => {
+  const url = String(req.query.url || "");
+  let hostname = url;
+  try {
+    hostname = new URL(url.includes("://") ? url : `https://${url}`).hostname;
+  } catch {
+    /* treat the input as a bare hostname */
+  }
+  res.json({ hostname, config: lookupSiteConfig(hostname) });
+});
+
+
 // ── CORS proxy ────────────────────────────────────────────────────────────────
 // The browser can't fetch most novel sites directly due to CORS restrictions.
 // This endpoint forwards the raw response so the browser's WebToEpub engine
