@@ -187,9 +187,8 @@ function base64ToBlob(base64: string, mimeType: string): Blob {
   return new Blob([buffer], { type: mimeType });
 }
 
-function ensureIframe(): Promise<EngineWindow> {
-  if (readyPromise) return readyPromise;
-
+async function ensureIframe(): Promise<EngineWindow> {
+  if (!readyPromise) {
   readyPromise = new Promise<EngineWindow>((resolve, reject) => {
     const el = document.createElement('iframe');
     el.src = import.meta.env.BASE_URL + 'webtoepub/plugin/popup.html?wte=1';
@@ -260,6 +259,9 @@ function ensureIframe(): Promise<EngineWindow> {
     document.body.appendChild(el);
     iframe = el;
   });
+  }
+
+
 
   const win = await readyPromise;
   if (win.util && win.util.sleepController?.signal?.aborted) {
