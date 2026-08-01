@@ -803,14 +803,14 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
     case "wattpad":
       return tocWattpad(tocUrl);
     default: {
+      const config = lookupSiteConfig(new URL(tocUrl).hostname);
+      const items = await tocFromConfig(tocUrl, config, linkSelector);
+      if (items.length) return items;
+      // Last resort: scrape every same-origin link on the page.
       const doc = parseHtml(await getText(tocUrl));
-      const out = [];
-      doc.querySelectorAll(linkSelector || "a[href]").forEach((a) => {
-        const href = a.getAttribute("href");
-        if (href) out.push({ url: absoluteUrl(tocUrl, href), title: (a.textContent || "").trim() });
-      });
-      return out;
+      return collectTocLinks(doc, tocUrl, [linkSelector || "a[href]"]);
     }
+
   }
 }
 
