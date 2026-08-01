@@ -259,6 +259,9 @@ async function ensureIframe(): Promise<EngineWindow> {
     document.body.appendChild(el);
     iframe = el;
   });
+  }
+
+
 
   const win = await readyPromise;
   if (win.util && win.util.sleepController?.signal?.aborted) {
