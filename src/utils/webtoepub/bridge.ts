@@ -187,8 +187,9 @@ function base64ToBlob(base64: string, mimeType: string): Blob {
   return new Blob([buffer], { type: mimeType });
 }
 
-function ensureIframe(): Promise<EngineWindow> {
+async function ensureIframe(): Promise<EngineWindow> {
   if (readyPromise) return readyPromise;
+
 
   readyPromise = new Promise<EngineWindow>((resolve, reject) => {
     const el = document.createElement('iframe');
