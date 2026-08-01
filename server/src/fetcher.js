@@ -766,41 +766,33 @@ async function tocFromConfig(url, config, linkSelector) {
   ];
   // Many sites keep the chapter list on a dedicated sub-page rather than the
   // novel landing page, so try those variants when the landing page is empty.
-  const base = url.replace(/[/#?].*$/, "") === url ? url : url;
-  const variants = [url];
   const clean = url.split(/[?#]/)[0].replace(/\/$/, "");
+  const variants = [url];
   if (!/\/(chapters?|toc|chapter-list)$/i.test(clean)) {
     variants.push(`${clean}/chapters`, `${clean}/chapter-list`, `${clean}/toc`);
   }
 
-  let html = "";
   let doc = null;
   let results = [];
   let sourceUrl = url;
   for (const candidate of variants) {
     try {
-      const h = await getText(candidate);
-      const d = parseHtml(h);
+      const d = parseHtml(await getText(candidate));
       const items = collectTocLinks(d, candidate, selectors);
       if (items.length) {
-        html = h;
         doc = d;
         results = items;
         sourceUrl = candidate;
         break;
       }
-      if (!doc) {
-        html = h;
-        doc = d;
-      }
+      doc = doc || d;
     } catch {
       /* try the next variant */
     }
   }
   if (!doc) return [];
-  void base;
-  void html;
   url = sourceUrl;
+
 
 
   const pages = tocPageUrls(doc, url);
