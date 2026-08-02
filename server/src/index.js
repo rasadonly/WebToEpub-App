@@ -316,7 +316,28 @@ async function runJob(job, { tocUrl, providedChapters, metadata, options, select
   job.status = "done";
   job.phase = "Ready to download";
   touch();
+
+  // Best-effort copy to the shared Hugging Face library (never fails the job).
+  if (libraryEnabled()) {
+    job.libraryStatus = "uploading";
+    touch();
+    try {
+      const up = await uploadToLibrary(buffer, job.filename, {
+        title: metadata.title,
+        author: metadata.author,
+        source: tocUrl,
+      });
+      job.libraryUrl = up.url;
+      job.libraryPageUrl = up.pageUrl;
+      job.libraryStatus = "saved";
+    } catch (e) {
+      job.libraryStatus = "failed";
+      job.libraryError = e.message;
+    }
+    touch();
+  }
 }
+
 
 function finishCancelled(job) {
   job.status = "cancelled";
