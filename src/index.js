@@ -51,6 +51,24 @@ setInterval(cleanup, 10 * 60 * 1000).unref();
 
 app.get("/health", (_req, res) => res.json({ ok: true, jobs: jobs.size, uptime: process.uptime() }));
 
+// ---- Live stats (active jobs + active users) -------------------------------
+const visitors = new Map(); // visitorId -> lastSeen ms
+const VISITOR_TTL_MS = 90 * 1000;
+
+app.get("/api/stats", (req, res) => {
+  const now = Date.now();
+  const uid = String(req.query.uid || "").slice(0, 64);
+  if (uid) visitors.set(uid, now);
+  for (const [id, seen] of visitors) if (now - seen > VISITOR_TTL_MS) visitors.delete(id);
+
+  let activeJobs = 0;
+  for (const job of jobs.values()) {
+    if (job.status === "queued" || job.status === "running") activeJobs++;
+  }
+  res.json({ activeJobs, activeUsers: Math.max(visitors.size, uid ? 1 : 0), totalJobs: jobs.size });
+});
+
+
 // Every domain the backend can parse (hand-written parsers + the generated
 // selector table extracted from the WebToEpub parser library).
 app.get("/api/sites", (_req, res) => {
