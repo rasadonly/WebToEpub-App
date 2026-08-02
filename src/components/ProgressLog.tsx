@@ -3,15 +3,19 @@ import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { ConversionProgress } from '@/types';
-import { CheckCircle, AlertCircle, Loader2, Download, Square } from 'lucide-react';
+import type { BackendJob } from '@/utils/backend';
+import { CheckCircle, AlertCircle, Loader2, Download, Square, Link as LinkIcon } from 'lucide-react';
 
 interface ProgressLogProps {
   progress: ConversionProgress;
   logs: string[];
   onStop?: () => void;
+  serverJob?: BackendJob | null;
+  onDownload?: () => void;
 }
 
-export default function ProgressLog({ progress, logs, onStop }: ProgressLogProps) {
+export default function ProgressLog({ progress, logs, onStop, serverJob, onDownload }: ProgressLogProps) {
+
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
