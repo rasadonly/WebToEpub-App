@@ -20,6 +20,9 @@ const Index = () => {
     isConverting,
     isGenerating,
     isFetchingToc,
+    serverJob,
+    downloadServerJob,
+
   } = useEpubConverter();
 
   useEffect(() => {
