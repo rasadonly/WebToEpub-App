@@ -152,7 +152,13 @@ export interface BackendJob {
   size: number;
   filename: string;
   ready: boolean;
+  /** Shared Hugging Face library copy (direct .epub download link). */
+  libraryUrl?: string;
+  libraryPageUrl?: string;
+  libraryStatus?: 'uploading' | 'saved' | 'failed';
+  libraryError?: string;
 }
+
 
 export interface BackendChapter {
   url: string;

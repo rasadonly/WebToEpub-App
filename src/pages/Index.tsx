@@ -20,6 +20,9 @@ const Index = () => {
     isConverting,
     isGenerating,
     isFetchingToc,
+    serverJob,
+    downloadServerJob,
+
   } = useEpubConverter();
 
   useEffect(() => {
@@ -107,7 +110,14 @@ const Index = () => {
               isStreaming={isFetchingToc}
             />
           )}
-          <ProgressLog progress={progress} logs={logs} onStop={stopConversion} />
+          <ProgressLog
+            progress={progress}
+            logs={logs}
+            onStop={stopConversion}
+            serverJob={serverJob}
+            onDownload={downloadServerJob}
+          />
+
         </div>
 
         {/* Reset Button */}

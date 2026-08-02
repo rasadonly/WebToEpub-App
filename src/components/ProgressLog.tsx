@@ -3,15 +3,19 @@ import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { ConversionProgress } from '@/types';
-import { CheckCircle, AlertCircle, Loader2, Download, Square } from 'lucide-react';
+import type { BackendJob } from '@/utils/backend';
+import { CheckCircle, AlertCircle, Loader2, Download, Square, Link as LinkIcon } from 'lucide-react';
 
 interface ProgressLogProps {
   progress: ConversionProgress;
   logs: string[];
   onStop?: () => void;
+  serverJob?: BackendJob | null;
+  onDownload?: () => void;
 }
 
-export default function ProgressLog({ progress, logs, onStop }: ProgressLogProps) {
+export default function ProgressLog({ progress, logs, onStop, serverJob, onDownload }: ProgressLogProps) {
+
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -100,6 +104,48 @@ export default function ProgressLog({ progress, logs, onStop }: ProgressLogProps
             </div>
           </div>
         )}
+
+        {/* Finished server job: local download + shared library copy */}
+        {progress.status === 'complete' && serverJob?.ready && (
+          <div className="space-y-3 rounded-lg border border-success/30 bg-success/5 p-4">
+            <div className="flex flex-wrap gap-2">
+              {onDownload && (
+                <Button onClick={onDownload} size="sm" className="gap-2">
+                  <Download className="w-4 h-4" />
+                  Download EPUB
+                </Button>
+              )}
+              {serverJob.libraryUrl && (
+                <Button asChild size="sm" variant="outline" className="gap-2">
+                  <a href={serverJob.libraryUrl} target="_blank" rel="noopener noreferrer">
+                    <LinkIcon className="w-4 h-4" />
+                    Download from library
+                  </a>
+                </Button>
+              )}
+            </div>
+            {serverJob.libraryUrl ? (
+              <p className="text-xs text-muted-foreground break-all">
+                Saved to the shared library:{' '}
+                <a
+                  href={serverJob.libraryPageUrl || serverJob.libraryUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary underline"
+                >
+                  {serverJob.libraryUrl}
+                </a>
+              </p>
+            ) : serverJob.libraryStatus === 'uploading' ? (
+              <p className="text-xs text-muted-foreground">Saving a copy to the library…</p>
+            ) : serverJob.libraryStatus === 'failed' ? (
+              <p className="text-xs text-muted-foreground">
+                Couldn't save a copy to the library ({serverJob.libraryError || 'upload failed'}).
+              </p>
+            ) : null}
+          </div>
+        )}
+
 
         {/* Logs */}
         {logs.length > 0 && (

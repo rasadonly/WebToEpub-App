@@ -16,6 +16,8 @@ import {
   lookupSiteConfig,
 } from "./fetcher.js";
 import { buildEpub, sanitizeFilename } from "./epub.js";
+import { uploadToLibrary, libraryEnabled } from "./library.js";
+
 
 const app = express();
 app.use(cors({ origin: true, exposedHeaders: ["Content-Disposition"] }));
@@ -313,10 +315,34 @@ async function runJob(job, { tocUrl, providedChapters, metadata, options, select
 
   job.file = file;
   job.size = buffer.length;
+
+  // Best-effort copy to the shared Hugging Face library (never fails the job).
+  // Done before flipping to "done" so the client's poll sees the link.
+  if (libraryEnabled()) {
+    job.phase = "Saving a copy to the library";
+    job.libraryStatus = "uploading";
+    touch();
+    try {
+      const up = await uploadToLibrary(buffer, job.filename, {
+        title: metadata.title,
+        author: metadata.author,
+        source: tocUrl,
+      });
+      job.libraryUrl = up.url;
+      job.libraryPageUrl = up.pageUrl;
+      job.libraryStatus = "saved";
+    } catch (e) {
+      job.libraryStatus = "failed";
+      job.libraryError = e.message;
+    }
+  }
+
   job.status = "done";
   job.phase = "Ready to download";
   touch();
+
 }
+
 
 function finishCancelled(job) {
   job.status = "cancelled";
