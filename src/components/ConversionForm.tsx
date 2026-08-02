@@ -85,45 +85,106 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
 
   // "Load & Analyse" state — auto-fetches book metadata like WebToEpub
   const [isAnalysing, setIsAnalysing] = useState(false);
+  // Remembers what auto-fill wrote, so we never clobber a value the user typed.
+  const autoFilledRef = useRef<Partial<EpubMetadata>>({});
+  const analysedUrlRef = useRef<string>('');
 
-  const handleLoadAnalyse = async () => {
-    const url = tocUrl.trim();
-    if (!url || !isUrlLike(url)) {
-      toast({
-        title: 'Enter a URL first',
-        description: 'Paste the novel\'s table-of-contents URL to load its metadata.',
-        variant: 'destructive',
+  const isUrlLike = (s: string) => /^https?:\/\//i.test(s.trim());
+
+  /** Drops tracking params (utm_*, ref, fbclid…) that break some parsers. */
+  const cleanUrl = (raw: string) => {
+    try {
+      const u = new URL(raw.trim());
+      [...u.searchParams.keys()].forEach(k => {
+        if (/^(utm_|fbclid|gclid|ref|source|share)/i.test(k)) u.searchParams.delete(k);
       });
+      return u.href.replace(/\?$/, '');
+    } catch {
+      return raw.trim();
+    }
+  };
+
+  /** Fills a metadata field only when it's empty or still holds an auto value. */
+  const mergeAuto = (info: Partial<EpubMetadata>) => {
+    setMetadata(prev => {
+      const next = { ...prev };
+      (Object.keys(info) as (keyof EpubMetadata)[]).forEach(key => {
+        const value = info[key];
+        if (!value) return;
+        const current = prev[key];
+        if (!current || current === autoFilledRef.current[key]) {
+          (next[key] as string) = value as string;
+          (autoFilledRef.current[key] as string) = value as string;
+        }
+      });
+      return next;
+    });
+  };
+
+  const analyse = async (rawUrl: string, silent: boolean) => {
+    const url = cleanUrl(rawUrl);
+    if (!url || !isUrlLike(url)) {
+      if (!silent) {
+        toast({
+          title: 'Enter a URL first',
+          description: 'Paste the novel\'s table-of-contents URL to load its metadata.',
+          variant: 'destructive',
+        });
+      }
       return;
     }
     setIsAnalysing(true);
     try {
       const info = await engineLoadMetadata(url);
-      setMetadata(prev => ({
-        title: info.title || prev.title,
-        author: info.author && info.author !== '<unknown>' ? info.author : prev.author,
-        language: info.language || prev.language || 'en',
-        description: info.description || prev.description || '',
-        fileName: info.fileName || prev.fileName,
-        coverUrl: info.coverUrl || prev.coverUrl,
-      }));
-      toast({
-        title: 'Metadata loaded',
-        description: info.title ? `Detected: ${info.title}` : 'Fields populated from the page.',
+      mergeAuto({
+        title: info.title || '',
+        author: info.author && info.author !== '<unknown>' ? info.author : '',
+        language: info.language || 'en',
+        description: info.description || '',
+        fileName: info.fileName || '',
+        coverUrl: info.coverUrl || '',
       });
+      if (!silent) {
+        toast({
+          title: 'Metadata loaded',
+          description: info.title ? `Detected: ${info.title}` : 'Fields populated from the page.',
+        });
+      }
     } catch (err) {
-      toast({
-        title: 'Load & Analyse failed',
-        description: err instanceof Error ? err.message : 'Could not fetch metadata for this URL.',
-        variant: 'destructive',
-      });
+      // Fall back to the slug in the URL so the title box is never empty.
+      const slugTitle = extractTitleFromUrl(url);
+      if (slugTitle) mergeAuto({ title: slugTitle });
+      if (!silent) {
+        toast({
+          title: 'Load & Analyse failed',
+          description: err instanceof Error ? err.message : 'Could not fetch metadata for this URL.',
+          variant: 'destructive',
+        });
+      }
     } finally {
       setIsAnalysing(false);
     }
   };
 
+  const handleLoadAnalyse = () => analyse(tocUrl, false);
 
-  const isUrlLike = (s: string) => /^https?:\/\//i.test(s.trim());
+  // Auto-grab the book title (and the rest of the metadata) as soon as a valid
+  // link is pasted or typed — no button press needed, works for any site.
+  useEffect(() => {
+    const url = cleanUrl(tocUrl);
+    if (!isUrlLike(url) || url === analysedUrlRef.current) return;
+    const timer = window.setTimeout(() => {
+      analysedUrlRef.current = url;
+      // Instant slug-based guess, then the real title once the engine answers.
+      const slugTitle = extractTitleFromUrl(url);
+      if (slugTitle) mergeAuto({ title: slugTitle });
+      void analyse(url, true);
+    }, 600);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tocUrl]);
+
+
 
   /** Score a search result against the query (higher = more relevant). */
   const scoreResult = (r: EngineSearchResult, query: string): number => {
