@@ -42,7 +42,7 @@ function formatSize(bytes?: number) {
 
 export function LibraryModal({ open, onClose }: LibraryModalProps) {
   const { toast } = useToast();
-  const [tab, setTab] = useState<Tab>('telegram');
+  const [tab, setTab] = useState<Tab>('community');
   const [loading, setLoading] = useState(false);
   const [books, setBooks] = useState<LibraryBook[]>([]);
   const [query, setQuery] = useState('');
@@ -65,7 +65,8 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
     setVisibleCount(INITIAL_VISIBLE_BOOKS);
     try {
       let list: LibraryBook[] = [];
-      if (which === 'telegram') list = await libraryGetTelegram();
+      if (which === 'community') list = await libraryGetCommunity();
+      else if (which === 'telegram') list = await libraryGetTelegram();
       else if (which === 'archive') list = await libraryGetArchive();
       else list = await libraryGetMega(megaOverride ?? megaUrl);
       setBooks(list);
