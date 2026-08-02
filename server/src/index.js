@@ -315,12 +315,11 @@ async function runJob(job, { tocUrl, providedChapters, metadata, options, select
 
   job.file = file;
   job.size = buffer.length;
-  job.status = "done";
-  job.phase = "Ready to download";
-  touch();
 
   // Best-effort copy to the shared Hugging Face library (never fails the job).
+  // Done before flipping to "done" so the client's poll sees the link.
   if (libraryEnabled()) {
+    job.phase = "Saving a copy to the library";
     job.libraryStatus = "uploading";
     touch();
     try {
@@ -336,8 +335,12 @@ async function runJob(job, { tocUrl, providedChapters, metadata, options, select
       job.libraryStatus = "failed";
       job.libraryError = e.message;
     }
-    touch();
   }
+
+  job.status = "done";
+  job.phase = "Ready to download";
+  touch();
+
 }
 
 
