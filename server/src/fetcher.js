@@ -727,28 +727,109 @@ function collectTocLinks(doc, pageUrl, selectors) {
   return out;
 }
 
-/** Finds extra TOC pages from a standard pagination block. */
-function tocPageUrls(doc, pageUrl) {
-  const urls = new Set();
-  let maxPage = 1;
-  doc
-    .querySelectorAll(".pagination a[href], .paging a[href], ul.pager a[href], .page-nav a[href]")
-    .forEach((a) => {
-      const href = a.getAttribute("href");
-      if (!href) return;
-      const abs = absoluteUrl(pageUrl, href);
-      const n = Number(
-        new URL(abs).searchParams.get("page") || /[?&/](?:page[=/-])(\d+)/i.exec(abs)?.[1] || 0
-      );
-      if (n > maxPage) maxPage = n;
-    });
-  if (maxPage > 1) {
-    const u = new URL(pageUrl);
-    for (let p = 2; p <= Math.min(maxPage, 200); p++) {
-      u.searchParams.set("page", String(p));
-      urls.add(u.href);
+const PAGINATION_SELECTORS = [
+  ".pagination a[href]",
+  ".paging a[href]",
+  "ul.pager a[href]",
+  ".page-nav a[href]",
+  ".page-numbers a[href]",
+  "a.page-numbers[href]",
+  ".pages a[href]",
+  ".pager a[href]",
+  "nav.pagination a[href]",
+  "[class*='pagination'] a[href]",
+  "[class*='page-num'] a[href]",
+  "select.listpage option[value]",
+  "select#pagination option[value]",
+].join(", ");
+
+/** Extracts the page number encoded in a URL, or 0. */
+function pageNumberOf(absUrl) {
+  let u;
+  try {
+    u = new URL(absUrl);
+  } catch {
+    return 0;
+  }
+  const q =
+    u.searchParams.get("page") ||
+    u.searchParams.get("p") ||
+    u.searchParams.get("pageNo") ||
+    u.searchParams.get("pg");
+  if (q && /^\d+$/.test(q)) return Number(q);
+  const m =
+    /\/page[/-](\d+)/i.exec(u.pathname) ||
+    /[?&](?:page|p|pg)=(\d+)/i.exec(u.search) ||
+    /[-_/]trang[-_/](\d+)/i.exec(u.pathname) ||
+    /[-_](\d+)\.html?$/i.exec(u.pathname);
+  return m ? Number(m[1]) : 0;
+}
+
+/** Builds the URL of page `n` from a template URL that already has a page marker. */
+function pageUrlTemplate(sampleUrl, n) {
+  const u = new URL(sampleUrl);
+  for (const key of ["page", "p", "pageNo", "pg"]) {
+    if (u.searchParams.has(key)) {
+      u.searchParams.set(key, String(n));
+      return u.href;
     }
   }
+  if (/\/page[/-]\d+/i.test(u.pathname)) {
+    u.pathname = u.pathname.replace(/\/page([/-])\d+/i, `/page$1${n}`);
+    return u.href;
+  }
+  if (/[-_/]trang[-_/]\d+/i.test(u.pathname)) {
+    u.pathname = u.pathname.replace(/([-_/]trang[-_/])\d+/i, `$1${n}`);
+    return u.href;
+  }
+  u.searchParams.set("page", String(n));
+  return u.href;
+}
+
+/**
+ * Finds every extra TOC page. Handles query pagination (?page=2), path
+ * pagination (/page/2, /trang-2), `<option>` page pickers, and "last page"
+ * links that only expose the highest page number.
+ */
+function tocPageUrls(doc, pageUrl) {
+  const urls = new Set();
+  const explicit = [];
+  let maxPage = 1;
+  let template = null;
+
+  let nodes = [];
+  try {
+    nodes = [...doc.querySelectorAll(PAGINATION_SELECTORS)];
+  } catch {
+    nodes = [];
+  }
+
+  for (const a of nodes) {
+    const href = a.getAttribute("href") || a.getAttribute("value");
+    if (!href || href.startsWith("#") || href.startsWith("javascript:")) continue;
+    const abs = absoluteUrl(pageUrl, href);
+    const n = pageNumberOf(abs);
+    if (n > 1) {
+      explicit.push({ n, abs });
+      if (!template) template = abs;
+      if (n > maxPage) maxPage = n;
+    }
+    // Some sites put the page count only in the link text ("Last (37)").
+    const textN = Number((a.textContent || "").replace(/[^\d]/g, ""));
+    if (textN > maxPage && textN < 5000) maxPage = textN;
+  }
+
+  const base = template || pageUrl;
+  for (let p = 2; p <= Math.min(maxPage, 300); p++) {
+    try {
+      urls.add(pageUrlTemplate(base, p));
+    } catch {
+      /* ignore malformed */
+    }
+  }
+  // Keep any explicitly-linked page that the template didn't reproduce.
+  explicit.forEach(({ abs }) => urls.add(abs));
+  urls.delete(pageUrl);
   return [...urls];
 }
 

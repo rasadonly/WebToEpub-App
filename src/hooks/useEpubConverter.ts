@@ -12,7 +12,7 @@ import { fetchChapterLinksLive, ChapterLink } from '@/utils/localWorker';
 import { getSiteConfig } from '@/utils/siteConfigs';
 import {
   isBackendEnabled,
-  isBackendSupportedUrl,
+  isBackendSupportedUrlAsync,
   backendToc,
   backendStartJob,
   backendCancelJob,
@@ -135,7 +135,7 @@ export function useEpubConverter() {
 
         // Server backend: only for sites that have a dedicated server-side parser.
         // Everything else goes straight to the browser engine (386 parsers).
-        if (isBackendEnabled() && isBackendSupportedUrl(data.tocUrl)) {
+        if (isBackendEnabled() && (await isBackendSupportedUrlAsync(data.tocUrl))) {
           try {
             addLog('Fetching chapter list from the server (streaming)…');
             const { chapters } = await backendToc(data.tocUrl, data.tocSelector, (items) => {
@@ -230,7 +230,7 @@ export function useEpubConverter() {
         };
 
         // --- Server-side conversion (keeps running if the page is closed) ---
-        if (isBackendEnabled() && isBackendSupportedUrl(data.tocUrl)) {
+        if (isBackendEnabled() && (await isBackendSupportedUrlAsync(data.tocUrl))) {
           try {
             updateProgress({
               status: 'processing-chapters',

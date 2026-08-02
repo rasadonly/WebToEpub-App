@@ -35,14 +35,86 @@ export const BACKEND_SUPPORTED_HOSTS: readonly string[] = [
   'wattpad.com',
 ];
 
-/** Returns true when the backend has a dedicated parser for this URL. */
+/** Domains reported live by the backend's /api/sites (526+ entries). */
+const SITES_CACHE_KEY = 'backend_sites_v1';
+let dynamicHosts: Set<string> | null = null;
+let dynamicHostsPromise: Promise<Set<string>> | null = null;
+
+function readSitesCache(): Set<string> | null {
+  try {
+    const raw = localStorage.getItem(SITES_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { at: number; domains: string[] };
+    if (!parsed?.domains?.length) return null;
+    if (Date.now() - parsed.at > 24 * 60 * 60 * 1000) return null;
+    return new Set(parsed.domains);
+  } catch {
+    return null;
+  }
+}
+
+/** Loads (and caches for a day) the full domain list the backend can parse. */
+export async function loadBackendHosts(): Promise<Set<string>> {
+  if (dynamicHosts) return dynamicHosts;
+  const cached = readSitesCache();
+  if (cached) {
+    dynamicHosts = cached;
+    return cached;
+  }
+  if (dynamicHostsPromise) return dynamicHostsPromise;
+  dynamicHostsPromise = (async () => {
+    try {
+      const { domains } = await api<{ domains: string[] }>('/api/sites', undefined, 20_000);
+      const set = new Set((domains || []).map(d => d.replace(/^www\./, '').toLowerCase()));
+      if (set.size) {
+        dynamicHosts = set;
+        try {
+          localStorage.setItem(
+            SITES_CACHE_KEY,
+            JSON.stringify({ at: Date.now(), domains: [...set] })
+          );
+        } catch { /* quota */ }
+        return set;
+      }
+    } catch { /* offline / old backend */ }
+    return new Set(BACKEND_SUPPORTED_HOSTS.map(h => h.toLowerCase()));
+  })();
+  const result = await dynamicHostsPromise;
+  dynamicHostsPromise = null;
+  return result;
+}
+
+function matches(host: string, hosts: Iterable<string>): boolean {
+  for (const h of hosts) if (host === h || host.endsWith('.' + h)) return true;
+  return false;
+}
+
+/** Synchronous best-effort check (static list + whatever is already cached). */
 export function isBackendSupportedUrl(url: string): boolean {
   try {
-    const host = new URL(url).hostname.replace(/^www\./, '');
-    return BACKEND_SUPPORTED_HOSTS.some(h => host === h || host.endsWith('.' + h));
+    const host = new URL(url).hostname.replace(/^www\./, '').toLowerCase();
+    if (matches(host, BACKEND_SUPPORTED_HOSTS)) return true;
+    const known = dynamicHosts ?? readSitesCache();
+    if (known) {
+      dynamicHosts = known;
+      return matches(host, known);
+    }
+    return false;
   } catch {
     return false;
   }
+}
+
+/** Authoritative check — fetches the backend's live domain table if needed. */
+export async function isBackendSupportedUrlAsync(url: string): Promise<boolean> {
+  let host = '';
+  try {
+    host = new URL(url).hostname.replace(/^www\./, '').toLowerCase();
+  } catch {
+    return false;
+  }
+  if (matches(host, BACKEND_SUPPORTED_HOSTS)) return true;
+  return matches(host, await loadBackendHosts());
 }
 
 /** URL format for the Heroku CORS proxy — use as a drop-in CORS proxy. */
