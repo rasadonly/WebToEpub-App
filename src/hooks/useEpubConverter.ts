@@ -12,7 +12,6 @@ import { fetchChapterLinksLive, ChapterLink } from '@/utils/localWorker';
 import { getSiteConfig } from '@/utils/siteConfigs';
 import {
   isBackendEnabled,
-  isBackendSupportedUrl,
   isBackendSupportedUrlAsync,
   backendToc,
   backendStartJob,
