@@ -19,8 +19,13 @@ const PROXIES = [
   "", // direct
   "https://corsproxy.io/?key=ab3170e1&url=",
   "https://api.allorigins.win/raw?url=",
+  "https://proxy.cors.sh/",
   "https://api.codetabs.com/v1/proxy?quest=",
+  "https://thingproxy.freeboard.io/fetch/",
   "https://api.cors.lol/?url=",
+  "https://render-proxy-1-181c.onrender.com/proxy?url=",
+  "https://prasadghanwat.alwaysdata.net/proxy?url=",
+  "https://loveable-proxy-forwebtoepub.lovable.app/api/proxy?url="
 ];
 
 const ENCODED_SUFFIXES = ["?url=", "?quest=", "&url="];
@@ -108,69 +113,43 @@ async function tocFreeWebNovel(url) {
   const base = url.split("?")[0].replace(/\/$/, "");
   const html = await getText(base);
   const doc = parseHtml(html);
-  const chapterPath = `${new URL(base).pathname}/chapter-`;
-  const seen = new Set();
+  const out = [];
 
-  const collectPage = (d) => {
-    const items = [];
-    const root = d.querySelector("#idData");
-    const scope = root || d;
-    const selector = root
-      ? "li > a[href]"
-      : [
-          `li > a.con[href*="${chapterPath}"]`,
-          `a.con[href*="${chapterPath}"]`,
-          `a[href*="${chapterPath}"]`,
-        ].join(",");
-    scope.querySelectorAll(selector).forEach((a) => {
+  const collect = (d) => {
+    d.querySelectorAll("#idData li > a").forEach((a) => {
       const href = a.getAttribute("href");
-      if (!href) return;
-      const abs = absoluteUrl(base, href);
-      if (abs.includes(chapterPath) && !seen.has(abs)) {
-        seen.add(abs);
-        items.push({ url: abs, title: (a.textContent || "").trim() || a.getAttribute("title") || "" });
+      if (href) {
+        out.push({
+          url: absoluteUrl(base, href),
+          title: (a.textContent || "").trim() || a.getAttribute("title") || "",
+        });
       }
     });
-    return items;
   };
 
-  const results = collectPage(doc);
+  collect(doc);
 
-  let totalPage = 1;
-  const indexSelect = doc.querySelector("#indexselect");
-  if (indexSelect) totalPage = indexSelect.querySelectorAll("option").length || 1;
-  if (totalPage === 1) {
-    const m = /totalPage:\s*(\d+)/.exec(html);
-    if (m) totalPage = parseInt(m[1]);
-  }
-
-  const fetchTocPage = async (pageUrl) => {
-    const raw = await getText(pageUrl);
-    if (!raw) return "";
-    try {
-      return JSON.parse(raw)?.html || "";
-    } catch {
-      return raw.includes("<li") ? raw : "";
-    }
-  };
+  const options = doc.querySelectorAll("#indexselect option");
+  const totalPage = options.length || 1;
 
   const pages = [];
-  for (let p = 2; p <= totalPage; p++) pages.push(`${base}?ajax=chapters&page=${p}`);
+  for (let p = 2; p <= totalPage; p++) {
+    pages.push(`${base}?page=${p}`);
+  }
+
   const htmls = await mapPool(pages, 8, async (pageUrl) => {
-    for (let a = 0; a < 3; a++) {
-      try {
-        const h = await fetchTocPage(pageUrl);
-        if (h) return h;
-      } catch {
-        /* retry */
-      }
+    try {
+      return await getText(pageUrl);
+    } catch {
+      return "";
     }
-    return "";
   });
+
   htmls.forEach((h) => {
-    if (h) results.push(...collectPage(parseHtml(h)));
+    if (h) collect(parseHtml(h));
   });
-  return results;
+
+  return out;
 }
 
 async function tocNovelFire(url) {
