@@ -11,7 +11,7 @@ const REPO = process.env.HF_LIBRARY_REPO || "prasadonly/webtoepub-library";
 const MAX_BYTES = Number(process.env.HF_LIBRARY_MAX_BYTES || 40 * 1024 * 1024);
 
 function token() {
-  return process.env.HUGGINGFACE_TOKEN || process.env.HF_TOKEN || "";
+  return (process.env.HUGGINGFACE_TOKEN || process.env.HF_TOKEN || "").trim();
 }
 
 export function libraryEnabled() {
