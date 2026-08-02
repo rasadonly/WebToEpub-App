@@ -360,9 +360,21 @@ export function useEpubConverter() {
   /** Manually re-download a finished server job (e.g. after reopening the page). */
   const downloadServerJob = useCallback(async () => {
     if (!serverJob || !serverJob.ready) return;
-    await backendDownload(serverJob);
-    clearActiveJobId();
-  }, [serverJob]);
+    try {
+      addLog('Downloading EPUB from the server…');
+      await backendDownload(serverJob);
+      clearActiveJobId();
+      addLog('EPUB downloaded successfully.');
+    } catch (err) {
+      const msg = (err as Error).message;
+      addLog(`Download failed: ${msg}`);
+      toast({
+        title: 'Download Failed',
+        description: msg,
+        variant: 'destructive',
+      });
+    }
+  }, [serverJob, addLog, toast]);
 
 
   const isFetchingToc = progress.status === 'fetching-toc';
