@@ -105,7 +105,7 @@ export default function ProgressLog({ progress, logs, onStop, serverJob, onDownl
           </div>
         )}
 
-        {/* Finished server job: local download + shared library copy */}
+        {/* Finished server job: local download */}
         {progress.status === 'complete' && serverJob?.ready && (
           <div className="space-y-3 rounded-lg border border-success/30 bg-success/5 p-4">
             <div className="flex flex-wrap gap-2">
@@ -115,36 +115,15 @@ export default function ProgressLog({ progress, logs, onStop, serverJob, onDownl
                   Download EPUB
                 </Button>
               )}
-              {serverJob.libraryUrl && (
-                <Button asChild size="sm" variant="outline" className="gap-2">
-                  <a href={serverJob.libraryUrl} target="_blank" rel="noopener noreferrer">
-                    <LinkIcon className="w-4 h-4" />
-                    Download from library
-                  </a>
-                </Button>
-              )}
             </div>
             {serverJob.libraryUrl ? (
-              <p className="text-xs text-muted-foreground break-all">
-                Saved to the shared library:{' '}
-                <a
-                  href={serverJob.libraryPageUrl || serverJob.libraryUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary underline"
-                >
-                  {serverJob.libraryUrl}
-                </a>
-              </p>
+              <p className="text-xs text-muted-foreground">Saved to the Community Library.</p>
             ) : serverJob.libraryStatus === 'uploading' ? (
-              <p className="text-xs text-muted-foreground">Saving a copy to the library…</p>
-            ) : serverJob.libraryStatus === 'failed' ? (
-              <p className="text-xs text-muted-foreground">
-                Couldn't save a copy to the library ({serverJob.libraryError || 'upload failed'}).
-              </p>
+              <p className="text-xs text-muted-foreground">Saving a copy to the Community Library…</p>
             ) : null}
           </div>
         )}
+
 
 
         {/* Logs */}
