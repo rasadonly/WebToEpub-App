@@ -350,6 +350,7 @@ async function runJob(job, { tocUrl, providedChapters, metadata, options, select
       job.libraryPageUrl = up.pageUrl;
       job.libraryStatus = "saved";
     } catch (e) {
+      console.error("Library upload failed:", e);
       job.libraryStatus = "failed";
       job.libraryError = e.message;
     }
