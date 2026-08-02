@@ -16,6 +16,8 @@ import {
   lookupSiteConfig,
 } from "./fetcher.js";
 import { buildEpub, sanitizeFilename } from "./epub.js";
+import { uploadToLibrary, libraryEnabled } from "./library.js";
+
 
 const app = express();
 app.use(cors({ origin: true, exposedHeaders: ["Content-Disposition"] }));
