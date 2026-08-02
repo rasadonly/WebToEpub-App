@@ -526,8 +526,12 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
 
 
           {/* Quick actions — fixed to top-right like Google/Bing account menu */}
-          <div className="fixed top-3 right-3 md:top-4 md:right-4 z-50">
+          <div className="fixed top-3 right-3 md:top-4 md:right-4 z-50 flex items-center gap-2">
+            <div className="hidden sm:block">
+              <LiveStats />
+            </div>
             <DropdownMenu modal={false}>
+
               <DropdownMenuTrigger asChild>
                 <Button
                   type="button"
