@@ -916,6 +916,48 @@ async function fetchHFBooks(mode: 'telegram' | 'hf'): Promise<LibraryBook[]> {
 export const libraryGetTelegram = () => fetchHFBooks('telegram');
 export const libraryGetPublic = () => fetchHFBooks('hf');
 
+// ── Community library (books this app uploads) ──────────────
+const HF_COMMUNITY_REPO_ID = 'prasadonly/webtoepub-library';
+
+interface HFTreeEntry { type: string; path: string; size?: number }
+
+function prettyTitleFromPath(path: string): string {
+  const file = path.split('/').pop() || path;
+  return file
+    .replace(/\.epub(\.txt)?$/i, '')
+    .replace(/-[a-z0-9]{6}$/i, '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase()) || 'Untitled';
+}
+
+export async function libraryGetCommunity(): Promise<LibraryBook[]> {
+  const list = await fetchJsonWithProxyFallback<HFTreeEntry[]>(
+    `https://huggingface.co/api/datasets/${HF_COMMUNITY_REPO_ID}/tree/main/books?recursive=true`,
+    15_000
+  );
+  if (!Array.isArray(list)) return [];
+
+  return list
+    .filter((item) => item.type === 'file' && /\.epub(\.txt)?$/i.test(item.path))
+    .map((item) => {
+      const dateMatch = item.path.match(/books\/(\d{4}-\d{2}-\d{2})\//);
+      return {
+        id: item.path,
+        title: prettyTitleFromPath(item.path),
+        author: '',
+        description: '',
+        size: item.size,
+        uploadedAt: dateMatch ? `${dateMatch[1]}T00:00:00Z` : undefined,
+        handle: { epubPath: item.path, repoId: HF_COMMUNITY_REPO_ID },
+        source: 'hf' as const,
+      };
+    })
+    .sort((a, b) => (b.uploadedAt || '').localeCompare(a.uploadedAt || '') || a.title.localeCompare(b.title));
+}
+
+
 export async function libraryDownloadHF(handle: unknown): Promise<Blob> {
   const { epubPath, repoId } = handle as { epubPath: string; repoId: string };
   const url = makeHfFileUrl(repoId || HF_OLD_REPO_ID, epubPath);
