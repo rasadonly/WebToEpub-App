@@ -26,7 +26,7 @@ export const BACKEND_SUPPORTED_HOSTS: readonly string[] = [
   'novelhall.com',
   'freewebnovel.com',
   'novelfire.net', 'novelfire.com', 'novelfire.io',
-  'novgo.com',
+  'novgo.com', 'novgo.net',
   'novelbuddy.com', 'novelbuddy.io',
   'novelarrow.com',
   'novelfull.com', 'novelfull.net',
