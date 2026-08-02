@@ -9,6 +9,7 @@ import {
   libraryGetTelegram,
   libraryGetMega,
   libraryGetArchive,
+  libraryGetCommunity,
   libraryDownloadHF,
   libraryDownloadMega,
   libraryDownloadArchive,
@@ -19,17 +20,19 @@ interface LibraryModalProps {
   onClose: () => void;
 }
 
-type Tab = 'telegram' | 'mega' | 'archive';
+type Tab = 'community' | 'telegram' | 'mega' | 'archive';
 
 const DEFAULT_MEGA_URL = 'https://mega.nz/folder/Ci4ETASB#KIFVuPI99P1Ytg0dxmtYlw';
 const INITIAL_VISIBLE_BOOKS = 80;
 const LOAD_MORE_COUNT = 80;
 
 const TABS: { id: Tab; label: string; icon: typeof Send }[] = [
+  { id: 'community', label: 'Community', icon: BookOpen },
   { id: 'telegram', label: 'Telegram (HF)', icon: Send },
   { id: 'mega', label: 'Mega Cloud', icon: Cloud },
   { id: 'archive', label: 'Archive.org', icon: Archive },
 ];
+
 
 function formatSize(bytes?: number) {
   if (!bytes) return '';
