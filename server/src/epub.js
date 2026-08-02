@@ -43,12 +43,25 @@ hr { border: none; border-top: 1px solid #ccc; margin: 1.5em 0; }`;
 
 const VOID_TAGS = "br|hr|img|input|meta|link|source|track|area|base|col|embed|param|wbr";
 
-// Make markup XHTML-safe: self-close void tags and drop scripts/styles.
+// HTML5 boolean attributes that may appear without a value (e.g. <div hidden>).
+// XHTML requires every attribute to have a value, so we convert them to
+// attr="attr" form, or strip them if they're meaningless inside an EPUB.
+const STRIP_ATTRS = "itemscope|itemprop|itemtype|itemid|itemref|role|aria-[\\w-]+";
+const BOOL_ATTRS = "hidden|checked|disabled|readonly|required|autofocus|autoplay|controls|loop|muted|defer|async|novalidate|formnovalidate|open|selected|multiple|allowfullscreen|default|reversed|scoped|seamless|typemustmatch|sortable|nomodule|playsinline|disablepictureinpicture|disableremoteplayback|shadowrootmode";
+
+// Make markup XHTML-safe: self-close void tags, drop scripts/styles,
+// strip microdata/ARIA attrs, and fix boolean attrs.
 function toXhtml(html = "") {
   return String(html)
     .replace(/<script[\s\S]*?<\/script>/gi, "")
     .replace(/<style[\s\S]*?<\/style>/gi, "")
     .replace(/<!--[\s\S]*?-->/g, "")
+    // Strip schema.org microdata & ARIA attributes (valueless or with value)
+    .replace(new RegExp(`\\s+(?:${STRIP_ATTRS})(?:\\s*=\\s*(?:"[^"]*"|'[^']*'|[^\\s>]*))?`, "gi"), "")
+    // Fix boolean attributes without values: <tag hidden> → <tag hidden="hidden">
+    .replace(new RegExp(`(<[a-zA-Z][^>]*?)\\s+(${BOOL_ATTRS})(?=[\\s/>])(?!\\s*=)`, "gi"), (_m, before, attr) => {
+      return `${before} ${attr.toLowerCase()}="${attr.toLowerCase()}"`;
+    })
     .replace(new RegExp(`<(${VOID_TAGS})((?:\\s[^<>]*?)?)\\s*/?>`, "gi"), (_m, tag, attrs) => {
       const cleaned = String(attrs).replace(/\s+(on\w+|data-[\w-]+)\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi, "");
       return `<${tag}${cleaned} />`;

@@ -191,11 +191,22 @@ function toXhtml(html: string): string {
       .querySelectorAll('script, style, iframe, ins, form, input, button, noscript, svg, canvas, video, audio')
       .forEach((el) => el.remove());
 
-    // Strip event handlers and other non-XHTML attributes.
+    // Strip event handlers, microdata, ARIA, and other non-EPUB attributes.
     wrap.querySelectorAll('*').forEach((el) => {
       [...el.attributes].forEach((attr) => {
         const name = attr.name.toLowerCase();
-        if (name.startsWith('on') || name.startsWith('data-') || name === 'contenteditable') {
+        if (
+          name.startsWith('on') ||
+          name.startsWith('data-') ||
+          name.startsWith('aria-') ||
+          name === 'contenteditable' ||
+          name === 'itemscope' ||
+          name === 'itemprop' ||
+          name === 'itemtype' ||
+          name === 'itemid' ||
+          name === 'itemref' ||
+          name === 'role'
+        ) {
           el.removeAttribute(attr.name);
         }
       });
