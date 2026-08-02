@@ -4,7 +4,7 @@ import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { ConversionProgress } from '@/types';
 import type { BackendJob } from '@/utils/backend';
-import { CheckCircle, AlertCircle, Loader2, Download, Square, Link as LinkIcon } from 'lucide-react';
+import { CheckCircle, AlertCircle, Loader2, Download, Square } from 'lucide-react';
 
 interface ProgressLogProps {
   progress: ConversionProgress;

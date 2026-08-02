@@ -17,6 +17,7 @@ import { LiveReaderModal } from './LiveReaderModal';
 import { LibraryModal } from './LibraryModal';
 import { EpubReaderModal } from './EpubReaderModal';
 import { ForumModal } from './ForumModal';
+import { LiveStats } from '@/components/LiveStats';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 
 
