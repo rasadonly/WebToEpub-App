@@ -432,9 +432,10 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
             </div>
             <h1 className="font-display text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight leading-none">
               <span className="text-foreground">Link</span>
-              <span className="text-primary">2</span>
+              <span className="text-primary">To</span>
               <span className="text-foreground">Epub</span>
               <span className="text-primary">.</span>
+
             </h1>
           </div>
 
