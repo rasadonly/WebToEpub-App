@@ -27,13 +27,13 @@ export const SUPPORTED_SITES: NovelSite[] = [
   },
   {
     name: 'NovelBin',
-    domain: 'novelbin.com',
+    domain: 'novel-bin.com',
     tocSelector: '.list-chapter a',
     contentSelector: '#chr-content, .chr-c',
     titleSelector: '.chr-title, h1',
     removeSelectors: ['.ads', '.advertisement', 'script', 'style', 'ins'],
     exampleUrls: [
-      'https://novelbin.com/b/against-the-gods-novel'
+      'https://novel-bin.com/b/against-the-gods-novel'
     ]
   },
   {
