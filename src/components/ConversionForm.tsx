@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -304,6 +304,20 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
     setSearchProgress({ done: 0, total: 0 });
     setSourceFilter('all');
   };
+
+  const sourceCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of searchResults) {
+      const src = r.source || 'other';
+      counts.set(src, (counts.get(src) || 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  }, [searchResults]);
+
+  const filteredResults = useMemo(
+    () => (sourceFilter === 'all' ? searchResults : searchResults.filter(r => (r.source || 'other') === sourceFilter)),
+    [searchResults, sourceFilter]
+  );
 
 
   // Load saved settings from localStorage
