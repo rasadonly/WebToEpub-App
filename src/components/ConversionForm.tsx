@@ -466,23 +466,62 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
             {/* Search results */}
             {(searchResults.length > 0 || isSearching) && (
               <Card className="mt-4 p-3 bg-card border border-border animate-in fade-in slide-in-from-top-2 duration-300">
-                <div className="flex items-center justify-between px-2 py-1 mb-1">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    {isSearching
-                      ? <span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-primary animate-pulse inline-block" />{searchStatus || 'Searching…'}</span>
-                      : `${searchResults.length} result${searchResults.length === 1 ? '' : 's'}`
-                    }
-                  </span>
-                  <button
-                    type="button"
-                    onClick={clearSearch}
-                    className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-                  >
-                    <X className="w-3.5 h-3.5" /> Clear
-                  </button>
+                <div className="px-2 py-1 mb-1 space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground min-w-0 truncate">
+                      {isSearching
+                        ? <span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-primary animate-pulse inline-block shrink-0" /><span className="truncate">{searchStatus || 'Searching…'}</span></span>
+                        : `${filteredResults.length} result${filteredResults.length === 1 ? '' : 's'}${lastQuery ? ` for “${lastQuery}”` : ''}`
+                      }
+                    </span>
+                    <button
+                      type="button"
+                      onClick={clearSearch}
+                      className="shrink-0 text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                    >
+                      <X className="w-3.5 h-3.5" /> {isSearching ? 'Stop' : 'Clear'}
+                    </button>
+                  </div>
+
+                  {isSearching && searchProgress.total > 0 && (
+                    <div className="space-y-1">
+                      <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
+                        <div
+                          className="h-full bg-primary transition-all duration-300"
+                          style={{ width: `${Math.min(100, (searchProgress.done / searchProgress.total) * 100)}%` }}
+                        />
+                      </div>
+                      <div className="text-[10px] text-muted-foreground/80">
+                        {searchProgress.done} / {searchProgress.total} sites searched · {searchResults.length} found
+                      </div>
+                    </div>
+                  )}
+
+                  {sourceCounts.length > 1 && (
+                    <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setSourceFilter('all')}
+                        className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-smooth ${sourceFilter === 'all' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'}`}
+                      >
+                        All {searchResults.length}
+                      </button>
+                      {sourceCounts.map(([src, count]) => (
+                        <button
+                          key={src}
+                          type="button"
+                          onClick={() => setSourceFilter(src)}
+                          className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-smooth ${sourceFilter === src ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'}`}
+                        >
+                          {src} {count}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="max-h-96 overflow-y-auto divide-y divide-border">
-                  {searchResults.map((r) => (
+                  {filteredResults.map((r) => (
+
                     <div
                       key={r.url}
                       className="group flex items-stretch gap-1 hover:bg-muted/60 rounded-md transition-smooth animate-in fade-in slide-in-from-bottom-1 duration-200"
