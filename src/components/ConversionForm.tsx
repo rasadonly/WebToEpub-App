@@ -296,6 +296,13 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
     }
   };
 
+  /** Stop searching but keep whatever results we already collected. */
+  const stopSearch = () => {
+    cancelSearch();
+    setIsSearching(false);
+    setSearchStatus('');
+  };
+
   const clearSearch = () => {
     cancelSearch();
     setIsSearching(false);
@@ -305,6 +312,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
     setSourceFilter('all');
     setLastQuery('');
   };
+
 
   const sourceCounts = useMemo(() => {
     const counts = new Map<string, number>();
