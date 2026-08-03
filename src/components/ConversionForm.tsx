@@ -68,6 +68,18 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
   const [searchResults, setSearchResults] = useState<EngineSearchResult[]>([]);
   const [searchStatus, setSearchStatus] = useState<string>('');
   const [isSearching, setIsSearching] = useState(false);
+  const [searchProgress, setSearchProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
+  const [sourceFilter, setSourceFilter] = useState<string>('all');
+  const [lastQuery, setLastQuery] = useState('');
+  const [recentSearches, setRecentSearches] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem('epub-recent-searches');
+      return raw ? (JSON.parse(raw) as string[]) : [];
+    } catch {
+      return [];
+    }
+  });
+
 
   // Live Reader state
   const [liveReaderOpen, setLiveReaderOpen] = useState(false);
