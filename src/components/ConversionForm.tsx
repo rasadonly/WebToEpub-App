@@ -524,11 +524,12 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                     </span>
                     <button
                       type="button"
-                      onClick={clearSearch}
+                      onClick={isSearching ? stopSearch : clearSearch}
                       className="shrink-0 text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
                     >
                       <X className="w-3.5 h-3.5" /> {isSearching ? 'Stop' : 'Clear'}
                     </button>
+
                   </div>
 
                   {isSearching && searchProgress.total > 0 && (
