@@ -595,7 +595,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
 
                     <div
                       key={r.url}
-                      className="group flex items-stretch gap-1 hover:bg-muted/60 rounded-md transition-smooth animate-in fade-in slide-in-from-bottom-1 duration-200"
+                      className="group flex items-center gap-2 px-2 sm:px-3 py-2 hover:bg-muted/60 rounded-md transition-smooth animate-in fade-in slide-in-from-bottom-1 duration-200"
                     >
                       <button
                         type="button"
@@ -606,62 +606,69 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                           }
                           clearSearch();
                         }}
-                        className="flex-1 text-left px-3 py-2.5"
+                        className="min-w-0 flex-1 text-left"
                       >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0 flex-1">
-                            <div className="font-medium text-sm truncate">{r.title || 'Untitled'}</div>
-                            {r.snippet && (
-                              <div className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{r.snippet}</div>
-                            )}
-                            <div className="text-[11px] text-muted-foreground/80 truncate mt-1">{r.url}</div>
-                          </div>
-                          <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
-                            <ExternalLink className="w-3 h-3" /> {r.source}
+                        <div className="font-medium text-sm leading-snug line-clamp-2 sm:truncate">
+                          {r.title || 'Untitled'}
+                        </div>
+                        {r.snippet && (
+                          <div className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{r.snippet}</div>
+                        )}
+                        <div className="mt-1 flex items-center gap-1.5 min-w-0">
+                          <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider max-w-[45%] truncate">
+                            <ExternalLink className="w-3 h-3 shrink-0" />
+                            <span className="truncate">{r.source}</span>
                           </span>
+                          <span className="text-[11px] text-muted-foreground/80 truncate">{r.url}</span>
                         </div>
                       </button>
-                      <button
-                        type="button"
-                        title="Convert to EPUB"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setTocUrl(r.url);
-                          const newMeta = r.title && !metadata.title
-                            ? { ...metadata, title: r.title }
-                            : metadata;
-                          if (r.title && !metadata.title) setMetadata(newMeta);
-                          clearSearch();
-                          const domain = extractDomain(r.url);
-                          if (domain) {
-                            localStorage.setItem(`epub-converter-${domain}`, JSON.stringify({ tocSelector, contentSelector }));
-                          }
-                          onSubmit({
-                            tocUrl: r.url,
-                            tocSelector,
-                            contentSelector,
-                            metadata: newMeta,
-                            chapterRange,
-                            fontFamily,
-                            includeIndex,
-                            editableUrls,
-                          });
-                        }}
-                        className="shrink-0 px-3 my-1 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-smooth inline-flex items-center gap-1 text-xs"
-                      >
-                        <Download className="w-4 h-4" />
-                        <span className="hidden sm:inline">EPUB</span>
-                      </button>
-                      <button
-                        type="button"
-                        title="Read live"
-                        onClick={(e) => { e.stopPropagation(); clearSearch(); openLiveReader(r.url); }}
-                        className="shrink-0 px-3 my-1 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-smooth inline-flex items-center gap-1 text-xs"
-                      >
-                        <BookOpenCheck className="w-4 h-4" />
-                        <span className="hidden sm:inline">Read</span>
-                      </button>
+
+                      <div className="shrink-0 flex items-center gap-1">
+                        <button
+                          type="button"
+                          title="Convert to EPUB"
+                          aria-label="Convert to EPUB"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setTocUrl(r.url);
+                            const newMeta = r.title && !metadata.title
+                              ? { ...metadata, title: r.title }
+                              : metadata;
+                            if (r.title && !metadata.title) setMetadata(newMeta);
+                            clearSearch();
+                            const domain = extractDomain(r.url);
+                            if (domain) {
+                              localStorage.setItem(`epub-converter-${domain}`, JSON.stringify({ tocSelector, contentSelector }));
+                            }
+                            onSubmit({
+                              tocUrl: r.url,
+                              tocSelector,
+                              contentSelector,
+                              metadata: newMeta,
+                              chapterRange,
+                              fontFamily,
+                              includeIndex,
+                              editableUrls,
+                            });
+                          }}
+                          className="h-9 w-9 sm:w-auto sm:px-3 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-smooth inline-flex items-center justify-center gap-1 text-xs"
+                        >
+                          <Download className="w-4 h-4 shrink-0" />
+                          <span className="hidden sm:inline">EPUB</span>
+                        </button>
+                        <button
+                          type="button"
+                          title="Read live"
+                          aria-label="Read live"
+                          onClick={(e) => { e.stopPropagation(); clearSearch(); openLiveReader(r.url); }}
+                          className="h-9 w-9 sm:w-auto sm:px-3 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-smooth inline-flex items-center justify-center gap-1 text-xs"
+                        >
+                          <BookOpenCheck className="w-4 h-4 shrink-0" />
+                          <span className="hidden sm:inline">Read</span>
+                        </button>
+                      </div>
                     </div>
+
                   ))}
                   {isSearching && (
                     /* Skeleton rows — one per site still loading */
