@@ -187,33 +187,65 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
 
 
 
+  /** Normalise a string for fuzzy comparison. */
+  const norm = (s: string) =>
+    (s || '')
+      .toLowerCase()
+      .replace(/[’'`]/g, '')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+
   /** Score a search result against the query (higher = more relevant). */
   const scoreResult = (r: EngineSearchResult, query: string): number => {
-    const q = query.toLowerCase().trim();
-    const words = q.split(/\s+/).filter(w => w.length > 1);
-    const title = (r.title || '').toLowerCase();
-    const snippet = (r.snippet || '').toLowerCase();
-    const url = (r.url || '').toLowerCase();
+    const q = norm(query);
+    const words = q.split(' ').filter(w => w.length > 1);
+    const title = norm(r.title);
+    const snippet = norm(r.snippet || '');
+    const url = norm(r.url || '');
     let score = 0;
 
-    if (title === q) score += 100;
-    if (title.startsWith(q)) score += 60;
-    if (title.includes(q)) score += 40;
+    if (title === q) score += 120;
+    else if (title.startsWith(q)) score += 70;
+    else if (title.includes(q)) score += 45;
+
     const matchedInTitle = words.filter(w => title.includes(w));
-    score += matchedInTitle.length * 8;
-    const matchedInSnippet = words.filter(w => snippet.includes(w));
-    score += matchedInSnippet.length * 3;
-    const matchedInUrl = words.filter(w => url.includes(w));
-    score += matchedInUrl.length * 1;
+    score += matchedInTitle.length * 10;
+    // All query words present in the title is a strong signal
+    if (words.length > 0 && matchedInTitle.length === words.length) score += 25;
+    // Prefer tight titles over long ones stuffed with extra words
+    const titleWords = title.split(' ').filter(Boolean).length;
+    if (titleWords > 0) score += Math.max(0, 12 - Math.abs(titleWords - words.length) * 2);
+
+    score += words.filter(w => snippet.includes(w)).length * 3;
+    score += words.filter(w => url.includes(w)).length * 2;
+
+    if (r.snippet) score += 2;
     // Penalise if nothing matched at all
-    if (matchedInTitle.length === 0 && matchedInSnippet.length === 0) score -= 50;
+    if (matchedInTitle.length === 0 && !snippet.includes(q)) score -= 50;
     return score;
+  };
+
+  const rankResults = (list: EngineSearchResult[], query: string) =>
+    list
+      .map(r => ({ r, s: scoreResult(r, query) }))
+      .filter(({ s }) => s > -10)
+      .sort((a, b) => b.s - a.s)
+      .map(({ r }) => r);
+
+  const pushRecentSearch = (q: string) => {
+    const next = [q, ...recentSearches.filter(x => x.toLowerCase() !== q.toLowerCase())].slice(0, 6);
+    setRecentSearches(next);
+    try { localStorage.setItem('epub-recent-searches', JSON.stringify(next)); } catch { /* ignore */ }
   };
 
   const runSearch = async (query: string) => {
     setIsSearching(true);
     setSearchResults([]);
+    setSourceFilter('all');
+    setSearchProgress({ done: 0, total: 0 });
     setSearchStatus('Searching supported sites…');
+    setLastQuery(query);
+    pushRecentSearch(query);
     const currentQuery = query;
     try {
       const seen = new Set<string>();
@@ -228,15 +260,13 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                 merged.push(r);
               }
             }
-            // Sort by relevance score descending; filter score < -10
-            return merged
-              .map(r => ({ r, s: scoreResult(r, currentQuery) }))
-              .filter(({ s }) => s > -10)
-              .sort((a, b) => b.s - a.s)
-              .map(({ r }) => r);
+            return rankResults(merged, currentQuery);
           });
         },
-        (site, status) => setSearchStatus(`${site}: ${status}`)
+        (site, status, progress) => {
+          if (progress) setSearchProgress({ done: progress.done, total: progress.total });
+          setSearchStatus(`${site}: ${status}`);
+        }
       );
       setSearchStatus('');
     } catch (err) {
@@ -259,7 +289,10 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
     setIsSearching(false);
     setSearchResults([]);
     setSearchStatus('');
+    setSearchProgress({ done: 0, total: 0 });
+    setSourceFilter('all');
   };
+
 
   // Load saved settings from localStorage
   useEffect(() => {
