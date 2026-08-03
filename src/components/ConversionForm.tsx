@@ -296,6 +296,13 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
     }
   };
 
+  /** Stop searching but keep whatever results we already collected. */
+  const stopSearch = () => {
+    cancelSearch();
+    setIsSearching(false);
+    setSearchStatus('');
+  };
+
   const clearSearch = () => {
     cancelSearch();
     setIsSearching(false);
@@ -305,6 +312,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
     setSourceFilter('all');
     setLastQuery('');
   };
+
 
   const sourceCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -478,6 +486,27 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
               )}
             </div>
 
+            {/* How to use */}
+            {!isSearching && searchResults.length === 0 && !isConverting && (
+              <div className="mt-4 grid gap-2 sm:grid-cols-3 text-left">
+                {[
+                  { n: '1', t: 'Paste or search', d: 'Drop a table-of-contents or chapter link, or type a novel name to search supported sites.' },
+                  { n: '2', t: 'Pick chapters', d: 'Review the detected title and author, then select a range, reorder or remove chapters.' },
+                  { n: '3', t: 'Get your EPUB', d: 'Convert and download a clean EPUB, or open it in the built-in reader.' },
+                ].map((s) => (
+                  <div key={s.n} className="rounded-xl border border-border bg-card/60 p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">{s.n}</span>
+                      <span className="text-xs font-semibold text-foreground">{s.t}</span>
+                    </div>
+                    <p className="text-[11px] leading-relaxed text-muted-foreground">{s.d}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+
+
             {/* Recent searches */}
             {!isSearching && searchResults.length === 0 && recentSearches.length > 0 && (
               <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
@@ -516,11 +545,12 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                     </span>
                     <button
                       type="button"
-                      onClick={clearSearch}
+                      onClick={isSearching ? stopSearch : clearSearch}
                       className="shrink-0 text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
                     >
                       <X className="w-3.5 h-3.5" /> {isSearching ? 'Stop' : 'Clear'}
                     </button>
+
                   </div>
 
                   {isSearching && searchProgress.total > 0 && (
