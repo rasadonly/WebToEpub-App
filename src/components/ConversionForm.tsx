@@ -477,8 +477,33 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
               )}
             </div>
 
+            {/* Recent searches */}
+            {!isSearching && searchResults.length === 0 && recentSearches.length > 0 && (
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
+                <span className="text-[11px] uppercase tracking-wider text-muted-foreground/70 mr-1">Recent</span>
+                {recentSearches.map((q) => (
+                  <button
+                    key={q}
+                    type="button"
+                    onClick={() => { setTocUrl(q); runSearch(q); }}
+                    className="rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground hover:text-foreground transition-smooth"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* No results */}
+            {!isSearching && lastQuery && searchResults.length === 0 && (
+              <Card className="mt-4 p-4 text-center text-sm text-muted-foreground border border-border">
+                No results for “{lastQuery}”. Try a shorter title, or paste the novel's TOC URL directly.
+              </Card>
+            )}
+
             {/* Search results */}
             {(searchResults.length > 0 || isSearching) && (
+
               <Card className="mt-4 p-3 bg-card border border-border animate-in fade-in slide-in-from-top-2 duration-300">
                 <div className="px-2 py-1 mb-1 space-y-2">
                   <div className="flex items-center justify-between gap-3">
