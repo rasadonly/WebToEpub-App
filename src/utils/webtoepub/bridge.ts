@@ -677,10 +677,31 @@ export function cancelSearch() {
   searchCancelToken++;
 }
 
+export interface SearchProgress {
+  done: number;
+  total: number;
+  found: number;
+  site: string;
+  status: string;
+}
+
+const SEARCH_CONCURRENCY = 10;
+const PER_SITE_TIMEOUT_MS = 12000;
+
+function promiseTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('timeout')), ms);
+    p.then(
+      (v) => { clearTimeout(t); resolve(v); },
+      (e) => { clearTimeout(t); reject(e); }
+    );
+  });
+}
+
 export async function engineSearch(
   query: string,
   onResults?: (results: EngineSearchResult[]) => void,
-  onProgress?: (site: string, status: string) => void
+  onProgress?: (site: string, status: string, progress?: SearchProgress) => void
 ): Promise<EngineSearchResult[]> {
   const win = await ensureIframe();
   const SSE: any = (win as any).SiteSearchEngine;
@@ -697,29 +718,36 @@ export async function engineSearch(
   const sites = downHosts.size
     ? allSites.filter((s: any) => !downHosts.has(String(s.hostname || '').toLowerCase()))
     : allSites;
-  if (isLive()) onProgress?.('Starting', `Searching ${sites.length} sites...`);
-
 
   const seen = new Set<string>();
   const results: EngineSearchResult[] = [];
+  let done = 0;
+  const total = sites.length;
+  const report = (site: string, status: string) => {
+    if (isLive()) onProgress?.(site, status, { done, total, found: results.length, site, status });
+  };
+  report('Starting', `Searching ${total} sites…`);
 
-  // Fire ALL sites in parallel — each request goes to a different domain,
-  // so there's no per-host rate-limit risk. Results stream in as they arrive.
-  await Promise.all(
-    sites.map(async (site: any) => {
-      if (!isLive()) return;
-      onProgress?.(site.name, 'searching');
+  // Bounded parallelism: dozens of simultaneous cross-origin fetches choke the
+  // browser's connection pool and make fast sites wait behind dead ones.
+  let cursor = 0;
+  const worker = async () => {
+    while (isLive()) {
+      const index = cursor++;
+      if (index >= sites.length) return;
+      const site = sites[index];
       let siteResults: EngineSearchResult[] = [];
       try {
-        siteResults = await SSE.fetchSiteResults(site, query);
-      } catch {
-        if (isLive()) onProgress?.(site.name, 'failed');
-        return;
+        siteResults = await promiseTimeout(SSE.fetchSiteResults(site, query), PER_SITE_TIMEOUT_MS);
+      } catch (e) {
+        done++;
+        report(site.name, (e as Error)?.message === 'timeout' ? 'timed out' : 'failed');
+        continue;
       }
       if (!isLive()) return;
-      onProgress?.(site.name, `found ${siteResults.length}`);
       const fresh: EngineSearchResult[] = [];
       for (const r of siteResults) {
+        if (!r?.url || !r?.title) continue;
         const key = SSE.normalizeUrl(r.url);
         if (!seen.has(key)) {
           seen.add(key);
@@ -727,12 +755,19 @@ export async function engineSearch(
           fresh.push(r);
         }
       }
+      done++;
+      report(site.name, `found ${siteResults.length}`);
       if (fresh.length && isLive()) onResults?.(fresh);
-    })
+    }
+  };
+
+  await Promise.all(
+    Array.from({ length: Math.min(SEARCH_CONCURRENCY, sites.length) }, worker)
   );
   if (!isLive()) throw new Error('__cancelled__');
   return results;
 }
+
 
 export interface EngineBookInfo {
   title: string;

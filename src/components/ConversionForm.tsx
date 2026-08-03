@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -68,6 +68,18 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
   const [searchResults, setSearchResults] = useState<EngineSearchResult[]>([]);
   const [searchStatus, setSearchStatus] = useState<string>('');
   const [isSearching, setIsSearching] = useState(false);
+  const [searchProgress, setSearchProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
+  const [sourceFilter, setSourceFilter] = useState<string>('all');
+  const [lastQuery, setLastQuery] = useState('');
+  const [recentSearches, setRecentSearches] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem('epub-recent-searches');
+      return raw ? (JSON.parse(raw) as string[]) : [];
+    } catch {
+      return [];
+    }
+  });
+
 
   // Live Reader state
   const [liveReaderOpen, setLiveReaderOpen] = useState(false);
@@ -187,33 +199,65 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
 
 
 
+  /** Normalise a string for fuzzy comparison. */
+  const norm = (s: string) =>
+    (s || '')
+      .toLowerCase()
+      .replace(/[’'`]/g, '')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+
   /** Score a search result against the query (higher = more relevant). */
   const scoreResult = (r: EngineSearchResult, query: string): number => {
-    const q = query.toLowerCase().trim();
-    const words = q.split(/\s+/).filter(w => w.length > 1);
-    const title = (r.title || '').toLowerCase();
-    const snippet = (r.snippet || '').toLowerCase();
-    const url = (r.url || '').toLowerCase();
+    const q = norm(query);
+    const words = q.split(' ').filter(w => w.length > 1);
+    const title = norm(r.title);
+    const snippet = norm(r.snippet || '');
+    const url = norm(r.url || '');
     let score = 0;
 
-    if (title === q) score += 100;
-    if (title.startsWith(q)) score += 60;
-    if (title.includes(q)) score += 40;
+    if (title === q) score += 120;
+    else if (title.startsWith(q)) score += 70;
+    else if (title.includes(q)) score += 45;
+
     const matchedInTitle = words.filter(w => title.includes(w));
-    score += matchedInTitle.length * 8;
-    const matchedInSnippet = words.filter(w => snippet.includes(w));
-    score += matchedInSnippet.length * 3;
-    const matchedInUrl = words.filter(w => url.includes(w));
-    score += matchedInUrl.length * 1;
+    score += matchedInTitle.length * 10;
+    // All query words present in the title is a strong signal
+    if (words.length > 0 && matchedInTitle.length === words.length) score += 25;
+    // Prefer tight titles over long ones stuffed with extra words
+    const titleWords = title.split(' ').filter(Boolean).length;
+    if (titleWords > 0) score += Math.max(0, 12 - Math.abs(titleWords - words.length) * 2);
+
+    score += words.filter(w => snippet.includes(w)).length * 3;
+    score += words.filter(w => url.includes(w)).length * 2;
+
+    if (r.snippet) score += 2;
     // Penalise if nothing matched at all
-    if (matchedInTitle.length === 0 && matchedInSnippet.length === 0) score -= 50;
+    if (matchedInTitle.length === 0 && !snippet.includes(q)) score -= 50;
     return score;
+  };
+
+  const rankResults = (list: EngineSearchResult[], query: string) =>
+    list
+      .map(r => ({ r, s: scoreResult(r, query) }))
+      .filter(({ s }) => s > -10)
+      .sort((a, b) => b.s - a.s)
+      .map(({ r }) => r);
+
+  const pushRecentSearch = (q: string) => {
+    const next = [q, ...recentSearches.filter(x => x.toLowerCase() !== q.toLowerCase())].slice(0, 6);
+    setRecentSearches(next);
+    try { localStorage.setItem('epub-recent-searches', JSON.stringify(next)); } catch { /* ignore */ }
   };
 
   const runSearch = async (query: string) => {
     setIsSearching(true);
     setSearchResults([]);
+    setSourceFilter('all');
+    setSearchProgress({ done: 0, total: 0 });
     setSearchStatus('Searching supported sites…');
+    setLastQuery(query);
+    pushRecentSearch(query);
     const currentQuery = query;
     try {
       const seen = new Set<string>();
@@ -228,15 +272,13 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                 merged.push(r);
               }
             }
-            // Sort by relevance score descending; filter score < -10
-            return merged
-              .map(r => ({ r, s: scoreResult(r, currentQuery) }))
-              .filter(({ s }) => s > -10)
-              .sort((a, b) => b.s - a.s)
-              .map(({ r }) => r);
+            return rankResults(merged, currentQuery);
           });
         },
-        (site, status) => setSearchStatus(`${site}: ${status}`)
+        (site, status, progress) => {
+          if (progress) setSearchProgress({ done: progress.done, total: progress.total });
+          setSearchStatus(`${site}: ${status}`);
+        }
       );
       setSearchStatus('');
     } catch (err) {
@@ -259,7 +301,25 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
     setIsSearching(false);
     setSearchResults([]);
     setSearchStatus('');
+    setSearchProgress({ done: 0, total: 0 });
+    setSourceFilter('all');
+    setLastQuery('');
   };
+
+  const sourceCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of searchResults) {
+      const src = r.source || 'other';
+      counts.set(src, (counts.get(src) || 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  }, [searchResults]);
+
+  const filteredResults = useMemo(
+    () => (sourceFilter === 'all' ? searchResults : searchResults.filter(r => (r.source || 'other') === sourceFilter)),
+    [searchResults, sourceFilter]
+  );
+
 
   // Load saved settings from localStorage
   useEffect(() => {
@@ -418,26 +478,90 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
               )}
             </div>
 
+            {/* Recent searches */}
+            {!isSearching && searchResults.length === 0 && recentSearches.length > 0 && (
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
+                <span className="text-[11px] uppercase tracking-wider text-muted-foreground/70 mr-1">Recent</span>
+                {recentSearches.map((q) => (
+                  <button
+                    key={q}
+                    type="button"
+                    onClick={() => { setTocUrl(q); runSearch(q); }}
+                    className="rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground hover:text-foreground transition-smooth"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* No results */}
+            {!isSearching && lastQuery && searchResults.length === 0 && (
+              <Card className="mt-4 p-4 text-center text-sm text-muted-foreground border border-border">
+                No results for “{lastQuery}”. Try a shorter title, or paste the novel's TOC URL directly.
+              </Card>
+            )}
+
             {/* Search results */}
             {(searchResults.length > 0 || isSearching) && (
+
               <Card className="mt-4 p-3 bg-card border border-border animate-in fade-in slide-in-from-top-2 duration-300">
-                <div className="flex items-center justify-between px-2 py-1 mb-1">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    {isSearching
-                      ? <span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-primary animate-pulse inline-block" />{searchStatus || 'Searching…'}</span>
-                      : `${searchResults.length} result${searchResults.length === 1 ? '' : 's'}`
-                    }
-                  </span>
-                  <button
-                    type="button"
-                    onClick={clearSearch}
-                    className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-                  >
-                    <X className="w-3.5 h-3.5" /> Clear
-                  </button>
+                <div className="px-2 py-1 mb-1 space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground min-w-0 truncate">
+                      {isSearching
+                        ? <span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-primary animate-pulse inline-block shrink-0" /><span className="truncate">{searchStatus || 'Searching…'}</span></span>
+                        : `${filteredResults.length} result${filteredResults.length === 1 ? '' : 's'}${lastQuery ? ` for “${lastQuery}”` : ''}`
+                      }
+                    </span>
+                    <button
+                      type="button"
+                      onClick={clearSearch}
+                      className="shrink-0 text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                    >
+                      <X className="w-3.5 h-3.5" /> {isSearching ? 'Stop' : 'Clear'}
+                    </button>
+                  </div>
+
+                  {isSearching && searchProgress.total > 0 && (
+                    <div className="space-y-1">
+                      <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
+                        <div
+                          className="h-full bg-primary transition-all duration-300"
+                          style={{ width: `${Math.min(100, (searchProgress.done / searchProgress.total) * 100)}%` }}
+                        />
+                      </div>
+                      <div className="text-[10px] text-muted-foreground/80">
+                        {searchProgress.done} / {searchProgress.total} sites searched · {searchResults.length} found
+                      </div>
+                    </div>
+                  )}
+
+                  {sourceCounts.length > 1 && (
+                    <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setSourceFilter('all')}
+                        className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-smooth ${sourceFilter === 'all' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'}`}
+                      >
+                        All {searchResults.length}
+                      </button>
+                      {sourceCounts.map(([src, count]) => (
+                        <button
+                          key={src}
+                          type="button"
+                          onClick={() => setSourceFilter(src)}
+                          className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-smooth ${sourceFilter === src ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'}`}
+                        >
+                          {src} {count}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="max-h-96 overflow-y-auto divide-y divide-border">
-                  {searchResults.map((r) => (
+                  {filteredResults.map((r) => (
+
                     <div
                       key={r.url}
                       className="group flex items-stretch gap-1 hover:bg-muted/60 rounded-md transition-smooth animate-in fade-in slide-in-from-bottom-1 duration-200"
