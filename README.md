@@ -1,73 +1,85 @@
-# Welcome to your Lovable project
+# LinkToEpub
 
-## Project info
+Convert web novels into clean, device-ready EPUB files — straight from a link.
 
-**URL**: https://lovable.dev/projects/90188eb1-eb07-47f6-92bb-828b64c28c78
+Paste a table-of-contents or chapter URL, or search a novel by name, and LinkToEpub
+fetches the chapters, cleans the HTML and packs a properly formatted EPUB you can read
+anywhere (Kindle, Kobo, Apple Books, Moon+ Reader, and the built-in reader).
 
-## How can I edit this code?
+**Live app:** https://epub-novel-forge.lovable.app
 
-There are several ways of editing your application.
+## Features
 
-**Use Lovable**
+- **Link or search** — paste a TOC/chapter URL, or type a novel name to search supported sites.
+- **380+ site parsers** — Novelfull, NovelBin, NovelFire, WTR-LAB, Royal Road, Scribble Hub,
+  FreeWebNovel and many more, with an AI fallback parser for unknown sites.
+- **Chapter manager** — select a range, remove chapters, reorder or reverse the list.
+- **Metadata** — auto-detected title, author, language and cover, all editable before export.
+- **Live reader** — read a novel in-app with themes, font controls, auto-scroll and text-to-speech.
+- **EPUB reader** — open any generated or local EPUB in the built-in reader.
+- **Community library** — finished books can be saved to a shared library.
+- **Forum** — Reddit-style threads for requests, site reports and discussion.
+- **Supported sites page** — live up/down health status, sorted by availability.
+- **Server mode (optional)** — offload long conversions to a backend so they keep running
+  after you close the tab; can be disabled to run fully in the browser.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/90188eb1-eb07-47f6-92bb-828b64c28c78) and start prompting.
+## How to use
 
-Changes made via Lovable will be committed automatically to this repo.
+1. **Paste or search** — drop a table-of-contents or chapter link, or type a novel name.
+2. **Pick chapters** — check the detected title/author, then choose a range, reorder or remove chapters.
+3. **Get your EPUB** — convert and download, or open the book in the built-in reader.
 
-**Use your preferred IDE**
+## Tech stack
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+- React 18 + TypeScript + Vite
+- Tailwind CSS + shadcn/ui
+- JSZip / FileSaver for EPUB packaging, epub.js for reading
+- Vendored WebToEpub parser engine (`public/webtoepub`)
+- Lovable Cloud (Postgres + edge functions) for forum, admin and site health
+- Optional Node/Express backend (`/server`) deployed to Heroku and a Hugging Face Space
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+## Local development
 
-Follow these steps:
+Requires Node.js and npm ([install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)).
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
 git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
 cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
 npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Build for production:
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+```sh
+npm run build
+npm run preview
+```
 
-**Use GitHub Codespaces**
+## Project structure
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+```text
+src/
+  components/      UI: conversion form, chapter manager, readers, library, forum, admin
+  hooks/           useEpubConverter — conversion orchestration
+  utils/           epub generation, worker/proxy fetching, backend + site configs
+public/webtoepub/  vendored parser engine and site parsers
+server/            optional Express backend (jobs, fetching, library uploads)
+supabase/          database migrations and edge functions
+```
 
-## What technologies are used for this project?
+## Contributing
 
-This project is built with:
+Site parsers live in `public/webtoepub/plugin/js/parsers/`, and server-side selectors in
+`server/src/siteConfigs.json`. Adding support for a new site usually means adding a parser
+there plus an entry in the site config table. Broken sites can also be reported in the
+in-app forum.
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Editing this project
 
-## How can I deploy this project?
+This app is built with [Lovable](https://lovable.dev/projects/90188eb1-eb07-47f6-92bb-828b64c28c78).
+Prompt changes in Lovable, or clone the repo and push — changes sync both ways. You can also
+edit files directly on GitHub or in a GitHub Codespace.
 
-Simply open [Lovable](https://lovable.dev/projects/90188eb1-eb07-47f6-92bb-828b64c28c78) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+To publish, open the project in Lovable and click **Share → Publish**. Custom domains can be
+connected under **Project → Settings → Domains**.
