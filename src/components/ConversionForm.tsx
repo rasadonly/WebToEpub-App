@@ -303,6 +303,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
     setSearchStatus('');
     setSearchProgress({ done: 0, total: 0 });
     setSourceFilter('all');
+    setLastQuery('');
   };
 
   const sourceCounts = useMemo(() => {
