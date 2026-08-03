@@ -688,7 +688,7 @@ export interface SearchProgress {
 const SEARCH_CONCURRENCY = 10;
 const PER_SITE_TIMEOUT_MS = 12000;
 
-function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+function promiseTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
     const t = setTimeout(() => reject(new Error('timeout')), ms);
     p.then(
@@ -738,7 +738,7 @@ export async function engineSearch(
       const site = sites[index];
       let siteResults: EngineSearchResult[] = [];
       try {
-        siteResults = await withTimeout(SSE.fetchSiteResults(site, query), PER_SITE_TIMEOUT_MS);
+        siteResults = await promiseTimeout(SSE.fetchSiteResults(site, query), PER_SITE_TIMEOUT_MS);
       } catch (e) {
         done++;
         report(site.name, (e as Error)?.message === 'timeout' ? 'timed out' : 'failed');
