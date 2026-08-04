@@ -737,7 +737,7 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
             </div>
 
             {/* Composer */}
-            <div className="border border-border rounded-lg p-3 bg-card/50 space-y-2 sticky bottom-0">
+            <div className="border border-border rounded-2xl p-3 bg-card/80 backdrop-blur-md space-y-2 sticky bottom-0 shadow-card">
               <ProfileFields
                 name={authorName}
                 avatar={authorAvatar}
@@ -751,19 +751,22 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
                 rows={3}
                 maxLength={3000}
                 placeholder="Add a comment…"
+                className="rounded-xl resize-none"
               />
-              <div className="flex justify-end">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-muted-foreground">{commentBody.length}/3000</span>
                 <Button
                   size="sm"
                   onClick={postComment}
                   disabled={postingComment || !commentBody.trim()}
-                  className="gap-1"
+                  className="gap-1 rounded-full"
                 >
                   {postingComment ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUp className="w-4 h-4" />}
                   Post
                 </Button>
               </div>
             </div>
+
           </div>
         )}
       </div>
