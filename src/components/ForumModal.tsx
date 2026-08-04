@@ -591,7 +591,8 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
         {view === 'thread' && activeThread && (
           <div className="max-w-3xl mx-auto p-4 space-y-4">
             {/* Thread body */}
-            <div className="border border-border rounded-lg p-4 bg-card">
+            <div className="border border-border rounded-2xl p-4 bg-card shadow-card">
+
               <div className="flex items-start gap-3">
                 <Avatar name={activeThread.author_name} url={activeThread.avatar_url} />
                 <div className="min-w-0 flex-1">
