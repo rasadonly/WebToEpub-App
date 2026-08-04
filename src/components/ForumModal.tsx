@@ -591,7 +591,8 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
         {view === 'thread' && activeThread && (
           <div className="max-w-3xl mx-auto p-4 space-y-4">
             {/* Thread body */}
-            <div className="border border-border rounded-lg p-4 bg-card">
+            <div className="border border-border rounded-2xl p-4 bg-card shadow-card">
+
               <div className="flex items-start gap-3">
                 <Avatar name={activeThread.author_name} url={activeThread.avatar_url} />
                 <div className="min-w-0 flex-1">
@@ -662,19 +663,29 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
             </div>
 
             {/* Comments */}
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+            <div className="space-y-2.5">
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                <MessageSquare className="w-3.5 h-3.5" />
                 {activeThread.comment_count} {activeThread.comment_count === 1 ? 'Comment' : 'Comments'}
+                <span className="h-px flex-1 bg-border" />
               </h3>
 
               {loadingComments ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
                   <Loader2 className="w-4 h-4 animate-spin" /> Loading…
                 </div>
+              ) : comments.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-6 text-center border border-dashed border-border rounded-2xl bg-card/40">
+                  No comments yet — be the first to reply.
+                </p>
               ) : (
-                <ul className="space-y-2">
+                <ul className="space-y-2.5">
                   {comments.map((c) => (
-                    <li key={c.id} className="border border-border rounded-lg p-3 bg-card/70">
+                    <li
+                      key={c.id}
+                      className="border border-border rounded-2xl p-3 bg-card/70 hover:border-primary/30 transition-colors"
+                    >
+
                       <div className="flex items-start gap-3">
                         <Avatar name={c.author_name} url={c.avatar_url} />
                         <div className="min-w-0 flex-1">
