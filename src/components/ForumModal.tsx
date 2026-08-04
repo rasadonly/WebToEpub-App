@@ -385,7 +385,7 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
     }
     removeToken(c.id);
     setComments((prev) => prev.filter((x) => x.id !== c.id));
-    if (activeThread) setActiveThread({ ...activeThread, comment_count: Math.max(0, activeThread.comment_count - 1) });
+    if (activeThread) bumpCount(activeThread.id, -1);
   };
 
   const filteredThreads = useMemo(
