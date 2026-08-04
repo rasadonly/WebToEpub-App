@@ -398,47 +398,62 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
   return (
     <div className="fixed inset-0 z-[100] bg-background flex flex-col animate-in fade-in duration-200">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-card/80 sticky top-0 z-10">
-        <div className="flex items-center gap-2 min-w-0">
-          {view !== 'list' && (
-            <Button variant="ghost" size="sm" onClick={() => setView('list')} className="gap-1">
-              <ArrowLeft className="w-4 h-4" /> Back
-            </Button>
-          )}
-          <MessagesSquare className="w-5 h-5 text-primary" />
-          <span className="font-semibold text-sm sm:text-base truncate">
-            {view === 'list' && 'Community Forum'}
-            {view === 'thread' && (activeThread?.title || 'Thread')}
-            {view === 'new' && 'New Discussion'}
-          </span>
+      <div className="sticky top-0 z-10 border-b border-border bg-card/70 backdrop-blur-xl supports-[backdrop-filter]:bg-card/60">
+        <div className="max-w-3xl mx-auto flex items-center justify-between gap-2 px-4 py-2.5">
+          <div className="flex items-center gap-2 min-w-0">
+            {view !== 'list' && (
+              <Button variant="ghost" size="sm" onClick={() => setView('list')} className="gap-1 -ml-2">
+                <ArrowLeft className="w-4 h-4" /> <span className="hidden sm:inline">Back</span>
+              </Button>
+            )}
+            <div className="w-8 h-8 rounded-xl bg-gradient-primary grid place-items-center shrink-0 shadow-glow">
+              <MessagesSquare className="w-4 h-4 text-primary-foreground" />
+            </div>
+            <div className="min-w-0">
+              <div className="font-display font-semibold text-sm sm:text-base truncate leading-tight">
+                {view === 'list' && 'Community Forum'}
+                {view === 'thread' && (activeThread?.title || 'Thread')}
+                {view === 'new' && 'New Discussion'}
+              </div>
+              {view === 'list' && (
+                <div className="text-[11px] text-muted-foreground truncate">
+                  {threads.length} discussion{threads.length === 1 ? '' : 's'} · report errors, request sites, chat
+                </div>
+              )}
+            </div>
+          </div>
+          <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full shrink-0">
+            <X className="w-4 h-4" />
+          </Button>
         </div>
-        <Button variant="ghost" size="sm" onClick={onClose}>
-          <X className="w-4 h-4" />
-        </Button>
       </div>
 
       {/* Body */}
       <div className="flex-1 overflow-auto">
         {view === 'list' && (
           <div className="max-w-3xl mx-auto p-4 space-y-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1 flex-wrap">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar flex-1 -mx-1 px-1 py-0.5">
                 {(['all', 'report_error', 'new_site', 'general'] as const).map((f) => {
                   const label = f === 'all' ? 'All' : CATEGORY_META[f].label;
+                  const active = filter === f;
                   return (
-                    <Button
+                    <button
                       key={f}
-                      size="sm"
-                      variant={filter === f ? 'default' : 'outline'}
                       onClick={() => setFilter(f)}
+                      className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium border transition-colors ${
+                        active
+                          ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                          : 'bg-card text-muted-foreground border-border hover:bg-muted hover:text-foreground'
+                      }`}
                     >
                       {label}
-                    </Button>
+                    </button>
                   );
                 })}
               </div>
               <Button
-                className="ml-auto gap-1"
+                className="gap-1 rounded-full shrink-0"
                 size="sm"
                 onClick={() => {
                   setNewTitle('');
@@ -447,7 +462,8 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
                   setView('new');
                 }}
               >
-                <Send className="w-4 h-4" /> New Thread
+                <Send className="w-4 h-4" /> <span className="hidden sm:inline">New Thread</span>
+                <span className="sm:hidden">New</span>
               </Button>
             </div>
 
@@ -456,26 +472,34 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
                 <Loader2 className="w-4 h-4 animate-spin" /> Loading discussions…
               </div>
             ) : filteredThreads.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-10">No threads yet. Start one!</p>
+              <div className="text-center py-16 border border-dashed border-border rounded-2xl bg-card/40">
+                <MessagesSquare className="w-8 h-8 mx-auto text-muted-foreground/50" />
+                <p className="text-sm text-muted-foreground mt-3">No threads here yet.</p>
+                <Button size="sm" className="mt-3 rounded-full gap-1" onClick={() => setView('new')}>
+                  <Send className="w-3.5 h-3.5" /> Start the first one
+                </Button>
+              </div>
             ) : (
-              <ul className="space-y-2">
+              <ul className="space-y-2.5">
                 {filteredThreads.map((t) => {
                   const meta = CATEGORY_META[t.category];
                   const Icon = meta.icon;
                   return (
                     <li
                       key={t.id}
-                      className="border border-border rounded-lg p-3 bg-card hover:bg-muted/40 transition-colors cursor-pointer"
+                      className="group border border-border rounded-2xl p-3.5 bg-card shadow-card hover:border-primary/40 hover:shadow-search transition-all cursor-pointer"
                       onClick={() => openThread(t)}
                     >
                       <div className="flex items-start gap-3">
                         <Avatar name={t.author_name} url={t.avatar_url} />
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
-                            <span className={`inline-flex items-center gap-1 ${meta.color}`}>
-                              <Icon className="w-3.5 h-3.5" /> {meta.label}
+                          <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-muted-foreground">
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 font-medium ${meta.color}`}
+                            >
+                              <Icon className="w-3 h-3" /> {meta.label}
                             </span>
-                            <span>· by {t.author_name}</span>
+                            <span className="font-medium text-foreground/80">{t.author_name}</span>
                             <span>· {timeAgo(t.created_at)}</span>
                             {t.is_pinned && (
                               <span className="inline-flex items-center gap-1 text-amber-500">
@@ -488,15 +512,18 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
                               </span>
                             )}
                           </div>
-                          <h3 className="font-semibold text-sm sm:text-base mt-1 break-words">{t.title}</h3>
+                          <h3 className="font-display font-semibold text-sm sm:text-base mt-1.5 break-words group-hover:text-primary transition-colors">
+                            {t.title}
+                          </h3>
                           {t.body && (
                             <p className="text-xs sm:text-sm text-muted-foreground line-clamp-2 mt-1 break-words">
                               {t.body}
                             </p>
                           )}
-                          <div className="text-xs text-muted-foreground mt-2 flex items-center gap-3">
-                            <span className="inline-flex items-center gap-1">
-                              <MessageSquare className="w-3.5 h-3.5" /> {t.comment_count}
+                          <div className="mt-2.5">
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+                              <MessageSquare className="w-3.5 h-3.5" /> {t.comment_count}{' '}
+                              {t.comment_count === 1 ? 'comment' : 'comments'}
                             </span>
                           </div>
                         </div>
@@ -508,6 +535,7 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
             )}
           </div>
         )}
+
 
         {view === 'new' && (
           <div className="max-w-2xl mx-auto p-4 space-y-4">
