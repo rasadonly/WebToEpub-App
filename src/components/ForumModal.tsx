@@ -335,7 +335,7 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
     saveToken(data.id, token);
     setCommentBody('');
     setComments((prev) => [...prev, data as Comment]);
-    setActiveThread({ ...activeThread, comment_count: activeThread.comment_count + 1 });
+    bumpCount(activeThread.id, 1);
   };
 
   const saveCommentEdit = async (c: Comment) => {
