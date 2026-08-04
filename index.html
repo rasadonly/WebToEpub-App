@@ -1,6 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
+    <script>
+      // Forward the Lovable-hosted deployment to the canonical domain.
+      (function () {
+        try {
+          var h = window.location.hostname;
+          if (h === 'epub-novel-forge.lovable.app') {
+            window.location.replace(
+              'https://linktoepub.com/' + window.location.search + window.location.hash
+            );
+          }
+        } catch (e) {}
+      })();
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=5" />
     <meta name="theme-color" content="#e11d48" media="(prefers-color-scheme: light)" />

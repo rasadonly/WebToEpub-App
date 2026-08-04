@@ -303,6 +303,19 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
     toast({ title: 'Thread deleted' });
   };
 
+  const bumpCount = (threadId: string, delta: number) => {
+    setActiveThread((prev) =>
+      prev && prev.id === threadId
+        ? { ...prev, comment_count: Math.max(0, prev.comment_count + delta) }
+        : prev
+    );
+    setThreads((prev) =>
+      prev.map((t) =>
+        t.id === threadId ? { ...t, comment_count: Math.max(0, t.comment_count + delta) } : t
+      )
+    );
+  };
+
   const postComment = async () => {
     if (!activeThread || !commentBody.trim()) return;
     setPostingComment(true);
@@ -335,7 +348,7 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
     saveToken(data.id, token);
     setCommentBody('');
     setComments((prev) => [...prev, data as Comment]);
-    setActiveThread({ ...activeThread, comment_count: activeThread.comment_count + 1 });
+    bumpCount(activeThread.id, 1);
   };
 
   const saveCommentEdit = async (c: Comment) => {
@@ -372,7 +385,7 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
     }
     removeToken(c.id);
     setComments((prev) => prev.filter((x) => x.id !== c.id));
-    if (activeThread) setActiveThread({ ...activeThread, comment_count: Math.max(0, activeThread.comment_count - 1) });
+    if (activeThread) bumpCount(activeThread.id, -1);
   };
 
   const filteredThreads = useMemo(
