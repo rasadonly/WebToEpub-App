@@ -303,6 +303,19 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
     toast({ title: 'Thread deleted' });
   };
 
+  const bumpCount = (threadId: string, delta: number) => {
+    setActiveThread((prev) =>
+      prev && prev.id === threadId
+        ? { ...prev, comment_count: Math.max(0, prev.comment_count + delta) }
+        : prev
+    );
+    setThreads((prev) =>
+      prev.map((t) =>
+        t.id === threadId ? { ...t, comment_count: Math.max(0, t.comment_count + delta) } : t
+      )
+    );
+  };
+
   const postComment = async () => {
     if (!activeThread || !commentBody.trim()) return;
     setPostingComment(true);
