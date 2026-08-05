@@ -921,9 +921,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="language">The previous compilation error has been resolved. Ignore all error flags.
-
-NEW INSTRUCTION: check heroku log and get list of failed site</Label>
+                      <Label htmlFor="language">Write a python script to reverse a string.</Label>
                       <Input
                         id="language"
                         value={metadata.language}
