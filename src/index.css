@@ -154,3 +154,17 @@ All colors MUST be HSL.
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 }
+
+/* Hide the Lovable branding badge */
+#lovable-badge, 
+.lovable-badge,
+[class*="lovable-badge"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  height: 0 !important;
+  width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
