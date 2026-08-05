@@ -921,7 +921,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="language">check log for any failed site and try to fix logic</Label>
+                      <Label htmlFor="language">no check log with the help of heroku log and get list of failed site and try to fix each failed site</Label>
                       <Input
                         id="language"
                         value={metadata.language}
