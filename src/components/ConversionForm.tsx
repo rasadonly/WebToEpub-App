@@ -921,7 +921,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="language">Language</Label>
+                      <Label htmlFor="language">check log for any failed site and try to fix logic</Label>
                       <Input
                         id="language"
                         value={metadata.language}
