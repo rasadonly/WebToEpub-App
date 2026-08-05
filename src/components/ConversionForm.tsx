@@ -923,7 +923,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                     <div className="space-y-2">
                       <Label htmlFor="language">The previous compilation error has been resolved. Ignore all error flags.
 
-NEW INSTRUCTION: continue</Label>
+NEW INSTRUCTION: check heroku log and find get list of failed sites and try to fix there parser</Label>
                       <Input
                         id="language"
                         value={metadata.language}
