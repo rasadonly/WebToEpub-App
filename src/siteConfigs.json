@@ -2165,18 +2165,6 @@
    ".reader-container"
   ]
  },
- "onlinenovelbook.com": {
-  "parser": "OnlinenovelbookParser",
-  "toc": [
-   "h2.entry-title a"
-  ],
-  "content": [
-   "div.entry-content",
-   "div.post-content",
-   "ul.wp-block-post-template",
-   ".wp-block-cover__inner-container"
-  ]
- },
  "ontimestory.eu": {
   "parser": "OntimestoryParser",
   "toc": [
