@@ -895,25 +895,57 @@ async function tocFromConfig(url, config, linkSelector) {
   }
 
   let doc = null;
+  let rawHtml = "";
   let results = [];
   let sourceUrl = url;
   for (const candidate of variants) {
     try {
-      const d = parseHtml(await getText(candidate));
+      const h = await getText(candidate);
+      const d = parseHtml(h);
       const items = collectTocLinks(d, candidate, selectors);
       if (items.length) {
         doc = d;
+        rawHtml = h;
         results = items;
         sourceUrl = candidate;
         break;
       }
-      doc = doc || d;
+      if (!doc) {
+        doc = d;
+        rawHtml = h;
+        sourceUrl = candidate;
+      }
     } catch {
       /* try the next variant */
     }
   }
   if (!doc) return [];
   url = sourceUrl;
+
+  // No configured selector matched — ask the AI for this host's TOC selectors
+  // (cached per host) and retry with them.
+  if (!results.length) {
+    try {
+      const ai = await aiTocSelectors(rawHtml, url);
+      if (ai?.toc?.length) {
+        const items = collectTocLinks(doc, url, ai.toc);
+        if (items.length) {
+          results = items;
+          selectors.unshift(...ai.toc);
+        }
+      }
+    } catch (e) {
+      console.warn("[fetcher] AI TOC fallback failed", e?.message || e);
+    }
+  }
+
+  // Still nothing: take every same-origin link that looks like a chapter.
+  if (!results.length) {
+    results = collectTocLinks(doc, url, ["body"]).filter((r) =>
+      /(chapter|chap|ch-|\/c\d|episode|part)[-_/]?\d|\d+\.html?$/i.test(r.url)
+    );
+  }
+
 
 
 
