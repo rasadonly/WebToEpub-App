@@ -1,0 +1,26 @@
+{
+  "name": "epub-backend",
+  "deployment": { "instances": 1 },
+  "buildSource": "git",
+  "vcsData": {
+    "projectUrl": "https://github.com/chatuser129-oss/epub-novel-forge",
+    "projectType": "github",
+    "accountLogin": "chatuser129-oss",
+    "projectBranch": "main"
+  },
+  "buildSettings": {
+    "dockerfile": {
+      "dockerFilePath": "/server/Dockerfile",
+      "dockerWorkDir": "/server"
+    }
+  },
+  "ports": [
+    {
+      "name": "http",
+      "port": 7860,
+      "internalPort": 7860,
+      "protocol": "HTTP",
+      "public": true
+    }
+  ]
+}

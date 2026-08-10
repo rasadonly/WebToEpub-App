@@ -79,17 +79,42 @@
           {
             "@type": "Question",
             "name": "Which web novel sites are supported?",
-            "acceptedAnswer": { "@type": "Answer", "text": "LinkToEpub supports 380+ sites including Novelfull, NovelBin, NovelFire, WTR-LAB, Royal Road, Scribble Hub, FreeWebNovel and many more." }
+            "acceptedAnswer": { "@type": "Answer", "text": "LinkToEpub supports 380+ sites including Royal Road, NovelBin, NovelFull, NovelFire, WTR-LAB, Scribble Hub, FreeWebNovel, WebNovel and many more." }
           },
           {
             "@type": "Question",
             "name": "Is LinkToEpub free?",
-            "acceptedAnswer": { "@type": "Answer", "text": "Yes. LinkToEpub is completely free to use, runs in your browser, and does not require an account." }
+            "acceptedAnswer": { "@type": "Answer", "text": "Yes. LinkToEpub is completely free to use, runs in your browser, and does not require an account or registration." }
           },
           {
             "@type": "Question",
             "name": "Will the EPUB work on my Kindle or e-reader?",
-            "acceptedAnswer": { "@type": "Answer", "text": "Yes. The generated EPUB uses standard EPUB 3 formatting with correct MIME type and works on Kindle (via Send to Kindle), Kobo, Apple Books, Google Play Books and most e-readers." }
+            "acceptedAnswer": { "@type": "Answer", "text": "Yes. The generated EPUB uses standard EPUB 3 formatting and works on Kindle (via Send to Kindle), Kobo, Apple Books, Google Play Books and most e-readers." }
+          },
+          {
+            "@type": "Question",
+            "name": "How do I convert a Royal Road novel to EPUB?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Go to the novel's main page on Royal Road (royalroad.com/fiction/XXXXX), copy the URL, paste it into LinkToEpub, click Fetch Chapters, then Generate EPUB." }
+          },
+          {
+            "@type": "Question",
+            "name": "How do I convert a NovelBin novel to EPUB?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Open the novel's main page on NovelBin (not a chapter page), copy the URL, paste into LinkToEpub and click Fetch. NovelBin has several mirror domains — if one fails try novelbin.me or novelbin.net." }
+          },
+          {
+            "@type": "Question",
+            "name": "Can I select specific chapters to download?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Yes. After fetching the chapter list, use the Chapter Range selector to choose a start and end chapter. This is useful for downloading specific arcs of long novels." }
+          },
+          {
+            "@type": "Question",
+            "name": "Does LinkToEpub store my novels?",
+            "acceptedAnswer": { "@type": "Answer", "text": "No. Generated EPUB files are temporarily stored on our server for download and automatically deleted within 6 hours. Novel content is never stored in a database." }
+          },
+          {
+            "@type": "Question",
+            "name": "What if my site isn't supported?",
+            "acceptedAnswer": { "@type": "Answer", "text": "LinkToEpub includes an AI fallback that automatically detects chapter structure on unsupported sites. Just paste the URL and try — it works on most novel sites even without an explicit parser." }
           }
         ]
       }
@@ -126,7 +151,34 @@
   </head>
 
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Static pre-render for crawlers and slow connections -->
+      <header style="position:sticky;top:0;z-index:40;width:100%;border-bottom:1px solid #e5e7eb;background:rgba(255,255,255,0.9);backdrop-filter:blur(8px)">
+        <div style="max-width:80rem;margin:0 auto;padding:0 1rem;display:flex;align-items:center;justify-content:space-between;height:3rem">
+          <a href="/" style="font-weight:700;font-size:1rem;text-decoration:none;color:inherit">LinkToEpub</a>
+          <nav style="display:flex;gap:1.25rem">
+            <a href="/#/sites" style="font-size:0.875rem;color:#6b7280;text-decoration:none">Sites</a>
+            <a href="/#/guide" style="font-size:0.875rem;color:#6b7280;text-decoration:none">Guide</a>
+            <a href="/#/privacy" style="font-size:0.875rem;color:#6b7280;text-decoration:none">Privacy</a>
+          </nav>
+        </div>
+      </header>
+      <main style="max-width:40rem;margin:0 auto;padding:2.5rem 1rem;text-align:center">
+        <h1 style="font-size:2rem;font-weight:800;line-height:1.2;margin-bottom:0.75rem">Convert Web Novels to EPUB — Free, Instant, No Account</h1>
+        <p style="color:#6b7280;margin-bottom:1.5rem;font-size:1.05rem">
+          Paste a table-of-contents URL from Royal Road, NovelBin, Scribble Hub, or
+          <a href="/#/sites" style="color:#e11d48;text-decoration:none"> 380+ other sites</a>
+          and download a clean EPUB in seconds.
+        </p>
+        <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:0.5rem;margin-bottom:1.5rem;font-size:0.875rem">
+          <span style="padding:0.25rem 0.75rem;border-radius:9999px;background:#f3f4f6;border:1px solid #e5e7eb">✅ Completely Free</span>
+          <span style="padding:0.25rem 0.75rem;border-radius:9999px;background:#f3f4f6;border:1px solid #e5e7eb">🚀 No Account Required</span>
+          <span style="padding:0.25rem 0.75rem;border-radius:9999px;background:#f3f4f6;border:1px solid #e5e7eb">📚 380+ Sites</span>
+          <span style="padding:0.25rem 0.75rem;border-radius:9999px;background:#f3f4f6;border:1px solid #e5e7eb">📱 Kindle &amp; Kobo Ready</span>
+        </div>
+        <p style="color:#9ca3af;font-size:0.85rem">Loading converter…</p>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
