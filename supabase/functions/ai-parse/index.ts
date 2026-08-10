@@ -1,5 +1,5 @@
 // Free AI proxy for the WebToEpub AiClient — routes OpenAI-compatible chat
-// requests to the Lovable AI Gateway (free tier: google/gemini-2.5-flash).
+// requests to NVIDIA API, with a fallback to Pollinations AI.
 // Used to auto-detect selectors on unknown/failed sites.
 
 const corsHeaders = {
@@ -15,13 +15,8 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const apiKey = Deno.env.get("LOVABLE_API_KEY");
-    if (!apiKey) {
-      return new Response(
-        JSON.stringify({ error: "LOVABLE_API_KEY not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
+    const nvKey = Deno.env.get("NVIDIA_API_KEY");
+    const pollKey = Deno.env.get("POLLINATIONS_API_KEY");
 
     const body = await req.json();
     const messages = Array.isArray(body?.messages) ? body.messages : [];
@@ -32,37 +27,63 @@ Deno.serve(async (req) => {
       });
     }
 
-    const model = typeof body?.model === "string" && body.model.includes("/")
-      ? body.model
-      : "google/gemini-2.5-flash";
+    const temperature = typeof body?.temperature === "number" ? body.temperature : 0;
 
-    const upstream = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
+    let responseText = "";
+    let statusCode = 500;
+    let contentType = "application/json";
+
+    // Try NVIDIA first if key is available
+    if (nvKey) {
+      const nvRes = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Lovable-API-Key": apiKey,
-          "X-Lovable-AIG-SDK": "webtoepub-aiclient",
+          "Authorization": `Bearer ${nvKey}`,
         },
         body: JSON.stringify({
-          model,
+          model: "meta/llama-3.1-70b-instruct",
           messages,
-          temperature: typeof body?.temperature === "number" ? body.temperature : 0,
+          temperature,
           stream: false,
         }),
-      },
-    );
+      });
+      if (nvRes.ok) {
+        return new Response(await nvRes.text(), {
+          status: nvRes.status,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": nvRes.headers.get("Content-Type") ?? "application/json",
+          },
+        });
+      } else {
+        console.warn(`[ai-parse] NVIDIA request failed with status ${nvRes.status}`);
+      }
+    }
 
-    const text = await upstream.text();
-    return new Response(text, {
-      status: upstream.status,
+    // Fallback to Pollinations AI
+    const pollRes = await fetch("https://gen.pollinations.ai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(pollKey ? { "Authorization": `Bearer ${pollKey}` } : {}),
+      },
+      body: JSON.stringify({
+        model: "nova-fast",
+        messages,
+        temperature,
+        stream: false,
+      }),
+    });
+    
+    return new Response(await pollRes.text(), {
+      status: pollRes.status,
       headers: {
         ...corsHeaders,
-        "Content-Type":
-          upstream.headers.get("Content-Type") ?? "application/json",
+        "Content-Type": pollRes.headers.get("Content-Type") ?? "application/json",
       },
     });
+
   } catch (err) {
     return new Response(
       JSON.stringify({ error: err instanceof Error ? err.message : String(err) }),
