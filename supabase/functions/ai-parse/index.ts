@@ -4,8 +4,7 @@
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -39,7 +38,7 @@ Deno.serve(async (req) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${nvKey}`,
+          Authorization: `Bearer ${nvKey}`,
         },
         body: JSON.stringify({
           model: "meta/llama-3.1-70b-instruct",
@@ -66,7 +65,7 @@ Deno.serve(async (req) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(pollKey ? { "Authorization": `Bearer ${pollKey}` } : {}),
+        ...(pollKey ? { Authorization: `Bearer ${pollKey}` } : {}),
       },
       body: JSON.stringify({
         model: "nova-fast",
@@ -75,7 +74,7 @@ Deno.serve(async (req) => {
         stream: false,
       }),
     });
-    
+
     return new Response(await pollRes.text(), {
       status: pollRes.status,
       headers: {
@@ -83,11 +82,10 @@ Deno.serve(async (req) => {
         "Content-Type": pollRes.headers.get("Content-Type") ?? "application/json",
       },
     });
-
   } catch (err) {
-    return new Response(
-      JSON.stringify({ error: err instanceof Error ? err.message : String(err) }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return new Response(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
