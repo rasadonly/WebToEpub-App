@@ -1057,19 +1057,32 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
     }
   };
 
+  const enough = (h) => h && h.replace(/<[^>]+>/g, "").trim().length >= 20;
   let last = "";
   for (let i = 0; i < 3; i++) {
     try {
       const html = await attempt();
-      if (html && html.replace(/<[^>]+>/g, "").trim().length >= 20) return html;
+      if (enough(html)) return html;
       last = html || last;
     } catch {
       /* retry */
     }
     await new Promise((r) => setTimeout(r, 400 * (i + 1)));
   }
+  // A hand-written parser produced nothing (site changed its markup) — retry
+  // through the generic path, which includes the AI selector fallback.
+  if (key !== "generic") {
+    try {
+      const html = await bodyGeneric(chapterUrl, contentSelector);
+      if (enough(html)) return html;
+      last = last || html;
+    } catch {
+      /* ignore */
+    }
+  }
   if (last) return last;
   throw new Error("Chapter content appears to be empty");
+
 }
 
 /** Fetch metadata (title / author / cover) from a TOC page, best-effort. */
