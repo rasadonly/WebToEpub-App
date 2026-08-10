@@ -30,9 +30,8 @@ Deno.serve(async (req) => {
     // Optional: force a provider ("nvidia" | "pollinations") for diagnostics.
     const provider = typeof body?.provider === "string" ? body.provider : "";
 
-    let responseText = "";
-    let statusCode = 500;
-    let contentType = "application/json";
+
+
 
     // Try NVIDIA first if key is available
     if (nvKey && provider !== "pollinations") {
