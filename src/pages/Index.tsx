@@ -95,40 +95,7 @@ const Index = () => {
       className="min-h-screen bg-gradient-hero"
       style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
-      <div className="container mx-auto px-3 sm:px-4 py-6 sm:py-10 space-y-6 sm:space-y-8 max-w-full">
-
-        {/* Hero Section */}
-        <div className="text-center max-w-2xl mx-auto mb-2">
-          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight mb-3">
-            Convert Web Novels to EPUB — Free, Instant, No Account
-          </h1>
-          <p className="text-muted-foreground text-base sm:text-lg mb-5">
-            Paste a table-of-contents URL from Royal Road, NovelBin, Scribble Hub, or{' '}
-            <Link to="/sites" className="text-primary hover:underline font-medium">380+ other sites</Link>{' '}
-            and download a clean, device-ready EPUB in seconds.
-          </p>
-          {/* Differentiator badges */}
-          <div className="flex flex-wrap justify-center gap-2 text-sm mb-5">
-            {[
-              '✅ Completely Free',
-              '🚀 No Account Required',
-              '📚 380+ Sites Supported',
-              '📱 Works on Kindle & Kobo',
-              '🔒 Privacy-First',
-            ].map(badge => (
-              <span key={badge} className="px-3 py-1 rounded-full bg-secondary text-secondary-foreground border border-border/60 font-medium">
-                {badge}
-              </span>
-            ))}
-          </div>
-          <div className="flex justify-center gap-4 text-xs text-muted-foreground">
-            <Link to="/guide" className="hover:text-primary transition-colors">How-to Guide</Link>
-            <span>·</span>
-            <Link to="/sites" className="hover:text-primary transition-colors">Supported Sites</Link>
-            <span>·</span>
-            <Link to="/privacy" className="hover:text-primary transition-colors">Privacy</Link>
-          </div>
-        </div>
+      <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-8 space-y-6 sm:space-y-8 max-w-full">
 
         {/* Main Content */}
         <div className="space-y-6">
@@ -153,7 +120,6 @@ const Index = () => {
             serverJob={serverJob}
             onDownload={downloadServerJob}
           />
-
         </div>
 
         {/* Reset Button */}
@@ -170,10 +136,24 @@ const Index = () => {
           </div>
         )}
 
+        {/* Below-the-fold SEO section — visible after scrolling or when idle */}
+        <div className="border-t border-border/40 pt-8 mt-4 text-center max-w-2xl mx-auto">
+          <p className="text-muted-foreground text-sm mb-4">
+            Works with <Link to="/sites" className="text-primary hover:underline font-medium">380+ sites</Link> — Royal Road, NovelBin, Scribble Hub, WTR-LAB and more.
+            No account, no install, no cost.
+          </p>
+          <div className="flex justify-center gap-5 text-xs text-muted-foreground">
+            <Link to="/guide" className="hover:text-primary transition-colors">How-to guide</Link>
+            <span>·</span>
+            <Link to="/sites" className="hover:text-primary transition-colors">Supported sites</Link>
+            <span>·</span>
+            <Link to="/privacy" className="hover:text-primary transition-colors">Privacy</Link>
+          </div>
+        </div>
+
       </div>
     </div>
   );
 };
 
 export default Index;
-
