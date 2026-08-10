@@ -4,6 +4,8 @@
 import { parseHTML } from "linkedom";
 import crypto from "node:crypto";
 import fs from "node:fs";
+import { aiContentSelectors, aiTocSelectors } from "./aiParser.js";
+
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
@@ -594,10 +596,36 @@ async function bodyWattpad(url) {
     ".part-content, pre.part-content, [data-field='text']"
   );
 }
+/** Last-resort heuristic: the block element with the most paragraph text. */
+function bodyByDensity(doc) {
+  let best = null;
+  let bestScore = 0;
+  const nodes = doc.querySelectorAll("div, article, section, main, td");
+  nodes.forEach((el) => {
+    const paras = el.querySelectorAll("p, br").length;
+    const text = (el.textContent || "").trim();
+    if (text.length < 400) return;
+    const links = el.querySelectorAll("a").length;
+    const linkText = [...el.querySelectorAll("a")].reduce(
+      (n, a) => n + (a.textContent || "").length,
+      0
+    );
+    // Penalise link-heavy blocks (nav / chapter lists), reward paragraphs.
+    const score = text.length * (1 - Math.min(linkText / text.length, 0.9)) + paras * 40 - links * 20;
+    if (score > bestScore) {
+      bestScore = score;
+      best = el;
+    }
+  });
+  if (!best) return "";
+  stripInside(best, "script, style, iframe, ins, nav, header, footer, form, .ads, .adsbygoogle");
+  return best.innerHTML;
+}
+
 /**
  * Chapter body for any site without a hand-written parser: user selector first,
- * then the selectors extracted from that site's WebToEpub parser, then common
- * container names as a final fallback.
+ * then the selectors extracted from that site's WebToEpub parser, common
+ * container names, then AI-detected selectors, then a text-density heuristic.
  */
 async function bodyGeneric(url, selector) {
   let config = null;
@@ -606,7 +634,8 @@ async function bodyGeneric(url, selector) {
   } catch {
     /* ignore */
   }
-  const doc = parseHtml(await getText(url));
+  const rawHtml = await getText(url);
+  const doc = parseHtml(rawHtml);
   const candidates = [
     ...(selector ? [selector] : []),
     ...(config?.content || []),
@@ -620,12 +649,44 @@ async function bodyGeneric(url, selector) {
     "article",
     ".content",
   ];
+  const good = (html) => html && html.replace(/<[^>]+>/g, "").trim().length >= 200;
+  let weak = "";
   for (const sel of candidates) {
     const html = extractWithSelector(doc, sel);
-    if (html && html.replace(/<[^>]+>/g, "").trim().length >= 20) return html;
+    if (good(html)) return html;
+    if (!weak && html && html.replace(/<[^>]+>/g, "").trim().length >= 20) weak = html;
   }
-  return "";
+
+  // Nothing solid — let the AI work out the selectors for this host (cached),
+  // then fall back to a text-density heuristic.
+  try {
+    const ai = await aiContentSelectors(rawHtml, url);
+    if (ai?.content) {
+      const html = extractWithSelector(doc, ai.content);
+      if (good(html) || (!weak && html)) {
+        if (ai.remove) {
+          try {
+            const frag = parseHtml(`<div id="__ai">${html}</div>`);
+            const root = frag.querySelector("#__ai");
+            stripInside(root, ai.remove);
+            return root.innerHTML;
+          } catch {
+            return html;
+          }
+        }
+        if (good(html)) return html;
+        weak = weak || html;
+      }
+    }
+  } catch (e) {
+    console.warn("[fetcher] AI content fallback failed", e?.message || e);
+  }
+
+  const dense = bodyByDensity(doc);
+  if (good(dense)) return dense;
+  return weak || dense || "";
 }
+
 
 
 // ---------------- Generic site table ----------------
@@ -836,25 +897,57 @@ async function tocFromConfig(url, config, linkSelector) {
   }
 
   let doc = null;
+  let rawHtml = "";
   let results = [];
   let sourceUrl = url;
   for (const candidate of variants) {
     try {
-      const d = parseHtml(await getText(candidate));
+      const h = await getText(candidate);
+      const d = parseHtml(h);
       const items = collectTocLinks(d, candidate, selectors);
       if (items.length) {
         doc = d;
+        rawHtml = h;
         results = items;
         sourceUrl = candidate;
         break;
       }
-      doc = doc || d;
+      if (!doc) {
+        doc = d;
+        rawHtml = h;
+        sourceUrl = candidate;
+      }
     } catch {
       /* try the next variant */
     }
   }
   if (!doc) return [];
   url = sourceUrl;
+
+  // No configured selector matched — ask the AI for this host's TOC selectors
+  // (cached per host) and retry with them.
+  if (!results.length) {
+    try {
+      const ai = await aiTocSelectors(rawHtml, url);
+      if (ai?.toc?.length) {
+        const items = collectTocLinks(doc, url, ai.toc);
+        if (items.length) {
+          results = items;
+          selectors.unshift(...ai.toc);
+        }
+      }
+    } catch (e) {
+      console.warn("[fetcher] AI TOC fallback failed", e?.message || e);
+    }
+  }
+
+  // Still nothing: take every same-origin link that looks like a chapter.
+  if (!results.length) {
+    results = collectTocLinks(doc, url, ["body"]).filter((r) =>
+      /(chapter|chap|ch-|\/c\d|episode|part)[-_/]?\d|\d+\.html?$/i.test(r.url)
+    );
+  }
+
 
 
 
@@ -899,38 +992,51 @@ function siteKey(hostname) {
 /** Returns [{ url, title }]. */
 export async function fetchChapterLinks(tocUrl, linkSelector = "") {
   const key = siteKey(new URL(tocUrl).hostname);
-  switch (key) {
-    case "novelhall":
-      return tocNovelhall(tocUrl);
-    case "freewebnovel":
-      return tocFreeWebNovel(tocUrl);
-    case "novelfire":
-      return tocNovelFire(tocUrl);
-    case "novgo":
-      return tocNovGo(tocUrl);
-    case "novelbuddy":
-      return tocNovelBuddy(tocUrl);
-    case "novelarrow":
-      return tocNovelArrow(tocUrl);
-    case "novelfull":
-      return tocNovelFull(tocUrl);
-    case "novelbin":
-      return tocNovelBin(tocUrl);
-    case "wtrlab":
-      return tocWtrLab(tocUrl);
-    case "wattpad":
-      return tocWattpad(tocUrl);
-    default: {
-      const config = lookupSiteConfig(new URL(tocUrl).hostname);
-      const items = await tocFromConfig(tocUrl, config, linkSelector);
-      if (items.length) return items;
-      // Last resort: scrape every same-origin link on the page.
-      const doc = parseHtml(await getText(tocUrl));
-      return collectTocLinks(doc, tocUrl, [linkSelector || "a[href]"]);
+  const dedicated = async () => {
+    switch (key) {
+      case "novelhall":
+        return tocNovelhall(tocUrl);
+      case "freewebnovel":
+        return tocFreeWebNovel(tocUrl);
+      case "novelfire":
+        return tocNovelFire(tocUrl);
+      case "novgo":
+        return tocNovGo(tocUrl);
+      case "novelbuddy":
+        return tocNovelBuddy(tocUrl);
+      case "novelarrow":
+        return tocNovelArrow(tocUrl);
+      case "novelfull":
+        return tocNovelFull(tocUrl);
+      case "novelbin":
+        return tocNovelBin(tocUrl);
+      case "wtrlab":
+        return tocWtrLab(tocUrl);
+      case "wattpad":
+        return tocWattpad(tocUrl);
+      default:
+        return [];
     }
+  };
 
+  if (key !== "generic") {
+    try {
+      const items = await dedicated();
+      if (items?.length) return items;
+    } catch (e) {
+      console.warn("[fetcher] dedicated TOC parser failed", key, e?.message || e);
+    }
   }
+
+  // Unknown site, or the dedicated parser came back empty: config selectors,
+  // then AI-detected selectors, then a raw same-origin link sweep.
+  const config = lookupSiteConfig(new URL(tocUrl).hostname);
+  const items = await tocFromConfig(tocUrl, config, linkSelector);
+  if (items.length) return items;
+  const doc = parseHtml(await getText(tocUrl));
+  return collectTocLinks(doc, tocUrl, [linkSelector || "a[href]"]);
 }
+
 
 export async function fetchChapterContent(chapterUrl, contentSelector = "") {
   let hostname = "";
@@ -964,19 +1070,32 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
     }
   };
 
+  const enough = (h) => h && h.replace(/<[^>]+>/g, "").trim().length >= 20;
   let last = "";
   for (let i = 0; i < 3; i++) {
     try {
       const html = await attempt();
-      if (html && html.replace(/<[^>]+>/g, "").trim().length >= 20) return html;
+      if (enough(html)) return html;
       last = html || last;
     } catch {
       /* retry */
     }
     await new Promise((r) => setTimeout(r, 400 * (i + 1)));
   }
+  // A hand-written parser produced nothing (site changed its markup) — retry
+  // through the generic path, which includes the AI selector fallback.
+  if (key !== "generic") {
+    try {
+      const html = await bodyGeneric(chapterUrl, contentSelector);
+      if (enough(html)) return html;
+      last = last || html;
+    } catch {
+      /* ignore */
+    }
+  }
   if (last) return last;
   throw new Error("Chapter content appears to be empty");
+
 }
 
 /** Fetch metadata (title / author / cover) from a TOC page, best-effort. */
