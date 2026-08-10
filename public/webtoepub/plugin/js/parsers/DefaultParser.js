@@ -226,45 +226,102 @@ class DefaultParser extends Parser {
         return chapters;
     }
 
+    static _looksEmpty(content) {
+        return content == null || (content.textContent || "").trim().length < 30;
+    }
+
+    /**
+     * Fetch the chapter, and if the configured (or heuristic) selectors find no
+     * usable text, ask the AI for selectors for this host BEFORE findContent()
+     * runs — findContent() itself is synchronous, so the async work has to
+     * happen here. Selectors are saved per host, so only the first failing
+     * chapter pays the AI round-trip.
+     */
+    async fetchChapter(url) {
+        let dom = await super.fetchChapter(url);
+        try {
+            let hostName = util.extractHostName(dom.baseURI || url);
+            let logic = this.siteConfigs.constructFindContentLogicForSite(hostName);
+            if (DefaultParser._looksEmpty(logic.findContent(dom)) && typeof AiClient !== "undefined") {
+                await this.autoConfigureWithAi(hostName, dom, url);
+            }
+        } catch (e) {
+            console.warn("[DefaultParser] AI auto-config skipped:", e);
+        }
+        return dom;
+    }
+
+    /** One AI selector lookup per host, shared between concurrent chapters. */
+    async autoConfigureWithAi(hostName, dom, url) {
+        let pending = DefaultParser._aiCache.get(hostName);
+        if (!pending) {
+            let html = dom.documentElement ? dom.documentElement.outerHTML : "";
+            pending = AiClient.fetchAiSelectors(html, dom.baseURI || url)
+                .then((sel) => {
+                    if (sel && sel.content) {
+                        this.siteConfigs.saveSiteConfig(
+                            hostName,
+                            sel.content,
+                            sel.title || "",
+                            sel.remove || "",
+                            dom.baseURI || url,
+                            ""
+                        );
+                        console.log("[DefaultParser] AI auto-config saved for", hostName, sel);
+                    }
+                    return sel;
+                })
+                .catch((e) => {
+                    console.warn("[DefaultParser] AI selector lookup failed:", e);
+                    return null;
+                });
+            DefaultParser._aiCache.set(hostName, pending);
+        }
+        return pending;
+    }
+
     findContent(dom) {
         let hostName = util.extractHostName(dom.baseURI);
         this.logic = this.siteConfigs.constructFindContentLogicForSite(hostName);
         let content = this.logic.findContent(dom);
-        if (content == null || (content.textContent || "").trim().length < 30) {
-            // Try AI selector auto-detection once per host, then cache.
-            try {
-                if (typeof AiClient !== "undefined" && !DefaultParser._aiTried.has(hostName)) {
-                    DefaultParser._aiTried.add(hostName);
-                    let html = dom.documentElement ? dom.documentElement.outerHTML : "";
-                    // Fire-and-forget synchronous best-effort: schedule async work
-                    // for the NEXT chapter; also try inline via cached promise.
-                    let cached = DefaultParser._aiCache.get(hostName);
-                    if (!cached) {
-                        cached = AiClient.fetchAiSelectors(html, dom.baseURI).then((sel) => {
-                            if (sel && sel.content) {
-                                try {
-                                    this.siteConfigs.saveSiteConfig(
-                                        hostName,
-                                        sel.content,
-                                        sel.title || "",
-                                        sel.remove || "",
-                                        dom.baseURI,
-                                        ""
-                                    );
-                                    console.log("[DefaultParser] AI auto-config saved for", hostName, sel);
-                                } catch (e) { console.warn("[DefaultParser] save AI config failed", e); }
-}
-DefaultParser._aiTried = new Set();
-DefaultParser._aiCache = new Map();
-                            return sel;
-                        });
-                        DefaultParser._aiCache.set(hostName, cached);
-                    }
-                }
-            } catch (e) { console.warn("[DefaultParser] AI fallback error:", e); }
+        if (DefaultParser._looksEmpty(content)) {
+            // AI config may have landed after this parser instance cached logic.
+            let fresh = this.siteConfigs.constructFindContentLogicForSite(hostName);
+            let retry = fresh.findContent(dom);
+            if (!DefaultParser._looksEmpty(retry)) {
+                this.logic = fresh;
+                return retry;
+            }
+            // Final heuristic: densest non-navigational text block on the page.
+            let dense = DefaultParser.findContentByDensity(dom);
+            if (dense != null) {
+                return dense;
+            }
         }
         return content;
     }
+
+    /** Pick the element with the most paragraph text and fewest links. */
+    static findContentByDensity(dom) {
+        let best = null;
+        let bestScore = 0;
+        for (let el of dom.querySelectorAll("div, article, section, main, td")) {
+            let text = (el.textContent || "").trim();
+            if (text.length < 400) continue;
+            let links = el.querySelectorAll("a");
+            let linkLen = 0;
+            for (let a of links) linkLen += (a.textContent || "").length;
+            let score = text.length * (1 - Math.min(linkLen / text.length, 0.9))
+                + el.querySelectorAll("p, br").length * 40
+                - links.length * 20;
+            if (score > bestScore) {
+                bestScore = score;
+                best = el;
+            }
+        }
+        return best;
+    }
+
 
     populateUI(dom) {
         super.populateUI(dom);
