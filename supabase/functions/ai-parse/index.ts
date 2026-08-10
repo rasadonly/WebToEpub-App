@@ -27,13 +27,15 @@ Deno.serve(async (req) => {
     }
 
     const temperature = typeof body?.temperature === "number" ? body.temperature : 0;
+    // Optional: force a provider ("nvidia" | "pollinations") for diagnostics.
+    const provider = typeof body?.provider === "string" ? body.provider : "";
 
     let responseText = "";
     let statusCode = 500;
     let contentType = "application/json";
 
     // Try NVIDIA first if key is available
-    if (nvKey) {
+    if (nvKey && provider !== "pollinations") {
       const nvRes = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
         method: "POST",
         headers: {
