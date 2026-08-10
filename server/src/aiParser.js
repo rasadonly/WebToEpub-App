@@ -48,13 +48,18 @@ function extractJson(text) {
 }
 
 const NV_KEY = process.env.NVIDIA_API_KEY || "";
-const POLL_KEY = process.env.POLLINATIONS_API_KEY || "sk_tefNMUnvpQbdOVYRgthdUFLBnvhrnxAW";
+const POLL_KEY = process.env.POLLINATIONS_API_KEY || "";
 
 async function chatJson(system, user, timeoutMs = 45000) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  const messages = [
+    { role: "system", content: system },
+    { role: "user", content: user },
+  ];
   try {
-    let res;
+    let res = null;
+
     if (NV_KEY) {
       res = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
         method: "POST",
@@ -67,10 +72,7 @@ async function chatJson(system, user, timeoutMs = 45000) {
           model: "meta/llama-3.1-70b-instruct",
           temperature: 0,
           response_format: { type: "json_object" },
-          messages: [
-            { role: "system", content: system },
-            { role: "user", content: user },
-          ],
+          messages,
         }),
       });
       if (!res.ok) {
@@ -79,22 +81,33 @@ async function chatJson(system, user, timeoutMs = 45000) {
       }
     }
 
-    if (!res) {
+    if (!res && POLL_KEY) {
       res = await fetch("https://gen.pollinations.ai/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(POLL_KEY ? { "Authorization": `Bearer ${POLL_KEY}` } : {}),
+          "Authorization": `Bearer ${POLL_KEY}`,
         },
         signal: ctrl.signal,
-        body: JSON.stringify({
-          model: "nova-fast",
-          temperature: 0,
-          messages: [
-            { role: "system", content: system },
-            { role: "user", content: user },
-          ],
-        }),
+        body: JSON.stringify({ model: "nova-fast", temperature: 0, messages }),
+      });
+      if (!res.ok) {
+        console.warn("[aiParser] Pollinations request failed", res.status);
+        res = null;
+      }
+    }
+
+    // No local provider keys (or both failed) — use the ai-parse proxy, which
+    // holds the keys server-side.
+    if (!res) {
+      res = await fetch(AI_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${AI_ANON}`,
+        },
+        signal: ctrl.signal,
+        body: JSON.stringify({ temperature: 0, messages }),
       });
     }
 
@@ -103,6 +116,10 @@ async function chatJson(system, user, timeoutMs = 45000) {
       return null;
     }
     const json = await res.json();
+    if (json?.error) {
+      console.warn("[aiParser] provider error", JSON.stringify(json.error).slice(0, 200));
+      return null;
+    }
     return extractJson(json?.choices?.[0]?.message?.content || "");
   } catch (e) {
     console.warn("[aiParser] request error", e?.message || e);
@@ -111,6 +128,7 @@ async function chatJson(system, user, timeoutMs = 45000) {
     clearTimeout(timer);
   }
 }
+
 
 /** Ask the model for chapter-content selectors. Cached per hostname. */
 export async function aiContentSelectors(html, url) {
