@@ -684,11 +684,14 @@ function collectTocLinks(doc, pageUrl, selectors) {
   })();
   for (const sel of selectors) {
     let nodes;
+    // Only append " a" when the selector doesn't already target links/options.
+    const targetsLinks = /(^|[\s>+~])(a|option)\b|\ba\[|\boption\[/.test(sel);
     try {
-      nodes = doc.querySelectorAll(sel.endsWith(" a") || /\ba\b/.test(sel) ? sel : `${sel} a`);
+      nodes = doc.querySelectorAll(targetsLinks ? sel : `${sel} a`);
     } catch {
       continue;
     }
+
     nodes.forEach((a) => {
       const href = a.getAttribute?.("href") || a.getAttribute?.("value");
       if (!href || href.startsWith("#") || href.startsWith("javascript:")) return;
