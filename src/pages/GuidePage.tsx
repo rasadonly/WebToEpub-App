@@ -4,62 +4,10 @@ import { trackPageView } from '@/utils/analytics';
 
 const guides = [
   {
-    slug: 'royal-road',
-    name: 'Royal Road',
-    domain: 'royalroad.com',
-    url_example: 'royalroad.com/fiction/12345/story-title',
-    steps: [
-      'Go to the novel\'s main fiction page — the one that shows the synopsis and chapter list.',
-      'Copy the URL from your address bar. It should look like royalroad.com/fiction/XXXXX.',
-      'Paste it into LinkToEpub and hit Fetch.',
-      'Pick a chapter range if you only want part of the story, then Generate EPUB.',
-    ],
-    gotcha: 'Don\'t copy a chapter URL like /chapter/XXXXX. It needs to be the main fiction page.',
-  },
-  {
-    slug: 'novelbin',
-    name: 'NovelBin',
-    domain: 'novelbin.com',
-    url_example: 'novelbin.com/b/novel-title',
-    steps: [
-      'Find the novel on NovelBin and open its main page (not a chapter).',
-      'Copy the URL.',
-      'Paste into LinkToEpub.',
-      'If it times out or returns no chapters, try the same novel on novelbin.me or novelbin.net — they\'re mirrors of the same site.',
-    ],
-    gotcha: 'NovelBin has several mirror domains. If one is slow or blocked, the others usually work.',
-  },
-  {
-    slug: 'novelfull',
-    name: 'NovelFull',
-    domain: 'novelfull.com',
-    url_example: 'novelfull.com/novel-title.html',
-    steps: [
-      'Open the novel\'s main page on NovelFull.',
-      'Copy the URL (usually ends in .html).',
-      'Paste into LinkToEpub and fetch.',
-      'NovelFull novels can have 1000+ chapters — use the range selector to grab just the arc you want.',
-    ],
-    gotcha: 'Very long novels can take a few minutes to fetch. The progress bar shows where you are.',
-  },
-  {
-    slug: 'scribblehub',
-    name: 'Scribble Hub',
-    domain: 'scribblehub.com',
-    url_example: 'scribblehub.com/series/12345/story-name/',
-    steps: [
-      'Go to the series page — the one with the cover, synopsis, and chapter list.',
-      'Copy the /series/ URL.',
-      'Paste into LinkToEpub.',
-      'Fetch and generate.',
-    ],
-    gotcha: 'The URL needs to be /series/ — not /read/ (that\'s a chapter URL).',
-  },
-  {
     slug: 'wtr-lab',
     name: 'WTR-LAB',
     domain: 'wtr-lab.com',
-    url_example: 'wtr-lab.com/novel-en/novel-title',
+    url_example: 'wtr-lab.com/en/serie-3914/i-am-the-fated-villain',
     steps: [
       'Find your novel on WTR-LAB and open its main page.',
       'Copy the URL.',
@@ -68,17 +16,41 @@ const guides = [
     gotcha: 'Large novels on WTR-LAB can take 2–3 minutes. That\'s normal — the server is being polite to the site.',
   },
   {
-    slug: 'webnovel',
-    name: 'WebNovel',
-    domain: 'webnovel.com',
-    url_example: 'webnovel.com/book/title_1234567890',
+    slug: 'novelcool',
+    name: 'NovelCool',
+    domain: 'novelcool.com',
+    url_example: 'novelcool.com/novel/Martial-Peak.html',
     steps: [
-      'Go to the book page on WebNovel.',
+      'Find the novel on NovelCool and open its main page (not a chapter).',
+      'Copy the URL.',
+      'Paste into LinkToEpub and hit Fetch.',
+    ],
+    gotcha: 'Make sure you copy the main novel page, not a specific chapter URL.',
+  },
+  {
+    slug: 'ranobe',
+    name: 'Ranobe',
+    domain: 'ranobes.top',
+    url_example: 'ranobes.top/novels/1083994-shadow-slave.html',
+    steps: [
+      'Open the novel\'s main page on Ranobe.',
+      'Copy the URL (usually ends in .html).',
+      'Paste into LinkToEpub and fetch.',
+    ],
+    gotcha: 'Always use the main novel URL, not the reader/chapter URL.',
+  },
+  {
+    slug: 'allnovelfull',
+    name: 'AllNovelFull',
+    domain: 'allnovelfull.com',
+    url_example: 'allnovelfull.com/the-beginning-after-the-end.html',
+    steps: [
+      'Go to the novel\'s main page — the one with the synopsis and chapter list.',
       'Copy the URL.',
       'Paste into LinkToEpub.',
-      'Only unlocked chapters download. Premium chapters are skipped.',
+      'Fetch and generate.',
     ],
-    gotcha: 'WebNovel locks most chapters behind coins. Only the first N free chapters will be in your EPUB.',
+    gotcha: 'Novels with thousands of chapters can take a few minutes to fetch. The progress bar shows where you are.',
   },
 ];
 

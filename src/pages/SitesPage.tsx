@@ -4,18 +4,10 @@ import { trackPageView } from '@/utils/analytics';
 import { engineListSupportedHosts } from '@/utils/webtoepub/bridge';
 
 const FEATURED: { domain: string; note: string }[] = [
-  { domain: 'royalroad.com', note: 'Original English web serials — LitRPG, progression fantasy, isekai' },
-  { domain: 'novelbin.com', note: 'Translated CN/KR novels. Also try novelbin.me if one mirror is slow' },
-  { domain: 'novelfull.com', note: 'Xianxia, cultivation, Chinese translations' },
-  { domain: 'scribblehub.com', note: 'Community fiction — original English stories and fan work' },
   { domain: 'wtr-lab.com', note: 'Machine-translated Chinese novels, massive catalog' },
-  { domain: 'webnovel.com', note: 'Qidian English — free chapters only, locked chapters are skipped' },
-  { domain: 'novelfire.net', note: 'Fast, clean reader with good translation coverage' },
-  { domain: 'freewebnovel.com', note: 'Free translations, updated frequently' },
-  { domain: 'lightnovelworld.co', note: 'Light novels from JP, KR, CN' },
-  { domain: 'archiveofourown.org', note: 'AO3 — all fandoms, community-run archive' },
-  { domain: 'fanfiction.net', note: 'The original fanfiction archive' },
-  { domain: 'parahumans.wordpress.com', note: 'Worm and Ward by Wildbow' },
+  { domain: 'novelcool.com', note: 'Huge collection of light novels and web novels' },
+  { domain: 'ranobes.top', note: 'Fast, clean reader with good translation coverage' },
+  { domain: 'allnovelfull.com', note: 'Xianxia, cultivation, Chinese translations' }
 ];
 
 export default function SitesPage() {
