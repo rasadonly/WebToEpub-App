@@ -45,6 +45,22 @@ export interface ConversionFormData {
 
 export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapters }: ConversionFormProps) {
   const { toast } = useToast();
+
+  // Listen for modal-open events dispatched by the NavBar
+  useEffect(() => {
+    const h = (e: Event) => {
+      const name = (e as CustomEvent).detail;
+      if (name === 'supported-sites') setSupportedOpen(true);
+      else if (name === 'library') setLibraryOpen(true);
+      else if (name === 'forum') setForumOpen(true);
+      else if (name === 'epub-reader') setEpubReaderOpen(true);
+      else if (name === 'admin') setAdminOpen(true);
+      else if (name === 'live-reader') openLiveReader(undefined);
+    };
+    window.addEventListener('open-modal', h);
+    return () => window.removeEventListener('open-modal', h);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [tocUrl, setTocUrl] = useState('');
   const [tocSelector, setTocSelector] = useState('');
   const [contentSelector, setContentSelector] = useState('');
@@ -688,48 +704,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
           </div>
 
 
-          {/* Quick actions — fixed to top-right like Google/Bing account menu */}
-          <div className="fixed top-3 right-3 md:top-4 md:right-4 z-50 flex items-center gap-2">
-            <div className="hidden sm:block">
-              <LiveStats />
-            </div>
-            <DropdownMenu modal={false}>
-
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  aria-label="More options"
-                  className="h-10 w-10 rounded-full bg-card/70 backdrop-blur border border-border shadow-sm hover:bg-card hover:shadow-md transition-smooth"
-                >
-                  <MoreVertical className="w-5 h-5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" sideOffset={8} className="w-52">
-                <DropdownMenuItem onSelect={() => setSupportedOpen(true)}>
-                  <Globe className="w-4 h-4 mr-2" /> Supported Sites
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => openLiveReader(hasUrl ? trimmed : undefined)}>
-                  <BookOpenCheck className="w-4 h-4 mr-2" /> Live Reader
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => setAdminOpen(true)}>
-                  <Settings className="w-4 h-4 mr-2" /> Admin
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setLibraryOpen(true)}>
-                  <LibraryIcon className="w-4 h-4 mr-2" /> Library
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setEpubReaderOpen(true)}>
-                  <BookMarked className="w-4 h-4 mr-2" /> EPUB Reader
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => setForumOpen(true)}>
-                  <MessagesSquare className="w-4 h-4 mr-2" /> Community Forum
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          {/* Modal triggers via custom events from the NavBar */}
 
 
           {/* Menu-controlled dialogs (headless triggers) */}
