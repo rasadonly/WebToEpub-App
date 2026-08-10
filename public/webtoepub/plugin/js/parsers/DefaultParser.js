@@ -335,10 +335,17 @@ class DefaultParser extends Parser {
         util.removeComments(element);
         util.removeUnwantedWordpressElements(element);
         util.removeMicrosoftWordCrapElements(element);
-        this.logic.removeUnwanted(element);
+        if (this.logic) {
+            this.logic.removeUnwanted(element);
+        }
     }
 
     findChapterTitle(dom) {
-        return this.logic.findChapterTitle(dom);
+        let logic = this.logic
+            || this.siteConfigs.constructFindContentLogicForSite(util.extractHostName(dom.baseURI));
+        return logic.findChapterTitle(dom);
     }
 }
+
+DefaultParser._aiTried = new Set();
+DefaultParser._aiCache = new Map();
