@@ -47,20 +47,22 @@ function extractJson(text) {
   }
 }
 
+const NV_KEY = process.env.NVIDIA_API_KEY || "";
+const POLL_KEY = process.env.POLLINATIONS_API_KEY || "sk_tefNMUnvpQbdOVYRgthdUFLBnvhrnxAW";
+
 async function chatJson(system, user, timeoutMs = 45000) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(AI_ENDPOINT, {
+    let res = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${AI_ANON}`,
-        apikey: AI_ANON,
+        "Authorization": `Bearer ${NV_KEY}`,
       },
       signal: ctrl.signal,
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "meta/llama-3.1-70b-instruct",
         temperature: 0,
         messages: [
           { role: "system", content: system },
@@ -68,6 +70,27 @@ async function chatJson(system, user, timeoutMs = 45000) {
         ],
       }),
     });
+
+    if (!res.ok) {
+      console.warn("[aiParser] NVIDIA request failed", res.status);
+      res = await fetch("https://gen.pollinations.ai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${POLL_KEY}`,
+        },
+        signal: ctrl.signal,
+        body: JSON.stringify({
+          model: "nova-fast",
+          temperature: 0,
+          messages: [
+            { role: "system", content: system },
+            { role: "user", content: user },
+          ],
+        }),
+      });
+    }
+
     if (!res.ok) {
       console.warn("[aiParser] request failed", res.status, (await res.text()).slice(0, 200));
       return null;
