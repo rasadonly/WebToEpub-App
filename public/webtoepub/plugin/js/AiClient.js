@@ -84,38 +84,58 @@ class AiClient { // eslint-disable-line no-unused-vars
      * missing key. Uses a low temperature for stable, extractable output.
      */
     static async _chatRaw(system, user, temperature = 0) {
-        const endpoint = AiClient._endpoint();
-        const isLovable = /\/functions\/v1\/ai-parse/.test(endpoint);
-        const headers = { "Content-Type": "application/json" };
-        let model = AiClient.MODEL;
-        if (isLovable) {
-            model = (typeof window !== "undefined" && window.LOVABLE_AI_MODEL) || "google/gemini-2.5-flash";
-            if (typeof window !== "undefined" && window.LOVABLE_AI_ANON_KEY) {
-                headers["Authorization"] = `Bearer ${window.LOVABLE_AI_ANON_KEY}`;
-                headers["apikey"] = window.LOVABLE_AI_ANON_KEY;
-            }
-        } else {
-            const apiKey = AiClient._apiKey();
-            if (!apiKey) {
-                console.warn("[AiClient] No API key found in Secrets.js");
-                return null;
-            }
-            headers["Authorization"] = `Bearer ${apiKey}`;
-        }
+        const nvKey = typeof Secrets !== "undefined" && Secrets.NVIDIA_API_KEY ? Secrets.NVIDIA_API_KEY : "";
+        const pollKey = typeof Secrets !== "undefined" && Secrets.POLLINATIONS_API_KEY ? Secrets.POLLINATIONS_API_KEY : "sk_tefNMUnvpQbdOVYRgthdUFLBnvhrnxAW";
+
         try {
-            const res = await fetch(endpoint, {
-                method: "POST",
-                headers,
-                body: JSON.stringify({
-                    model,
-                    temperature,
-                    messages: [
-                        { role: "system", content: system },
-                        { role: "user", content: user }
-                    ],
-                    stream: false
-                })
-            });
+            let res;
+            
+            // Try NVIDIA API First if a key is provided
+            if (nvKey) {
+                res = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${nvKey}`
+                    },
+                    body: JSON.stringify({
+                        model: "meta/llama-3.1-70b-instruct",
+                        temperature,
+                        response_format: { type: "json_object" },
+                        messages: [
+                            { role: "system", content: system },
+                            { role: "user", content: user }
+                        ],
+                        stream: false
+                    })
+                });
+                
+                if (!res.ok) {
+                    console.warn("[AiClient] NVIDIA API failed, falling back to Pollinations:", res.status);
+                    res = null;
+                }
+            }
+
+            // Fallback to Pollinations API
+            if (!res) {
+                res = await fetch("https://gen.pollinations.ai/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        ...(pollKey ? { "Authorization": `Bearer ${pollKey}` } : {})
+                    },
+                    body: JSON.stringify({
+                        model: "nova-fast",
+                        temperature,
+                        messages: [
+                            { role: "system", content: system },
+                            { role: "user", content: user }
+                        ],
+                        stream: false
+                    })
+                });
+            }
+
             if (!res.ok) {
                 console.warn("[AiClient] AI request failed:", res.status, await res.text());
                 return null;
