@@ -594,10 +594,36 @@ async function bodyWattpad(url) {
     ".part-content, pre.part-content, [data-field='text']"
   );
 }
+/** Last-resort heuristic: the block element with the most paragraph text. */
+function bodyByDensity(doc) {
+  let best = null;
+  let bestScore = 0;
+  const nodes = doc.querySelectorAll("div, article, section, main, td");
+  nodes.forEach((el) => {
+    const paras = el.querySelectorAll("p, br").length;
+    const text = (el.textContent || "").trim();
+    if (text.length < 400) return;
+    const links = el.querySelectorAll("a").length;
+    const linkText = [...el.querySelectorAll("a")].reduce(
+      (n, a) => n + (a.textContent || "").length,
+      0
+    );
+    // Penalise link-heavy blocks (nav / chapter lists), reward paragraphs.
+    const score = text.length * (1 - Math.min(linkText / text.length, 0.9)) + paras * 40 - links * 20;
+    if (score > bestScore) {
+      bestScore = score;
+      best = el;
+    }
+  });
+  if (!best) return "";
+  stripInside(best, "script, style, iframe, ins, nav, header, footer, form, .ads, .adsbygoogle");
+  return best.innerHTML;
+}
+
 /**
  * Chapter body for any site without a hand-written parser: user selector first,
- * then the selectors extracted from that site's WebToEpub parser, then common
- * container names as a final fallback.
+ * then the selectors extracted from that site's WebToEpub parser, common
+ * container names, then AI-detected selectors, then a text-density heuristic.
  */
 async function bodyGeneric(url, selector) {
   let config = null;
@@ -606,7 +632,8 @@ async function bodyGeneric(url, selector) {
   } catch {
     /* ignore */
   }
-  const doc = parseHtml(await getText(url));
+  const rawHtml = await getText(url);
+  const doc = parseHtml(rawHtml);
   const candidates = [
     ...(selector ? [selector] : []),
     ...(config?.content || []),
@@ -620,12 +647,44 @@ async function bodyGeneric(url, selector) {
     "article",
     ".content",
   ];
+  const good = (html) => html && html.replace(/<[^>]+>/g, "").trim().length >= 200;
+  let weak = "";
   for (const sel of candidates) {
     const html = extractWithSelector(doc, sel);
-    if (html && html.replace(/<[^>]+>/g, "").trim().length >= 20) return html;
+    if (good(html)) return html;
+    if (!weak && html && html.replace(/<[^>]+>/g, "").trim().length >= 20) weak = html;
   }
-  return "";
+
+  // Nothing solid — let the AI work out the selectors for this host (cached),
+  // then fall back to a text-density heuristic.
+  try {
+    const ai = await aiContentSelectors(rawHtml, url);
+    if (ai?.content) {
+      const html = extractWithSelector(doc, ai.content);
+      if (good(html) || (!weak && html)) {
+        if (ai.remove) {
+          try {
+            const frag = parseHtml(`<div id="__ai">${html}</div>`);
+            const root = frag.querySelector("#__ai");
+            stripInside(root, ai.remove);
+            return root.innerHTML;
+          } catch {
+            return html;
+          }
+        }
+        if (good(html)) return html;
+        weak = weak || html;
+      }
+    }
+  } catch (e) {
+    console.warn("[fetcher] AI content fallback failed", e?.message || e);
+  }
+
+  const dense = bodyByDensity(doc);
+  if (good(dense)) return dense;
+  return weak || dense || "";
 }
+
 
 
 // ---------------- Generic site table ----------------
