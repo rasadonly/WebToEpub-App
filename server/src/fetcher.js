@@ -992,38 +992,51 @@ function siteKey(hostname) {
 /** Returns [{ url, title }]. */
 export async function fetchChapterLinks(tocUrl, linkSelector = "") {
   const key = siteKey(new URL(tocUrl).hostname);
-  switch (key) {
-    case "novelhall":
-      return tocNovelhall(tocUrl);
-    case "freewebnovel":
-      return tocFreeWebNovel(tocUrl);
-    case "novelfire":
-      return tocNovelFire(tocUrl);
-    case "novgo":
-      return tocNovGo(tocUrl);
-    case "novelbuddy":
-      return tocNovelBuddy(tocUrl);
-    case "novelarrow":
-      return tocNovelArrow(tocUrl);
-    case "novelfull":
-      return tocNovelFull(tocUrl);
-    case "novelbin":
-      return tocNovelBin(tocUrl);
-    case "wtrlab":
-      return tocWtrLab(tocUrl);
-    case "wattpad":
-      return tocWattpad(tocUrl);
-    default: {
-      const config = lookupSiteConfig(new URL(tocUrl).hostname);
-      const items = await tocFromConfig(tocUrl, config, linkSelector);
-      if (items.length) return items;
-      // Last resort: scrape every same-origin link on the page.
-      const doc = parseHtml(await getText(tocUrl));
-      return collectTocLinks(doc, tocUrl, [linkSelector || "a[href]"]);
+  const dedicated = async () => {
+    switch (key) {
+      case "novelhall":
+        return tocNovelhall(tocUrl);
+      case "freewebnovel":
+        return tocFreeWebNovel(tocUrl);
+      case "novelfire":
+        return tocNovelFire(tocUrl);
+      case "novgo":
+        return tocNovGo(tocUrl);
+      case "novelbuddy":
+        return tocNovelBuddy(tocUrl);
+      case "novelarrow":
+        return tocNovelArrow(tocUrl);
+      case "novelfull":
+        return tocNovelFull(tocUrl);
+      case "novelbin":
+        return tocNovelBin(tocUrl);
+      case "wtrlab":
+        return tocWtrLab(tocUrl);
+      case "wattpad":
+        return tocWattpad(tocUrl);
+      default:
+        return [];
     }
+  };
 
+  if (key !== "generic") {
+    try {
+      const items = await dedicated();
+      if (items?.length) return items;
+    } catch (e) {
+      console.warn("[fetcher] dedicated TOC parser failed", key, e?.message || e);
+    }
   }
+
+  // Unknown site, or the dedicated parser came back empty: config selectors,
+  // then AI-detected selectors, then a raw same-origin link sweep.
+  const config = lookupSiteConfig(new URL(tocUrl).hostname);
+  const items = await tocFromConfig(tocUrl, config, linkSelector);
+  if (items.length) return items;
+  const doc = parseHtml(await getText(tocUrl));
+  return collectTocLinks(doc, tocUrl, [linkSelector || "a[href]"]);
 }
+
 
 export async function fetchChapterContent(chapterUrl, contentSelector = "") {
   let hostname = "";
