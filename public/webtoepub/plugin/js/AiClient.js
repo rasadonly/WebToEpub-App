@@ -48,15 +48,16 @@ class AiClient { // eslint-disable-line no-unused-vars
         return typeof Secrets !== "undefined" ? Secrets.POLLINATIONS_API_KEY : null;
     }
 
-    /** Endpoint override injected by the host app (Lovable AI Gateway proxy). */
+    /** Endpoint override injected by the host app; defaults to the ai-parse proxy. */
     static _endpoint() {
         try {
             if (typeof window !== "undefined" && window.LOVABLE_AI_ENDPOINT) {
                 return window.LOVABLE_AI_ENDPOINT;
             }
         } catch (e) { /* ignore */ }
-        return "https://gen.pollinations.ai/v1/chat/completions";
+        return "https://nvsxxxqlmxaompwpyfpd.supabase.co/functions/v1/ai-parse";
     }
+
 
     /** Resolve a possibly-relative href against a base URL. */
     static _resolveUrl(base, href) {
@@ -84,69 +85,38 @@ class AiClient { // eslint-disable-line no-unused-vars
      * missing key. Uses a low temperature for stable, extractable output.
      */
     static async _chatRaw(system, user, temperature = 0) {
-        const nvKey = typeof Secrets !== "undefined" && Secrets.NVIDIA_API_KEY ? Secrets.NVIDIA_API_KEY : "";
-        const pollKey = typeof Secrets !== "undefined" && Secrets.POLLINATIONS_API_KEY ? Secrets.POLLINATIONS_API_KEY : "sk_tefNMUnvpQbdOVYRgthdUFLBnvhrnxAW";
-
+        // Always go through the server-side proxy: it holds the provider keys
+        // (NVIDIA first, Pollinations fallback) and avoids CORS/key exposure.
         try {
-            let res;
-            
-            // Try NVIDIA API First if a key is provided
-            if (nvKey) {
-                res = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": `Bearer ${nvKey}`
-                    },
-                    body: JSON.stringify({
-                        model: "meta/llama-3.1-70b-instruct",
-                        temperature,
-                        response_format: { type: "json_object" },
-                        messages: [
-                            { role: "system", content: system },
-                            { role: "user", content: user }
-                        ],
-                        stream: false
-                    })
-                });
-                
-                if (!res.ok) {
-                    console.warn("[AiClient] NVIDIA API failed, falling back to Pollinations:", res.status);
-                    res = null;
-                }
-            }
-
-            // Fallback to Pollinations API
-            if (!res) {
-                res = await fetch("https://gen.pollinations.ai/v1/chat/completions", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        ...(pollKey ? { "Authorization": `Bearer ${pollKey}` } : {})
-                    },
-                    body: JSON.stringify({
-                        model: "nova-fast",
-                        temperature,
-                        messages: [
-                            { role: "system", content: system },
-                            { role: "user", content: user }
-                        ],
-                        stream: false
-                    })
-                });
-            }
+            const res = await fetch(AiClient._endpoint(), {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    temperature,
+                    messages: [
+                        { role: "system", content: system },
+                        { role: "user", content: user }
+                    ],
+                    stream: false
+                })
+            });
 
             if (!res.ok) {
                 console.warn("[AiClient] AI request failed:", res.status, await res.text());
                 return null;
             }
             const json = await res.json();
+            if (json && json.error) {
+                console.warn("[AiClient] AI provider error:", json.error);
+                return null;
+            }
             return json?.choices?.[0]?.message?.content || null;
         } catch (e) {
             console.error("[AiClient] Request failed:", e);
             return null;
         }
     }
+
 
     /**
      * Chat completion that must yield JSON. Tries once deterministically; on
