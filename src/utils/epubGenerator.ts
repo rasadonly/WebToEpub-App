@@ -243,6 +243,7 @@ function toXhtml(html: string): string {
         .replace(/^<div[^>]*>/, '')
         .replace(/<\/div>$/, '')
         .replace(/ xmlns="http:\/\/www\.w3\.org\/1999\/xhtml"/g, '')
+        .replace(/<(img|br|hr|input|meta|link|embed|source|param|track|wbr)(\s+[^>]*?)?(?<!\/)>/gi, '<$1$2 />')
     );
 
     // Verify the result actually parses as XML; if not, fall back to text.
