@@ -1265,6 +1265,260 @@ async function tocMtlNovel(url) {
   return dedupeByUrl(items).reverse();
 }
 
+// --- NovelCool: .chp-item a — all chapters on one page, reverse order ---
+async function tocNovelCool(url) {
+  const base = url.split('?')[0].replace(/\/$/, '').replace(/\/chapter\/.*$/, '');
+  const html = await getText(base);
+  const doc = parseHtml(html);
+  const out = [];
+  doc.querySelectorAll('.chp-item a[href]').forEach(a => {
+    const href = a.getAttribute('href');
+    if (!href || !href.includes('/chapter/')) return;
+    const title = a.getAttribute('title') || textOf(a.querySelector('.chapter-item-title')) || textOf(a);
+    out.push({ url: absoluteUrl(base, href), title });
+  });
+  return out.reverse(); // site shows newest-first
+}
+
+// --- AllNovelFull: ul.list-chapter a — all chapters on one page ---
+async function tocAllNovelFull(url) {
+  const base = url.split('?')[0].replace(/\/$/, '');
+  const html = await getText(base);
+  const out = [];
+  parseHtml(html).querySelectorAll('#list-chapter a[href], ul.list-chapter a[href]').forEach(a => {
+    const href = a.getAttribute('href');
+    if (href) out.push({ url: absoluteUrl(base, href), title: textOf(a) });
+  });
+  return dedupeByUrl(out);
+}
+
+// --- Syosetu (ncode.syosetu.com): episode list on TOC page ---
+async function tocSyosetu(url) {
+  const u = new URL(url);
+  const ncode = u.pathname.split('/').filter(Boolean)[0];
+  const tocUrl = `https://ncode.syosetu.com/${ncode}/`;
+  const html = await getText(tocUrl);
+  const doc = parseHtml(html);
+  const origin = 'https://ncode.syosetu.com';
+  const out = [];
+  // New design (2024+): .p-eplist__subtitle
+  doc.querySelectorAll('a.p-eplist__subtitle[href]').forEach(a => {
+    const href = a.getAttribute('href');
+    if (href) out.push({ url: absoluteUrl(origin, href), title: textOf(a) });
+  });
+  if (out.length) return out;
+  // Old design: dd.subtitle > a
+  doc.querySelectorAll('dl.novel_sublist2 dd.subtitle a, dl.novel_sublist a').forEach(a => {
+    const href = a.getAttribute('href');
+    if (href) out.push({ url: absoluteUrl(origin, href), title: textOf(a) });
+  });
+  return out;
+}
+
+// --- Novel18 (adult syosetu, same structure) ---
+async function tocNovel18(url) {
+  const u = new URL(url);
+  const ncode = u.pathname.split('/').filter(Boolean)[0];
+  const tocUrl = `https://novel18.syosetu.com/${ncode}/`;
+  const html = await getText(tocUrl);
+  const doc = parseHtml(html);
+  const origin = 'https://novel18.syosetu.com';
+  const out = [];
+  doc.querySelectorAll('a.p-eplist__subtitle[href], dl.novel_sublist2 dd.subtitle a').forEach(a => {
+    const href = a.getAttribute('href');
+    if (href) out.push({ url: absoluteUrl(origin, href), title: textOf(a) });
+  });
+  return out;
+}
+
+// --- Kakuyomu (kakuyomu.jp): JSON in __NEXT_DATA__ ---
+async function tocKakuyomu(url) {
+  const html = await getText(url);
+  const doc = parseHtml(html);
+  try {
+    const nd = doc.querySelector('script#__NEXT_DATA__')?.textContent;
+    if (nd) {
+      const data = JSON.parse(nd);
+      const work = Object.values(data?.props?.pageProps?.__APOLLO_STATE__ || {})
+        .find(v => v?.__typename === 'Work');
+      const episodes = Object.values(data?.props?.pageProps?.__APOLLO_STATE__ || {})
+        .filter(v => v?.__typename === 'Episode' && v?.title);
+      const workId = url.match(/works\/(\d+)/)?.[1];
+      return episodes.map(e => ({
+        url: `https://kakuyomu.jp/works/${workId}/episodes/${e.id?.split(':').pop() || e.id}`,
+        title: e.title || ''
+      }));
+    }
+  } catch {}
+  // Fallback: scrape episode links
+  return linksFrom(html, url, 'a[href*="/episodes/"]');
+}
+
+// --- WuxiaWorld.co: chapter list page ---
+async function tocWuxiaWorldCo(url) {
+  const base = url.split('?')[0].replace(/\/$/, '');
+  // Try /chapter-list.html variant
+  const variants = [
+    base,
+    base.replace(/(\/[^/]+)$/, '$1/$1'.split('/').pop() + '-chapter-list.html'),
+    base + '/chapter-list.html',
+  ];
+  for (const v of variants) {
+    try {
+      const html = await getText(v);
+      const items = linksFrom(html, v, '.chapter-list a[href], .chapter-item a[href], li.chapter-li a[href]');
+      if (items.length) return dedupeByUrl(items);
+    } catch {}
+  }
+  return [];
+}
+
+// --- XenForo threadmarks (SpaceBattles, SufficientVelocity, QuestionableQuesting) ---
+async function tocXenForo(url) {
+  const u = new URL(url);
+  const base = u.origin;
+  // Extract thread id from URL like /threads/name.12345/
+  const threadMatch = u.pathname.match(/\/threads\/[^/]+\.(\d+)/);
+  if (!threadMatch) return [];
+  const threadId = threadMatch[1];
+  // Use the threadmarks reader page
+  const readerUrl = `${base}/threads/${threadId}/threadmarks`;
+  const html = await getText(readerUrl);
+  const doc = parseHtml(html);
+  const out = [];
+  // XenForo threadmark list
+  doc.querySelectorAll('.block-body .structItem--threadmark .structItem-title a[href]').forEach(a => {
+    const href = a.getAttribute('href');
+    if (href) out.push({ url: absoluteUrl(base, href), title: textOf(a) });
+  });
+  if (out.length) return out;
+  // Alternative selector
+  doc.querySelectorAll('a.threadmarkLabel[href]').forEach(a => {
+    const href = a.getAttribute('href');
+    if (href) out.push({ url: absoluteUrl(base, href), title: textOf(a) });
+  });
+  return dedupeByUrl(out);
+}
+
+// --- CreativeNovels: chapter list AJAX ---
+async function tocCreativeNovels(url) {
+  const html = await getText(url);
+  const doc = parseHtml(html);
+  const postId = html.match(/"postId":(\d+)/)?.[1] ||
+    doc.querySelector('[data-post-id]')?.getAttribute('data-post-id');
+  if (!postId) {
+    return linksFrom(html, url, '.lcp_catlist a[href], .chapter-list a[href]');
+  }
+  const origin = new URL(url).origin;
+  const ajaxHtml = await tryText(`${origin}/wp-admin/admin-ajax.php?action=lcp_category&catid=${postId}&order=ASC`);
+  return linksFrom(ajaxHtml || html, url, 'a[href]').filter(i => /chapter|chap|ch[-_]?\d/i.test(i.url));
+}
+
+// --- Moonquill / generic Next.js novel sites ---
+async function tocNextJs(url) {
+  const html = await getText(url);
+  const nd = parseHtml(html).querySelector('script#__NEXT_DATA__')?.textContent;
+  if (!nd) return [];
+  try {
+    const data = JSON.parse(nd);
+    const chapters = data?.props?.pageProps?.chapters ||
+      data?.props?.pageProps?.novel?.chapters ||
+      data?.props?.pageProps?.book?.chapters || [];
+    const origin = new URL(url).origin;
+    return chapters.map((c, i) => ({
+      url: c.url || absoluteUrl(origin, c.slug || c.path || `/chapter/${c.id || i + 1}`),
+      title: c.title || c.name || `Chapter ${i + 1}`
+    }));
+  } catch { return []; }
+}
+
+// --- NovelHi / NovelGate family: /ajax/chapter-archive ---
+async function tocNovelHi(url) {
+  const html = await getText(url);
+  const origin = new URL(url).origin;
+  const novelId = html.match(/data-novel-id=["'](\d+)["']/)?.[1] ||
+    html.match(/novelId["'\s:=]+(\d+)/)?.[1];
+  if (novelId) {
+    const ajaxHtml = await tryText(`${origin}/ajax/chapter-archive?novelId=${novelId}`);
+    const items = linksFrom(ajaxHtml, origin, 'a[href]');
+    if (items.length) return items;
+  }
+  return linksFrom(html, url, 'ul.list-chapter a, .list-chapter a, #chapter-list a');
+}
+
+// --- LightNovelPub / NovelPub: /chapters page, paginated ---
+async function tocLightNovelPub(url) {
+  const base = url.split('?')[0].replace(/\/$/, '').replace(/\/chapters$/, '');
+  const chapUrl = `${base}/chapters`;
+  const html = await getText(chapUrl);
+  const doc = parseHtml(html);
+  const pick = h => linksFrom(h, chapUrl, 'ul.chapter-list a, li.chapter-item a, .chp-item a');
+  let items = pick(html);
+  // Get max page
+  const maxPage = [...doc.querySelectorAll('.pagination a[href*="page="]')]
+    .map(a => parseInt(new URL(absoluteUrl(chapUrl, a.getAttribute('href'))).searchParams.get('page') || '0'))
+    .reduce((a, b) => Math.max(a, b), 1);
+  if (maxPage > 1) {
+    const urls = [];
+    for (let p = 2; p <= maxPage; p++) urls.push(`${chapUrl}?page=${p}`);
+    const htmls = await mapPool(urls, 4, tryText);
+    htmls.forEach(h => h && items.push(...pick(h)));
+  }
+  return dedupeByUrl(items);
+}
+
+// --- NovelUpdatesForums / Translated Scans: WordPress-based scanlation groups ---
+async function tocWordPressList(url) {
+  const html = await getText(url);
+  const origin = new URL(url).origin;
+  // Try WP REST API
+  const slug = new URL(url).pathname.split('/').filter(Boolean).pop();
+  try {
+    const json = await getJson(`${origin}/wp-json/wp/v2/posts?categories_name=${slug}&per_page=100&orderby=date&order=asc`);
+    if (Array.isArray(json) && json.length) {
+      return json.map(p => ({ url: p.link, title: p.title?.rendered || p.slug }));
+    }
+  } catch {}
+  return linksFrom(html, url, '.entry-content a[href], .post-content a[href]')
+    .filter(i => /chapter|chap|ch[-_]?\d|episode|part[-_]?\d/i.test(i.title + i.url));
+}
+
+// --- AsianFanfics: story/view pages ---
+async function tocAsianFanfics(url) {
+  const html = await getText(url);
+  const origin = new URL(url).origin;
+  // Chapter list is rendered via JS — try the chapters tab URL
+  const storyId = url.match(/story\/view\/(\d+)/)?.[1];
+  if (!storyId) return [];
+  // Try the chapter list page
+  const chapHtml = await tryText(`${origin}/story/view/${storyId}/chapters`);
+  const items = linksFrom(chapHtml || html, origin, 'a[href*="story/view/"][href*="/"]')
+    .filter(i => i.url.split('/').length > 6);
+  return dedupeByUrl(items);
+}
+
+// --- WattpadStory (mobile): use existing wattpad parser but handle /story/ URL ---
+async function tocWattpadStory(url) {
+  // Normalize /story/ URL to standard format then delegate
+  const normalized = url.replace('/story/', '/w/');
+  return tocWattpad(normalized);
+}
+
+// --- NovelOnlineFull / similar aggregators with standard HTML lists ---
+async function tocGenericList(url) {
+  const html = await getText(url);
+  const sels = [
+    'ul.list-chapter a', '#list-chapter a', '.chapter-list a',
+    'ul.chapters a', '#chapter-list a', '.listing-chapters_wrap a',
+    '.wp-manga-chapter a', 'li.chapter a', 'a.chapter-link',
+  ];
+  for (const sel of sels) {
+    const items = linksFrom(html, url, sel);
+    if (items.length > 2) return dedupeByUrl(items);
+  }
+  return [];
+}
+
 /** Hosts covered by the dedicated parsers above (used by supportedDomains). */
 const MAJOR_DOMAINS = [
   "royalroad.com",
@@ -1308,7 +1562,21 @@ const MAJOR_BODY_SELECTORS = {
   mtlnovel: "div.par, .chapter-content, #chapter-content",
   readnovelfull: "#chr-content, #chapter-content, div.chapter-content",
   madara: "div.reading-content .text-left, div.reading-content, div.entry-content, .text-left",
+  // New sites
+  novelcool: ".chapter-content, .text-content, #chapterContent, .reading-content",
+  allnovelfull: ".chr-c, #chapter-content, .reading-content, div.chapter-content",
+  syosetu: "#novel_honbun, .p-novel__body, div#novel_color",
+  novel18: "#novel_honbun, .p-novel__body, div#novel_color",
+  kakuyomu: ".widget-episodeBody, .js-episode-body, article.widget-episodeBody",
+  wuxiaworld_co: ".chapter-content, #chapter-content, .text-chapter",
+  xenforo: "article.message-body .bbWrapper, .message-body .bbWrapper, .message-userContent",
+  creativenovels: ".entry-content, .chapter-content, article .post-content",
+  nextjs: ".chapter-content, .reader-content, main article",
+  novelhi: "#chr-content, #chapter-content, div.chapter-content",
+  lightnovelpub: "#chapter-content, .chapter-content, .chapter-body",
+  asianfanfics: ".story-body, .chapter-text, .container .text",
 };
+
 
 const MAJOR_SITES = [
   [/(^|\.)royalroadl?\.com$/, "royalroad"],
@@ -1319,34 +1587,48 @@ const MAJOR_SITES = [
   [/(^|\.)fictionpress\.com$/, "fanfiction"],
   [/(^|\.)archiveofourown\.org$/, "ao3"],
   [
-    /(^|\.)(lightnovelworld\.(com|co)|lightnovelcave\.com|lightnovelpub\.(com|fan)|novelpub\.com|webnovelpub\.(com|pro)|pandanovel\.co|novelbob\.org|findnovel\.net)$/,
+    /(^|\.)(lightnovelworld\.(com|co)|lightnovelcave\.com|lightnovelpub\.(com|fan)|novelpub\.com|webnovelpub\.(com|pro)|pandanovel\.co|novelbob\.org|findnovel\.net|novelfull\.(me|net))$/,
     "lightnovelworld",
   ],
   [/(^|\.)ranobes\.(top|net|com)$/, "ranobes"],
   [/(^|\.)webnovel\.com$/, "webnovel"],
   [/(^|\.)mtlnovel\.(com|net)$/, "mtlnovel"],
   [
-    /(^|\.)(readnovelfull\.com|novelusb\.com|allnovel\.org|vipnovel\.com|novelall\.com|lightnovelheaven\.com|novelsonline\.net)$/,
+    /(^|\.)(readnovelfull\.(com|me)|novelusb\.com|allnovel\.org|vipnovel\.com|novelall\.com|lightnovelheaven\.com|novelsonline\.net|novelgate\.net|novelhall\.net)$/,
     "readnovelfull",
   ],
   [
-    /(^|\.)(boxnovel\.com|wuxiaworld\.site|foxaholic\.com|1stkissnovel\.love|listnovel\.com|morenovel\.net|noveltrench\.com|readwebnovel\.xyz|novelnice\.com|mangasushi\.net|zinnovel\.com|noveluniverse\.net)$/,
+    /(^|\.)(boxnovel\.(com|net)|wuxiaworld\.site|foxaholic\.com|1stkissnovel\.love|listnovel\.com|morenovel\.net|noveltrench\.com|readwebnovel\.xyz|novelnice\.com|mangasushi\.net|zinnovel\.com|noveluniverse\.net|woopread\.com|novelpassion\.net|novelkite\.com|romanticlovebooks\.com|lscomic\.com|novel35\.com|sleepytranslations\.com|novelskip\.com|mangaonlineteam\.com|manhwatop\.com|novelcenter\.net)$/,
     "madara",
   ],
+  [/(^|\.)(ncode|novel18)\.syosetu\.com$/, "syosetu"],
+  [/(^|\.)kakuyomu\.jp$/, "kakuyomu"],
+  [/(^|\.)novelcool\.com$/, "novelcool"],
+  [/(^|\.)allnovelfull\.(com|net)$/, "allnovelfull"],
+  [/(^|\.)wuxiaworld\.co$/, "wuxiaworld_co"],
+  [/(^|\.)asianfanfics\.com$/, "asianfanfics"],
+  [/(^|\.)forums?\.spacebattles\.com$/, "xenforo"],
+  [/(^|\.)forums?\.sufficientvelocity\.com$/, "xenforo"],
+  [/(^|\.)forum\.questionablequesting\.com$/, "xenforo"],
+  [/(^|\.)creative-novels\.com$/, "creativenovels"],
+  [/(^|\.)moonquill\.com$/, "nextjs"],
 ];
 
 function siteKey(hostname) {
   const host = String(hostname || "").toLowerCase().replace(/^www\./, "");
-  if (hostname.includes("novelhall.com")) return "novelhall";
-  if (hostname.includes("freewebnovel.com")) return "freewebnovel";
-  if (hostname.includes("novelfire.")) return "novelfire";
-  if (hostname.includes("novgo.")) return "novgo";
-  if (hostname.includes("novelbuddy.com")) return "novelbuddy";
-  if (hostname.includes("novelarrow.com")) return "novelarrow";
-  if (hostname.includes("novelfull")) return "novelfull";
-  if (hostname.includes("novelbin") || hostname.includes("novlove")) return "novelbin";
-  if (hostname.includes("wtr-lab.com")) return "wtrlab";
-  if (hostname.includes("wattpad.com")) return "wattpad";
+  if (host.includes("novelhall.com")) return "novelhall";
+  if (host.includes("freewebnovel.com")) return "freewebnovel";
+  if (host.includes("novelfire.")) return "novelfire";
+  if (host.includes("novgo.")) return "novgo";
+  if (host.includes("novelbuddy.com")) return "novelbuddy";
+  if (host.includes("novelarrow.com")) return "novelarrow";
+  if (host.includes("novelfull.com")) return "novelfull";
+  if (host.includes("novelbin") || host.includes("novlove")) return "novelbin";
+  if (host.includes("wtr-lab.com")) return "wtrlab";
+  if (host.includes("wattpad.com")) return "wattpad";
+  if (host.includes("novelhi.com") || host.includes("novelgate.")) return "novelhi";
+  if (host.includes("lightnovelpub.") || host.includes("novelpub.")) return "lightnovelpub";
+  if (host.includes("creative-novels.com")) return "creativenovels";
   for (const [re, key] of MAJOR_SITES) {
     if (re.test(host)) return key;
   }
@@ -1404,6 +1686,30 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         return tocReadNovelFull(tocUrl);
       case "madara":
         return tocMadara(tocUrl);
+      case "novelcool":
+        return tocNovelCool(tocUrl);
+      case "allnovelfull":
+        return tocAllNovelFull(tocUrl);
+      case "syosetu":
+        return tocSyosetu(tocUrl);
+      case "novel18":
+        return tocNovel18(tocUrl);
+      case "kakuyomu":
+        return tocKakuyomu(tocUrl);
+      case "wuxiaworld_co":
+        return tocWuxiaWorldCo(tocUrl);
+      case "xenforo":
+        return tocXenForo(tocUrl);
+      case "creativenovels":
+        return tocCreativeNovels(tocUrl);
+      case "nextjs":
+        return tocNextJs(tocUrl);
+      case "novelhi":
+        return tocNovelHi(tocUrl);
+      case "lightnovelpub":
+        return tocLightNovelPub(tocUrl);
+      case "asianfanfics":
+        return tocAsianFanfics(tocUrl);
       default:
         return [];
     }
