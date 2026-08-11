@@ -1755,7 +1755,7 @@ const MAJOR_SITES = [
   [/(^|\.)fictionpress\.com$/, "fanfiction"],
   [/(^|\.)archiveofourown\.org$/, "ao3"],
   [
-    /(^|\.)(lightnovelworld\.(com|co)|lightnovelcave\.com|lightnovelpub\.(com|fan)|novelpub\.com|webnovelpub\.(com|pro)|pandanovel\.co|novelbob\.org|findnovel\.net|novelfull\.(me|net)|lightnovelstranslations\.com)$/,
+    /(^|\.)(lightnovelworld\.(com|co)|lightnovelcave\.com|lightnovelpub\.(com|fan)|novelpub\.com|webnovelpub\.(com|pro)|pandanovel\.co|novelbob\.org|findnovel\.net|lightnovelstranslations\.com)$/,
     "lightnovelworld",
   ],
   [/(^|\.)ranobes\.(top|net|com)$/, "ranobes"],
@@ -1797,7 +1797,7 @@ function siteKey(hostname) {
   if (host.includes("novgo.")) return "novgo";
   if (host.includes("novelbuddy.com")) return "novelbuddy";
   if (host.includes("novelarrow.com")) return "novelarrow";
-  if (host.includes("novelfull.com")) return "novelfull";
+  if (host.includes("novelfull.")) return "novelfull";
   if (host.includes("novelbin") || host.includes("novlove")) return "novelbin";
   if (host.includes("wtr-lab.com")) return "wtrlab";
   if (host.includes("wattpad.com")) return "wattpad";
