@@ -19,15 +19,12 @@ const DEFAULT_HEADERS = {
 
 const PROXIES = [
   "", // direct
+  "https://loveable-proxy-forwebtoepub.lovable.app/api/proxy?url=",
+  "https://prasadghanwat.alwaysdata.net/proxy?url=",
+  "https://render-proxy-1-181c.onrender.com/proxy?url=",
   "https://corsproxy.io/?key=ab3170e1&url=",
   "https://api.allorigins.win/raw?url=",
-  "https://proxy.cors.sh/",
-  "https://api.codetabs.com/v1/proxy?quest=",
-  "https://thingproxy.freeboard.io/fetch/",
   "https://api.cors.lol/?url=",
-  "https://render-proxy-1-181c.onrender.com/proxy?url=",
-  "https://prasadghanwat.alwaysdata.net/proxy?url=",
-  "https://loveable-proxy-forwebtoepub.lovable.app/api/proxy?url="
 ];
 
 const ENCODED_SUFFIXES = ["?url=", "?quest=", "&url="];
@@ -39,9 +36,13 @@ function buildUrl(base, target) {
     : base + target;
 }
 
-async function httpGet(url, extra = {}, timeoutMs = 20000) {
+const blockedHosts = new Set();
+
+async function httpGet(url, extra = {}, timeoutMs = 7000) {
+  const host = new URL(url).hostname;
   let lastErr = null;
   for (const proxy of PROXIES) {
+    if (!proxy && blockedHosts.has(host)) continue;
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
@@ -51,6 +52,9 @@ async function httpGet(url, extra = {}, timeoutMs = 20000) {
         redirect: "follow",
       });
       if (r.ok) return r;
+      if (!proxy && (r.status === 403 || r.status === 503)) {
+        blockedHosts.add(host);
+      }
       lastErr = new Error(`HTTP ${r.status}`);
     } catch (e) {
       lastErr = e;
@@ -73,11 +77,22 @@ function parseHtml(html) {
   return parseHTML(html).document;
 }
 
+function unwrapProxyUrl(url) {
+  if (!url) return url;
+  if (url.includes("/api/proxy?url=") || url.includes("?url=")) {
+    try {
+      const match = url.match(/[?&]url=([^&]+)/);
+      if (match) return decodeURIComponent(match[1]);
+    } catch {}
+  }
+  return url;
+}
+
 function absoluteUrl(base, rel) {
   try {
-    return new URL(rel, base).href;
+    return unwrapProxyUrl(new URL(rel, base).href);
   } catch {
-    return rel;
+    return unwrapProxyUrl(rel);
   }
 }
 
@@ -258,9 +273,10 @@ async function tocNovelFull(url) {
   let limit = 1;
   const lastPageEl = doc.querySelector("li.last a");
   if (lastPageEl) {
+    const rawHref = unwrapProxyUrl(lastPageEl.getAttribute("href") || "");
     const page =
       lastPageEl.getAttribute("data-page") ||
-      new URL(lastPageEl.getAttribute("href") || "", url).searchParams.get("page");
+      new URL(rawHref, url).searchParams.get("page");
     if (page) limit = parseInt(page) + 1;
   }
   const origin = new URL(url).origin;
