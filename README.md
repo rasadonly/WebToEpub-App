@@ -1,3 +1,13 @@
+---
+title: Web to EPUB Bot
+emoji: 📚
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # LinkToEpub
 
 Convert web novels into clean, device-ready EPUB files — straight from a link.
