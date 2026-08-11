@@ -649,7 +649,21 @@ async function bodyWattpad(url) {
     ".author-info",
     ".follow-button",
     ".reading-widget",
-    ".promoted-stories-container"
+    ".promoted-stories-container",
+    ".left-rail",
+    ".right-rail",
+    "#sticky-nav",
+    ".sidebar",
+    ".share-tools",
+    ".part-footer-actions",
+    ".component-wrapper",
+    ".carousel-indicators",
+    ".social-icons-container",
+    ".image-options-container",
+    "a[href*='pinterest']",
+    "a[href*='facebook.com/sharer']",
+    "a[href*='twitter.com/intent']",
+    "a[href*='tumblr.com']"
   ].join(", "));
 
   // 2. Fix bare & in all attribute values (& not followed by word chars + ;)
@@ -660,7 +674,11 @@ async function bodyWattpad(url) {
   root.querySelectorAll("[href], [src], [action], [data-url]").forEach((el) => {
     for (const attr of ["href", "src", "action", "data-url"]) {
       const v = el.getAttribute(attr);
-      if (v) el.setAttribute(attr, fixAmpersand(v));
+      if (v) {
+        let clean = fixAmpersand(v);
+        clean = clean.replace(/"/g, "&quot;");
+        el.setAttribute(attr, clean);
+      }
     }
   });
 
