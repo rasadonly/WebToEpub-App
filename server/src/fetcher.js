@@ -726,8 +726,11 @@ export function supportedDomains() {
     "novelbin.com",
     "wtr-lab.com",
     "wattpad.com",
+    ...MAJOR_DOMAINS,
     ...Object.keys(SITE_CONFIGS),
-  ].sort();
+  ]
+    .filter((d, i, a) => a.indexOf(d) === i)
+    .sort();
 }
 
 const NON_CHAPTER = /\/(login|register|signup|search|tag|genre|author|category|user|profile|contact|about|privacy|terms|feed|rss)\b/i;
@@ -974,7 +977,366 @@ async function tocFromConfig(url, config, linkSelector) {
   return results;
 }
 
+// ---------------- Dedicated parsers for major sites ----------------
+//
+// These sites paginate their TOC or serve it from a JSON/AJAX endpoint, so the
+// static selector table alone only ever sees the first page (or nothing).
+// Ported from the matching WebToEpub parsers.
+
+const textOf = (el) => (el?.textContent || "").replace(/\s+/g, " ").trim();
+
+async function tryText(url) {
+  try {
+    return await getText(url);
+  } catch {
+    return "";
+  }
+}
+
+/** Collect links from an HTML string with a selector, keeping order. */
+function linksFrom(html, base, selector, titleSelector) {
+  const out = [];
+  if (!html) return out;
+  parseHtml(html)
+    .querySelectorAll(selector)
+    .forEach((a) => {
+      const href = a.getAttribute("href");
+      if (!href || href.startsWith("#") || href.startsWith("javascript:")) return;
+      const title = titleSelector ? textOf(a.querySelector(titleSelector)) || textOf(a) : textOf(a);
+      out.push({ url: absoluteUrl(base, href), title });
+    });
+  return out;
+}
+
+function dedupeByUrl(items) {
+  const seen = new Set();
+  return items.filter((i) => i.url && !seen.has(i.url) && seen.add(i.url));
+}
+
+// --- Royal Road: /fiction/<id>/<slug>, chapter table paginated with ?page=N ---
+async function tocRoyalRoad(url) {
+  const u = new URL(url);
+  const parts = u.pathname.split("/").filter(Boolean);
+  const ci = parts.indexOf("chapter");
+  const tocUrl = u.origin + "/" + (ci > 0 ? parts.slice(0, ci) : parts).join("/");
+  const html = await getText(tocUrl);
+  let items = linksFrom(html, tocUrl, "table#chapters a[href*='/chapter/']");
+  // Older/large fictions paginate the chapter table.
+  const doc = parseHtml(html);
+  const pages = [...doc.querySelectorAll("ul.pagination a[href*='page=']")]
+    .map((a) => parseInt(new URL(absoluteUrl(tocUrl, a.getAttribute("href"))).searchParams.get("page") || "0"))
+    .filter((n) => n > 1);
+  const max = pages.length ? Math.max(...pages) : 1;
+  if (max > 1) {
+    const urls = [];
+    for (let p = 2; p <= max; p++) urls.push(`${tocUrl}?page=${p}`);
+    const htmls = await mapPool(urls, 4, tryText);
+    htmls.forEach((h) => items.push(...linksFrom(h, tocUrl, "table#chapters a[href*='/chapter/']")));
+  }
+  return dedupeByUrl(items);
+}
+
+// --- ScribbleHub: TOC paginated with ?toc=N, newest first ---
+async function tocScribbleHub(url) {
+  const base = url.split("?")[0];
+  const first = await getText(base);
+  const total = parseInt(textOf(parseHtml(first).querySelector("span.cnt_toc")) || "0");
+  let items = linksFrom(first, base, "a.toc_a");
+  for (let page = 2; page <= 60; page++) {
+    if (total && items.length >= total) break;
+    const html = await tryText(`${base}?toc=${page}`);
+    const more = linksFrom(html, base, "a.toc_a");
+    if (!more.length) break;
+    items = items.concat(more);
+  }
+  return dedupeByUrl(items).reverse();
+}
+
+// --- Tapas: episode list REST API ---
+async function tocTapas(url) {
+  const html = await getText(url);
+  const doc = parseHtml(html);
+  const seriesId =
+    doc.querySelector("meta[property='al:android:url']")?.getAttribute("content")?.split("/").pop() ||
+    html.match(/series[\\/_-]?id["':\s]+(\d+)/i)?.[1];
+  if (!seriesId) throw new Error("Tapas: series id not found");
+  const out = [];
+  for (let page = 1; page <= 100; page++) {
+    const json = await getJson(
+      `https://tapas.io/series/${seriesId}/episodes?page=${page}&sort=OLDEST&max_limit=20`
+    );
+    const data = json?.data || {};
+    const eps = data.episodes || [];
+    eps
+      .filter((e) => e.free || e.free_access || e.unlocked)
+      .forEach((e) => out.push({ url: `https://tapas.io/episode/${e.id}`, title: `${e.scene}: ${e.title}` }));
+    if (!data.pagination?.has_next || eps.length < 20) break;
+  }
+  return out;
+}
+
+// --- NovelUpdates: table#myTable, paginated with ?pg=N, oldest last ---
+async function tocNovelUpdates(url) {
+  const base = url.split("?")[0].replace(/\/$/, "") + "/";
+  const html = await getText(base);
+  const doc = parseHtml(html);
+  const rowLinks = (h) => {
+    const items = [];
+    parseHtml(h)
+      .querySelectorAll("table#myTable tbody tr")
+      .forEach((row) => {
+        const links = [...row.querySelectorAll("a[href]")];
+        const a = links[links.length - 1];
+        if (a) items.push({ url: absoluteUrl(base, a.getAttribute("href")), title: textOf(a) });
+      });
+    return items;
+  };
+  let items = rowLinks(html);
+  const maxPage = [...doc.querySelectorAll("div.digg_pagination a[href*='pg=']")]
+    .map((a) => parseInt(new URL(absoluteUrl(base, a.getAttribute("href"))).searchParams.get("pg") || "0"))
+    .reduce((a, b) => Math.max(a, b), 1);
+  if (maxPage > 1) {
+    const urls = [];
+    for (let p = 2; p <= maxPage; p++) urls.push(`${base}?pg=${p}`);
+    const htmls = await mapPool(urls, 4, tryText);
+    htmls.forEach((h) => h && items.push(...rowLinks(h)));
+  }
+  return dedupeByUrl(items).reverse();
+}
+
+// --- FanFiction.net / FictionPress: select#chap_select ---
+async function tocFanFiction(url) {
+  const html = await getText(url);
+  const doc = parseHtml(html);
+  const select = doc.querySelector("select#chap_select");
+  const storyId = url.match(/\/s\/(\d+)/)?.[1];
+  const origin = new URL(url).origin;
+  const slug = url.split("/").filter(Boolean).pop();
+  if (!select || !storyId) {
+    return [{ url, title: textOf(doc.querySelector("div#profile_top b")) || "Chapter 1" }];
+  }
+  return [...select.querySelectorAll("option")].map((o) => ({
+    url: `${origin}/s/${storyId}/${o.getAttribute("value")}/${slug}`,
+    title: textOf(o),
+  }));
+}
+
+// --- Archive of Our Own: chapter index ---
+async function tocAo3(url) {
+  const workId = url.match(/\/works\/(\d+)/)?.[1];
+  if (!workId) throw new Error("AO3: work id not found");
+  const origin = new URL(url).origin;
+  const navHtml = await tryText(`${origin}/works/${workId}/navigate`);
+  let items = linksFrom(navHtml, origin, "ol.chapter.index.group li a[href*='/chapters/']");
+  if (!items.length) {
+    const html = await getText(`${origin}/works/${workId}`);
+    items = [...parseHtml(html).querySelectorAll("select#selected_id option")].map((o) => ({
+      url: `${origin}/works/${workId}/chapters/${o.getAttribute("value")}`,
+      title: textOf(o),
+    }));
+  }
+  if (!items.length) items = [{ url: `${origin}/works/${workId}`, title: "Chapter 1" }];
+  return dedupeByUrl(items);
+}
+
+// --- LightNovelWorld family: /chapters?page=N ---
+async function tocLightNovelWorld(url) {
+  const base = url.split("?")[0].replace(/\/$/, "").replace(/\/chapters$/, "");
+  const firstUrl = `${base}/chapters`;
+  const html = await getText(firstUrl);
+  const doc = parseHtml(html);
+  const pick = (h) => linksFrom(h, firstUrl, "ul.chapter-list a", ".chapter-title");
+  let items = pick(html);
+  const maxPage = [...doc.querySelectorAll(".pagination a[href*='page=']")]
+    .map((a) => parseInt(new URL(absoluteUrl(firstUrl, a.getAttribute("href"))).searchParams.get("page") || "0"))
+    .reduce((a, b) => Math.max(a, b), 1);
+  if (maxPage > 1) {
+    const urls = [];
+    for (let p = 2; p <= maxPage; p++) urls.push(`${firstUrl}?page=${p}`);
+    const htmls = await mapPool(urls, 4, tryText);
+    htmls.forEach((h) => h && items.push(...pick(h)));
+  }
+  return dedupeByUrl(items);
+}
+
+// --- Ranobes: /chapters/<id>/ with page/N/ pagination, newest first ---
+async function tocRanobes(url) {
+  const html = await getText(url);
+  const doc = parseHtml(html);
+  let tocUrl =
+    doc.querySelector("div.r-fullstory-chapters-foot a[href*='/chapters/']")?.getAttribute("href") ||
+    doc.querySelector("a[href*='/chapters/']")?.getAttribute("href");
+  if (!tocUrl) {
+    return linksFrom(html, url, "ul.chapters-scroll-list a", ".title").reverse();
+  }
+  tocUrl = absoluteUrl(url, tocUrl).replace(/\/$/, "") + "/";
+  const tocHtml = await getText(tocUrl);
+  const pagesCount =
+    parseInt(tocHtml.match(/"pages_count"\s*:\s*(\d+)/)?.[1] || "0") ||
+    [...parseHtml(tocHtml).querySelectorAll(".pages a")]
+      .map((a) => parseInt(textOf(a)))
+      .filter((n) => !isNaN(n))
+      .reduce((a, b) => Math.max(a, b), 1);
+  const pick = (h) => linksFrom(h, tocUrl, "div#dle-content a[title], .cat_line a, ul.chapters-scroll-list a");
+  let items = pick(tocHtml);
+  for (let p = 2; p <= Math.max(pagesCount, 1); p++) {
+    const h = await tryText(`${tocUrl}page/${p}/`);
+    const more = pick(h);
+    if (!more.length) break;
+    items = items.concat(more);
+  }
+  return dedupeByUrl(items).reverse();
+}
+
+// --- Madara (WordPress manga/novel theme) family: admin-ajax chapter list ---
+async function tocMadara(url) {
+  const base = url.split("?")[0].replace(/\/$/, "") + "/";
+  const origin = new URL(url).origin;
+  const pick = (h) => linksFrom(h, base, "li.wp-manga-chapter a:not([title]), li.wp-manga-chapter a");
+  // 1. Modern theme: POST-free AJAX endpoint on the series URL.
+  let items = [];
+  try {
+    const res = await httpGet(`${base}ajax/chapters/`, { "X-Requested-With": "XMLHttpRequest" });
+    items = pick(await res.text());
+  } catch {
+    /* fall through */
+  }
+  // 2. Older theme: admin-ajax with the numeric post id.
+  if (!items.length) {
+    const html = await getText(base);
+    items = pick(html);
+    if (!items.length) {
+      const postId = html.match(/manga_id["'\s:=]+(\d+)/)?.[1] || html.match(/postid-(\d+)/)?.[1];
+      if (postId) {
+        try {
+          const res = await fetch(`${origin}/wp-admin/admin-ajax.php`, {
+            method: "POST",
+            headers: {
+              ...DEFAULT_HEADERS,
+              "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+              "X-Requested-With": "XMLHttpRequest",
+            },
+            body: `action=manga_get_chapters&manga=${postId}`,
+          });
+          items = pick(await res.text());
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }
+  return dedupeByUrl(items).reverse();
+}
+
+// --- ReadNovelFull family (novelfull clones with an AJAX chapter archive) ---
+async function tocReadNovelFull(url) {
+  const html = await getText(url);
+  const origin = new URL(url).origin;
+  let items = linksFrom(html, url, "ul.list-chapter a, .list-chapter a");
+  if (!items.length) {
+    const novelId =
+      html.match(/data-novel-id=["'](\d+)["']/)?.[1] || html.match(/novelId["'\s:=]+(\d+)/)?.[1];
+    if (novelId) {
+      const ajax = await tryText(`${origin}/ajax/chapter-archive?novelId=${novelId}`);
+      items = linksFrom(ajax, origin, "a[href]");
+    }
+  }
+  return dedupeByUrl(items);
+}
+
+// --- Webnovel (Qidian International): the /catalog page holds every chapter ---
+async function tocWebnovel(url) {
+  const catalog = url
+    .replace(/(\/book\/(?:.*?_)?\d+\b).*/, "$1/catalog")
+    .replace(/(\/comic\/(?:.*?_)?\d+\b).*/, "$1/catalog");
+  const html = await getText(catalog);
+  let items = linksFrom(html, catalog, "ul.content-list a[href], div.volume-item ol a[href]");
+  if (!items.length) items = linksFrom(html, catalog, "a[href*='/book/'][href*='_']");
+  return dedupeByUrl(items);
+}
+
+// --- MTLNovel: chapter list lives on <series>/chapter-list/ ---
+async function tocMtlNovel(url) {
+  const base = url.split("?")[0].replace(/\/$/, "");
+  const listUrl = base.endsWith("chapter-list") ? base + "/" : `${base}/chapter-list/`;
+  const html = await tryText(listUrl);
+  let items = linksFrom(html, listUrl, "a.ch-link, div.ch-list a, #chapterlist a");
+  if (!items.length) items = linksFrom(await getText(base + "/"), base, "a.ch-link, div.ch-list a");
+  return dedupeByUrl(items).reverse();
+}
+
+/** Hosts covered by the dedicated parsers above (used by supportedDomains). */
+const MAJOR_DOMAINS = [
+  "royalroad.com",
+  "scribblehub.com",
+  "tapas.io",
+  "novelupdates.com",
+  "fanfiction.net",
+  "fictionpress.com",
+  "archiveofourown.org",
+  "lightnovelworld.com",
+  "lightnovelcave.com",
+  "lightnovelpub.com",
+  "novelpub.com",
+  "webnovelpub.com",
+  "pandanovel.co",
+  "ranobes.top",
+  "ranobes.net",
+  "webnovel.com",
+  "mtlnovel.com",
+  "readnovelfull.com",
+  "novelusb.com",
+  "allnovel.org",
+  "novelsonline.net",
+  "boxnovel.com",
+  "wuxiaworld.site",
+  "foxaholic.com",
+  "1stkissnovel.love",
+];
+
+/** Chapter-body selectors for the dedicated sites, tried in order. */
+const MAJOR_BODY_SELECTORS = {
+  royalroad: "div.chapter-inner, div.chapter-content, .page-content-wrapper",
+  scribblehub: "div#chp_raw, div.chp_raw, div.fic_row",
+  tapas: "#viewport, article.viewer__body, article",
+  novelupdates: "",
+  fanfiction: "div.storytext, #storytext",
+  ao3: "div#chapters .userstuff, div#chapters, .userstuff",
+  lightnovelworld: "#chapter-container, div.chapter-content, .chapter-container",
+  ranobes: "div#arrticle, .story, #dle-content .text-story",
+  webnovel: "div.chapter_content, .cha-words, .cha-content",
+  mtlnovel: "div.par, .chapter-content, #chapter-content",
+  readnovelfull: "#chr-content, #chapter-content, div.chapter-content",
+  madara: "div.reading-content .text-left, div.reading-content, div.entry-content, .text-left",
+};
+
+const MAJOR_SITES = [
+  [/(^|\.)royalroadl?\.com$/, "royalroad"],
+  [/(^|\.)scribblehub\.com$/, "scribblehub"],
+  [/(^|\.)tapas\.io$/, "tapas"],
+  [/(^|\.)novelupdates\.com$/, "novelupdates"],
+  [/(^|\.)(fanfiction|fictionpress)\.net$/, "fanfiction"],
+  [/(^|\.)fictionpress\.com$/, "fanfiction"],
+  [/(^|\.)archiveofourown\.org$/, "ao3"],
+  [
+    /(^|\.)(lightnovelworld\.(com|co)|lightnovelcave\.com|lightnovelpub\.(com|fan)|novelpub\.com|webnovelpub\.(com|pro)|pandanovel\.co|novelbob\.org|findnovel\.net)$/,
+    "lightnovelworld",
+  ],
+  [/(^|\.)ranobes\.(top|net|com)$/, "ranobes"],
+  [/(^|\.)webnovel\.com$/, "webnovel"],
+  [/(^|\.)mtlnovel\.(com|net)$/, "mtlnovel"],
+  [
+    /(^|\.)(readnovelfull\.com|novelusb\.com|allnovel\.org|vipnovel\.com|novelall\.com|lightnovelheaven\.com|novelsonline\.net)$/,
+    "readnovelfull",
+  ],
+  [
+    /(^|\.)(boxnovel\.com|wuxiaworld\.site|foxaholic\.com|1stkissnovel\.love|listnovel\.com|morenovel\.net|noveltrench\.com|readwebnovel\.xyz|novelnice\.com|mangasushi\.net|zinnovel\.com|noveluniverse\.net)$/,
+    "madara",
+  ],
+];
+
 function siteKey(hostname) {
+  const host = String(hostname || "").toLowerCase().replace(/^www\./, "");
   if (hostname.includes("novelhall.com")) return "novelhall";
   if (hostname.includes("freewebnovel.com")) return "freewebnovel";
   if (hostname.includes("novelfire.")) return "novelfire";
@@ -985,8 +1347,12 @@ function siteKey(hostname) {
   if (hostname.includes("novelbin") || hostname.includes("novlove")) return "novelbin";
   if (hostname.includes("wtr-lab.com")) return "wtrlab";
   if (hostname.includes("wattpad.com")) return "wattpad";
+  for (const [re, key] of MAJOR_SITES) {
+    if (re.test(host)) return key;
+  }
   return "generic";
 }
+
 
 
 /** Returns [{ url, title }]. */
@@ -1014,6 +1380,30 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         return tocWtrLab(tocUrl);
       case "wattpad":
         return tocWattpad(tocUrl);
+      case "royalroad":
+        return tocRoyalRoad(tocUrl);
+      case "scribblehub":
+        return tocScribbleHub(tocUrl);
+      case "tapas":
+        return tocTapas(tocUrl);
+      case "novelupdates":
+        return tocNovelUpdates(tocUrl);
+      case "fanfiction":
+        return tocFanFiction(tocUrl);
+      case "ao3":
+        return tocAo3(tocUrl);
+      case "lightnovelworld":
+        return tocLightNovelWorld(tocUrl);
+      case "ranobes":
+        return tocRanobes(tocUrl);
+      case "webnovel":
+        return tocWebnovel(tocUrl);
+      case "mtlnovel":
+        return tocMtlNovel(tocUrl);
+      case "readnovelfull":
+        return tocReadNovelFull(tocUrl);
+      case "madara":
+        return tocMadara(tocUrl);
       default:
         return [];
     }
@@ -1066,6 +1456,9 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
         return bodyWtrLab(chapterUrl);
 
       default:
+        if (MAJOR_BODY_SELECTORS[key]) {
+          return bodyGeneric(chapterUrl, contentSelector || MAJOR_BODY_SELECTORS[key]);
+        }
         return bodyGeneric(chapterUrl, contentSelector);
     }
   };
