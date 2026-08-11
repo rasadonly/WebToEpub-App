@@ -1,6 +1,7 @@
 // Server-side EPUB packer — mirrors src/utils/epubGenerator.ts output byte-for-byte
 // in structure (same CSS, same OPF/NCX), but returns a Buffer instead of downloading.
 import JSZip from "jszip";
+import { parseHTML } from "linkedom";
 
 function escapeXml(text = "") {
   return String(text)
@@ -41,33 +42,39 @@ blockquote { margin: 1em 2em; font-style: italic; }
 hr { border: none; border-top: 1px solid #ccc; margin: 1.5em 0; }`;
 }
 
-const VOID_TAGS = "br|hr|img|input|meta|link|source|track|area|base|col|embed|param|wbr";
-
-// HTML5 boolean attributes that may appear without a value (e.g. <div hidden>).
-// XHTML requires every attribute to have a value, so we convert them to
-// attr="attr" form, or strip them if they're meaningless inside an EPUB.
-const STRIP_ATTRS = "itemscope|itemprop|itemtype|itemid|itemref|role|aria-[\\w-]+|data-[\\w-]+|on\\w+";
-const BOOL_ATTRS = "hidden|checked|disabled|readonly|required|autofocus|autoplay|controls|loop|muted|defer|async|novalidate|formnovalidate|open|selected|multiple|allowfullscreen|default|reversed|scoped|seamless|typemustmatch|sortable|nomodule|playsinline|disablepictureinpicture|disableremoteplayback|shadowrootmode";
-
-// Make markup XHTML-safe: self-close void tags, drop scripts/styles,
-// strip microdata/ARIA/data attrs, and fix boolean attrs.
 function toXhtml(html = "") {
-  return String(html)
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<!--[\s\S]*?-->/g, "")
-    // Strip schema.org microdata, ARIA, data-*, & event attributes (valueless or with value)
-    .replace(new RegExp(`\\s+(?:${STRIP_ATTRS})(?:\\s*=\\s*(?:"[^"]*"|'[^']*'|[^\\s>]*))?`, "gi"), "")
-    // Fix boolean attributes without values: <tag hidden> → <tag hidden="hidden">
-    .replace(new RegExp(`(<[a-zA-Z][^>]*?)\\s+(${BOOL_ATTRS})(?=[\\s/>])(?!\\s*=)`, "gi"), (_m, before, attr) => {
-      return `${before} ${attr.toLowerCase()}="${attr.toLowerCase()}"`;
-    })
-    .replace(new RegExp(`<(${VOID_TAGS})((?:\\s[^<>]*?)?)\\s*/?>`, "gi"), (_m, tag, attrs) => {
-      const cleaned = String(attrs).replace(/\s+(on\w+|data-[\w-]+)\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi, "");
-      return `<${tag}${cleaned} />`;
-    })
-    .replace(/<\/(?:br|hr|img)\s*>/gi, "")
-    .replace(/&(?!(?:[a-zA-Z][a-zA-Z0-9]*|#\d+|#x[0-9a-fA-F]+);)/g, "&amp;");
+  try {
+    const { document } = parseHTML(`<div id="__wrap__">${html}</div>`);
+    const wrap = document.getElementById("__wrap__");
+    if (!wrap) return escapeXml(html);
+
+    wrap.querySelectorAll("script, style, iframe, ins, form, input, button, noscript, svg, canvas, video, audio").forEach((el) => el.remove());
+
+    wrap.querySelectorAll("*").forEach((el) => {
+      [...el.attributes].forEach((attr) => {
+        const name = attr.name.toLowerCase();
+        if (
+          name.startsWith("on") ||
+          name.startsWith("data-") ||
+          name.startsWith("aria-") ||
+          name === "contenteditable" ||
+          name === "itemscope" ||
+          name === "itemprop" ||
+          name === "itemtype" ||
+          name === "itemid" ||
+          name === "itemref" ||
+          name === "role"
+        ) {
+          el.removeAttribute(attr.name);
+        }
+      });
+    });
+
+    return wrap.innerHTML
+      .replace(/&(?!(?:[a-zA-Z][a-zA-Z0-9]*|#\d+|#x[0-9a-fA-F]+);)/g, "&amp;");
+  } catch {
+    return escapeXml(html);
+  }
 }
 
 function chapterXhtml(chapter) {
