@@ -42,6 +42,28 @@ blockquote { margin: 1em 2em; font-style: italic; }
 hr { border: none; border-top: 1px solid #ccc; margin: 1.5em 0; }`;
 }
 
+const ENTITIES = {
+  nbsp: "&#160;", iexcl: "&#161;", cent: "&#162;", pound: "&#163;", curren: "&#164;", yen: "&#165;",
+  brvbar: "&#166;", sect: "&#167;", uml: "&#168;", copy: "&#169;", ordf: "&#170;", laquo: "&#171;",
+  not: "&#172;", shy: "&#173;", reg: "&#174;", macr: "&#175;", deg: "&#176;", plusmn: "&#177;",
+  sup2: "&#178;", sup3: "&#179;", acute: "&#180;", micro: "&#181;", para: "&#182;", middot: "&#183;",
+  cedil: "&#184;", sup1: "&#185;", ordm: "&#186;", raquo: "&#187;", frac14: "&#188;", frac12: "&#189;",
+  frac34: "&#190;", iquest: "&#191;", ndash: "&#8211;", mdash: "&#8212;", lsquo: "&#8216;", rsquo: "&#8217;",
+  sbquo: "&#8218;", ldquo: "&#8220;", rdquo: "&#8221;", bdquo: "&#8222;", dagger: "&#8224;", Dagger: "&#8225;",
+  bull: "&#8226;", hellip: "&#8230;", permil: "&#8240;", lsaquo: "&#8249;", rsaquo: "&#8250;", euro: "&#8364;",
+  trade: "&#8482;"
+};
+
+function fixEntities(html) {
+  return html.replace(/&([a-zA-Z0-9]+);/g, (match, entity) => {
+    const lower = entity.toLowerCase();
+    if (lower === "amp" || lower === "lt" || lower === "gt" || lower === "quot" || lower === "apos") {
+      return match;
+    }
+    return ENTITIES[entity] || ENTITIES[lower] || `&amp;${entity};`;
+  });
+}
+
 function toXhtml(html = "") {
   try {
     const { document } = parseHTML(`<div id="__wrap__">${html}</div>`);
@@ -70,8 +92,9 @@ function toXhtml(html = "") {
       });
     });
 
-    return wrap.innerHTML
+    const clean = wrap.innerHTML
       .replace(/&(?!(?:[a-zA-Z][a-zA-Z0-9]*|#\d+|#x[0-9a-fA-F]+);)/g, "&amp;");
+    return fixEntities(clean);
   } catch {
     return escapeXml(html);
   }
