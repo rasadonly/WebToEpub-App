@@ -1557,19 +1557,127 @@ async function tocWattpadStory(url) {
   return tocWattpad(normalized);
 }
 
-// --- NovelOnlineFull / similar aggregators with standard HTML lists ---
-async function tocGenericList(url) {
-  const html = await getText(url);
-  const sels = [
-    'ul.list-chapter a', '#list-chapter a', '.chapter-list a',
-    'ul.chapters a', '#chapter-list a', '.listing-chapters_wrap a',
-    '.wp-manga-chapter a', 'li.chapter a', 'a.chapter-link',
-  ];
-  for (const sel of sels) {
-    const items = linksFrom(html, url, sel);
-    if (items.length > 2) return dedupeByUrl(items);
+// --- NovelOnlineFull / similar aggregators with standard HTML list ---
+async function tocNovelOnlineFull(url) {
+  const base = url.split('?')[0].replace(/\/$/, '');
+  const html = await getText(base);
+  const out = [];
+  parseHtml(html).querySelectorAll('#list-chapter a[href], ul.list-chapter a[href], .list-chapter a[href]').forEach(a => {
+    const href = a.getAttribute('href');
+    if (href) out.push({ url: absoluteUrl(base, href), title: textOf(a) });
+  });
+  return dedupeByUrl(out);
+}
+
+// --- JJ Wuxia Comics (jjwxc.net): Chinese fiction (GBK-encoded server, proxies transcode to UTF-8) ---
+async function tocJjwxc(url) {
+  const novelId = new URL(url).searchParams.get('novelid') || url.match(/novelid=(\d+)/)?.[1];
+  if (!novelId) return [];
+  const tocUrl = `https://www.jjwxc.net/onebook.php?novelid=${novelId}`;
+  // getText() uses the Content-Type charset (gb2312 direct, utf-8 via proxy) — both work correctly
+  const html = await getText(tocUrl);
+  const origin = 'https://www.jjwxc.net';
+  const doc = parseHtml(html);
+  const out = [];
+  doc.querySelectorAll('a[href*="chapterid="]').forEach(a => {
+    const href = a.getAttribute('href');
+    if (href.includes('report')) return;
+    const title = (a.textContent || '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim();
+    if (href && title) out.push({ url: absoluteUrl(origin, href), title });
+  });
+  return dedupeByUrl(out);
+}
+
+
+
+// --- Pixiv Novel (novel.pixiv.net): series API ---
+async function tocPixivNovel(url) {
+  const seriesId = url.match(/series\/(\d+)/)?.[1];
+  const workId = url.match(/works\/(\d+)/)?.[1];
+  if (seriesId) {
+    // Fetch series chapter list via AJAX API
+    const json = await getJson(
+      `https://www.pixiv.net/ajax/novel/series/${seriesId}/content_titles?last_order=0&order_by=asc`
+    );
+    const works = json?.body?.page?.series || [];
+    if (works.length) {
+      return works.map(w => ({
+        url: `https://novel.pixiv.net/works/${w.id}`,
+        title: w.title || `Chapter ${w.series?.contentOrder || ''}`
+      }));
+    }
   }
-  return [];
+  if (workId) {
+    // Single work — check if part of a series
+    try {
+      const json = await getJson(`https://www.pixiv.net/ajax/novel/${workId}`);
+      const sid = json?.body?.seriesNavData?.seriesId;
+      if (sid) return tocPixivNovel(`https://novel.pixiv.net/series/${sid}`);
+      return [{ url, title: json?.body?.title || 'Chapter 1' }];
+    } catch {}
+  }
+  return linksFrom(await tryText(url), url, 'a[href*="/works/"], a[href*="/series/"]');
+}
+
+// --- StoriesOnline.net: numeric chapter TOC ---
+async function tocStoriesOnline(url) {
+  const storyId = url.match(/\/s\/(\d+)/)?.[1];
+  if (!storyId) return [];
+  const tocUrl = `https://storiesonline.net/s/${storyId}`;
+  const html = await getText(tocUrl);
+  const out = [];
+  parseHtml(html).querySelectorAll('a[href*="/s/' + storyId + '/"]').forEach(a => {
+    const href = a.getAttribute('href');
+    if (href && /\/s\/\d+\/\d+/.test(href)) {
+      out.push({ url: absoluteUrl('https://storiesonline.net', href), title: textOf(a) });
+    }
+  });
+  return dedupeByUrl(out);
+}
+
+// --- FicWad: list of stories for an author / story chapters ---
+async function tocFicwad(url) {
+  const html = await getText(url);
+  const origin = 'https://ficwad.com';
+  // Story page: /story/XXXX — chapters listed in .chapter_list
+  const chaps = linksFrom(html, origin, '.chapter_list a[href], .chapters a[href], a[href*="/story/"]');
+  if (chaps.length > 1) return dedupeByUrl(chaps);
+  // Author page: /a/XXXX — list all their stories
+  return linksFrom(html, origin, 'a[href*="/story/"]').filter(i => !/author/.test(i.url));
+}
+
+// --- Volare Novels / WordPress translation blog ---
+async function tocVolareNovels(url) {
+  const base = url.split('?')[0].replace(/\/$/, '');
+  const slug = base.split('/novel/')[1]?.split('/')[0];
+  const origin = new URL(base).origin;
+  // Try WP REST API for chapter posts
+  if (slug) {
+    try {
+      const json = await getJson(`${origin}/wp-json/wp/v2/posts?slug=${slug}&per_page=1`);
+      const catId = json?.[0]?.categories?.[0];
+      if (catId) {
+        const posts = await getJson(`${origin}/wp-json/wp/v2/posts?categories=${catId}&per_page=100&orderby=date&order=asc`);
+        if (Array.isArray(posts) && posts.length) {
+          return posts.map(p => ({ url: p.link, title: p.title?.rendered || p.slug }));
+        }
+      }
+    } catch {}
+  }
+  // Fallback: scrape chapter links from the novel index page
+  const html = await getText(base);
+  return linksFrom(html, base, '.chapter-list a, .entry-content a[href], table.chapter-table a')
+    .filter(i => /chapter|chap|ch[-_]?\d/i.test(i.title + i.url));
+}
+
+// --- GravityTales / similar WP translation blogs ---
+async function tocGravityTales(url) {
+  const html = await getText(url);
+  const origin = new URL(url).origin;
+  // Chapter table or list
+  const items = linksFrom(html, origin, 'table.tablepress a[href], .chapter-list a[href], .entry-content a[href]')
+    .filter(i => /chapter|chap|ch[-_]?\d|\d+-\d+/i.test(i.title + i.url));
+  return dedupeByUrl(items);
 }
 
 /** Hosts covered by the dedicated parsers above (used by supportedDomains). */
@@ -1628,6 +1736,13 @@ const MAJOR_BODY_SELECTORS = {
   novelhi: "#chr-content, #chapter-content, div.chapter-content",
   lightnovelpub: "#chapter-content, .chapter-content, .chapter-body",
   asianfanfics: ".story-body, .chapter-text, .container .text",
+  // Batch 3
+  jjwxc: "div.noveltext, #noveltext, .readtxt",
+  pixivnovel: "section.novel-text, .works-display, p",
+  storiesonline: "#chapter_body, .chapter-text, div#story",
+  ficwad: ".storytext, #story, .storyBody",
+  volarenovels: ".entry-content, .chapter-content, article .post-content",
+  gravitytales: ".entry-content, .chapter-content, article",
 };
 
 
@@ -1640,18 +1755,19 @@ const MAJOR_SITES = [
   [/(^|\.)fictionpress\.com$/, "fanfiction"],
   [/(^|\.)archiveofourown\.org$/, "ao3"],
   [
-    /(^|\.)(lightnovelworld\.(com|co)|lightnovelcave\.com|lightnovelpub\.(com|fan)|novelpub\.com|webnovelpub\.(com|pro)|pandanovel\.co|novelbob\.org|findnovel\.net|novelfull\.(me|net))$/,
+    /(^|\.)(lightnovelworld\.(com|co)|lightnovelcave\.com|lightnovelpub\.(com|fan)|novelpub\.com|webnovelpub\.(com|pro)|pandanovel\.co|novelbob\.org|findnovel\.net|novelfull\.(me|net)|lightnovelstranslations\.com)$/,
     "lightnovelworld",
   ],
   [/(^|\.)ranobes\.(top|net|com)$/, "ranobes"],
   [/(^|\.)webnovel\.com$/, "webnovel"],
-  [/(^|\.)mtlnovel\.(com|net)$/, "mtlnovel"],
+  [/(^|\.)mtlnovel\.(com|net|org)$/, "mtlnovel"],
+  [/(^|\.)mtlnation\.com$/, "mtlnovel"],
   [
-    /(^|\.)(readnovelfull\.(com|me)|novelusb\.com|allnovel\.org|vipnovel\.com|novelall\.com|lightnovelheaven\.com|novelsonline\.net|novelgate\.net|novelhall\.net)$/,
+    /(^|\.)(readnovelfull\.(com|me)|novelusb\.com|allnovel\.org|vipnovel\.com|novelall\.com|lightnovelheaven\.com|novelsonline\.net|novelgate\.net|novelhall\.net|novelnext\.com|novelhat\.com|freefullnovel\.com|novelplanet\.com|novelonlinefull\.com|novelonlinefree\.com)$/,
     "readnovelfull",
   ],
   [
-    /(^|\.)(boxnovel\.(com|net)|wuxiaworld\.site|foxaholic\.com|1stkissnovel\.love|listnovel\.com|morenovel\.net|noveltrench\.com|readwebnovel\.xyz|novelnice\.com|mangasushi\.net|zinnovel\.com|noveluniverse\.net|woopread\.com|novelpassion\.net|novelkite\.com|romanticlovebooks\.com|lscomic\.com|novel35\.com|sleepytranslations\.com|novelskip\.com|mangaonlineteam\.com|manhwatop\.com|novelcenter\.net)$/,
+    /(^|\.)(boxnovel\.(com|net)|wuxiaworld\.site|foxaholic\.com|1stkissnovel\.love|listnovel\.com|morenovel\.net|noveltrench\.com|readwebnovel\.xyz|novelnice\.com|mangasushi\.net|zinnovel\.com|noveluniverse\.net|woopread\.com|novelpassion\.net|novelkite\.com|romanticlovebooks\.com|lscomic\.com|novel35\.com|sleepytranslations\.com|novelskip\.com|mangaonlineteam\.com|manhwatop\.com|novelcenter\.net|isekaiscan\.(com|eu)|manhuafast\.com|topmanhua\.com|manhuaga\.com|dragonholic\.com|nightscans\.net|mangatx\.com)$/,
     "madara",
   ],
   [/(^|\.)(ncode|novel18)\.syosetu\.com$/, "syosetu"],
@@ -1665,6 +1781,12 @@ const MAJOR_SITES = [
   [/(^|\.)forum\.questionablequesting\.com$/, "xenforo"],
   [/(^|\.)creative-novels\.com$/, "creativenovels"],
   [/(^|\.)moonquill\.com$/, "nextjs"],
+  [/(^|\.)jjwxc\.net$/, "jjwxc"],
+  [/(^|\.)novel\.pixiv\.net$/, "pixivnovel"],
+  [/(^|\.)storiesonline\.net$/, "storiesonline"],
+  [/(^|\.)ficwad\.com$/, "ficwad"],
+  [/(^|\.)volarenovels\.com$/, "volarenovels"],
+  [/(^|\.)gravitytales\.com$/, "gravitytales"],
 ];
 
 function siteKey(hostname) {
@@ -1763,6 +1885,18 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         return tocLightNovelPub(tocUrl);
       case "asianfanfics":
         return tocAsianFanfics(tocUrl);
+      case "jjwxc":
+        return tocJjwxc(tocUrl);
+      case "pixivnovel":
+        return tocPixivNovel(tocUrl);
+      case "storiesonline":
+        return tocStoriesOnline(tocUrl);
+      case "ficwad":
+        return tocFicwad(tocUrl);
+      case "volarenovels":
+        return tocVolareNovels(tocUrl);
+      case "gravitytales":
+        return tocGravityTales(tocUrl);
       default:
         return [];
     }
