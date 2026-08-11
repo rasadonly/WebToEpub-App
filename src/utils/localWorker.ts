@@ -121,6 +121,15 @@ function stripInside(root: Element, selector: string) {
   root.querySelectorAll(selector).forEach((n) => n.remove());
 }
 
+function sanitizeHtml(html: string): string {
+  if (!html) return "";
+  return html.replace(
+    /(<[^>]+?(?:href|src|action|data-url|data-href)\s*=\s*["'])([^"']*)(["'])/gi,
+    (_, before, val, after) =>
+      before + val.replace(/&(?![a-zA-Z#]\w{0,6};)/g, "&amp;") + after
+  );
+}
+
 // ---------- Site-specific link (TOC) parsers ----------
 
 async function tocFreeWebNovel(
@@ -442,8 +451,8 @@ function extractWithSelector(doc: Document, selectors: string): string {
   for (const sel of sels) {
     const el = doc.querySelector(sel);
     if (el) {
-      stripInside(el, "script, style, ins, iframe, .ad, .ads, .advertisement");
-      return el.innerHTML;
+      stripInside(el, "script, style, ins, iframe, .ad, .ads, .advertisement, a[href*='utm_source'], a[href^='mailto:']");
+      return sanitizeHtml(el.innerHTML);
     }
   }
   return "";
@@ -570,27 +579,57 @@ async function tocWattpad(url: string): Promise<string[]> {
 }
 
 async function bodyWattpad(url: string): Promise<string> {
-  // Extract partId from URL (wattpad.com/{partId}-...)
   const partIdMatch = url.match(/wattpad\.com\/(\d+)/);
+  let html = "";
   if (partIdMatch) {
     try {
       const apiBase = "https://www.wattpad.com/api/v3";
       const partJson = await getJson(
         `${apiBase}/story_parts/${partIdMatch[1]}?fields=id,title,text`
       );
-      const text: string = partJson?.text || "";
-      if (text.trim().length > 20) {
-        // text is already HTML
-        return text;
+      if ((partJson?.text || "").trim().length > 20) {
+        html = partJson.text;
       }
     } catch { /* fall through to scraping */ }
   }
-  // Fallback: scrape the page
-  const doc = parseHtml(await getText(url));
-  return extractWithSelector(
-    doc,
-    ".part-content, pre.part-content, [data-field='text']"
-  );
+  if (!html) {
+    // Fallback: scrape the page
+    html = extractWithSelector(
+      parseHtml(await getText(url)),
+      ".part-content, pre.part-content, [data-field='text']"
+    );
+  }
+  if (!html) return "";
+
+  // Sanitize for EPUB XML validity
+  const doc = parseHtml(`<div id="_wp_root">${html}</div>`);
+  const root = doc.querySelector("#_wp_root");
+  if (!root) return html;
+
+  stripInside(root, [
+    "figure.media-share",
+    ".share-buttons",
+    "[class*='share']",
+    "[class*='social']",
+    "a[href^='mailto:']",
+    "a[href*='utm_source']",
+    "a[href*='utm_medium']",
+    ".report-story",
+    ".author-info",
+    ".follow-button",
+  ].join(", "));
+
+  const fixAmpersand = (val: string | null) =>
+    val ? val.replace(/&(?![a-zA-Z#]\w{0,6};)/g, "&amp;") : val;
+
+  root.querySelectorAll("[href], [src], [action], [data-url]").forEach((el) => {
+    for (const attr of ["href", "src", "action", "data-url"]) {
+      const v = el.getAttribute(attr);
+      if (v) el.setAttribute(attr, fixAmpersand(v)!);
+    }
+  });
+
+  return sanitizeHtml(root.innerHTML);
 }
 
 export async function fetchChapterLinks(tocUrl: string, linkSelector: string): Promise<string[]> {
