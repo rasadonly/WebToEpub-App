@@ -97,6 +97,7 @@ function toXhtml(html = "") {
     });
 
     const clean = wrap.innerHTML
+      .replace(/<(img|br|hr|input|meta|link|embed|source|param|track|wbr)(\s+[^>]*?)?(?<!\/)>/gi, '<$1$2 />')
       .replace(/&(?!(?:[a-zA-Z][a-zA-Z0-9]*|#\d+|#x[0-9a-fA-F]+);)/g, "&amp;");
     return fixEntities(clean);
   } catch {
