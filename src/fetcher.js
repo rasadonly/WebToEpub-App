@@ -52,11 +52,10 @@ async function httpGet(url, extra = {}, timeoutMs = 7000) {
         redirect: "follow",
       });
       if (r.ok) return r;
-      if (!proxy && (r.status === 403 || r.status === 503)) {
-        blockedHosts.add(host);
-      }
+      if (!proxy) blockedHosts.add(host);
       lastErr = new Error(`HTTP ${r.status}`);
     } catch (e) {
+      if (!proxy) blockedHosts.add(host);
       lastErr = e;
     } finally {
       clearTimeout(timer);
