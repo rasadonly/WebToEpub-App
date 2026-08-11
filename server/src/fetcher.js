@@ -270,19 +270,24 @@ async function tocNovelFull(url) {
   const html = await getText(url);
   const doc = parseHtml(html);
   let limit = 1;
-  const lastPageEl = doc.querySelector("li.last a");
-  if (lastPageEl) {
-    const rawHref = unwrapProxyUrl(lastPageEl.getAttribute("href") || "");
-    const page =
-      lastPageEl.getAttribute("data-page") ||
-      new URL(rawHref, url).searchParams.get("page");
-    if (page) limit = parseInt(page) + 1;
+  const options = doc.querySelectorAll("#indexselect option");
+  if (options.length > 0) {
+    limit = options.length;
+  } else {
+    const lastPageEl = doc.querySelector("li.last a");
+    if (lastPageEl) {
+      const rawHref = unwrapProxyUrl(lastPageEl.getAttribute("href") || "");
+      const page =
+        lastPageEl.getAttribute("data-page") ||
+        new URL(rawHref, url).searchParams.get("page");
+      if (page) limit = parseInt(page) + 1;
+    }
   }
   const origin = new URL(url).origin;
   const collect = (h) => {
     const items = [];
     parseHtml(h)
-      .querySelectorAll("ul.list-chapter a, .list-chapter a")
+      .querySelectorAll("#idData li a, #idData a, ul.list-chapter a, .list-chapter a, ul.chapter-list a")
       .forEach((a) => {
         const href = a.getAttribute("href");
         if (href) items.push({ url: absoluteUrl(origin, href), title: (a.textContent || "").trim() });
