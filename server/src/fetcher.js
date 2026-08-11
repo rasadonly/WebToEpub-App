@@ -85,6 +85,21 @@ function stripInside(root, selector) {
   root.querySelectorAll(selector).forEach((n) => n.remove());
 }
 
+/**
+ * Fix bare & in href/src/action attribute values so EPUB's XML parser
+ * doesn't throw "attributes construct error". Runs on every returned chunk.
+ */
+function sanitizeHtml(html) {
+  if (!html) return "";
+  // Replace & not already part of a named/numeric entity with &amp;
+  // This handles href="?a=1&b=2" → href="?a=1&amp;b=2"
+  return html.replace(
+    /(<[^>]+?(?:href|src|action|data-url|data-href)\s*=\s*["'])([^"']*)(["'])/gi,
+    (_, before, val, after) =>
+      before + val.replace(/&(?![a-zA-Z#]\w{0,6};)/g, "&amp;") + after
+  );
+}
+
 function extractWithSelector(doc, selectors) {
   for (const sel of String(selectors || "")
     .split(",")
@@ -92,8 +107,8 @@ function extractWithSelector(doc, selectors) {
     .filter(Boolean)) {
     const el = doc.querySelector(sel);
     if (el) {
-      stripInside(el, "script, style, ins, iframe, .ad, .ads, .advertisement");
-      return el.innerHTML;
+      stripInside(el, "script, style, ins, iframe, .ad, .ads, .advertisement, a[href*='utm_source'], a[href^='mailto:']");
+      return sanitizeHtml(el.innerHTML);
     }
   }
   return "";
@@ -581,21 +596,59 @@ async function bodyNovelArrow(url) {
 }
 async function bodyWattpad(url) {
   const partId = url.match(/wattpad\.com\/(\d+)/)?.[1];
+  let html = "";
   if (partId) {
     try {
       const json = await getJson(
         `https://www.wattpad.com/api/v3/story_parts/${partId}?fields=id,title,text`
       );
-      if ((json?.text || "").trim().length > 20) return json.text;
+      if ((json?.text || "").trim().length > 20) html = json.text;
     } catch {
       /* fall through */
     }
   }
-  return extractWithSelector(
-    parseHtml(await getText(url)),
-    ".part-content, pre.part-content, [data-field='text']"
-  );
+  if (!html) {
+    html = extractWithSelector(
+      parseHtml(await getText(url)),
+      ".part-content, pre.part-content, [data-field='text']"
+    );
+  }
+  if (!html) return "";
+
+  // --- Sanitize for EPUB XML validity ---
+  // 1. Remove social-share / footer sections that contain mailto: and tracking URLs
+  const doc = parseHtml(`<div id="_wp_root">${html}</div>`);
+  const root = doc.querySelector("#_wp_root");
+
+  // Remove share/send buttons, report links, author profile badges, follow buttons
+  stripInside(root, [
+    "figure.media-share",
+    ".share-buttons",
+    "[class*='share']",
+    "[class*='social']",
+    "a[href^='mailto:']",
+    "a[href*='utm_source']",
+    "a[href*='utm_medium']",
+    ".report-story",
+    ".author-info",
+    ".follow-button",
+  ].join(", "));
+
+  // 2. Fix bare & in all attribute values (& not followed by word chars + ;)
+  //    Walk every element and re-encode href/src/action attrs
+  const fixAmpersand = (val) =>
+    val ? val.replace(/&(?![a-zA-Z#]\w{0,6};)/g, "&amp;") : val;
+
+  root.querySelectorAll("[href], [src], [action], [data-url]").forEach((el) => {
+    for (const attr of ["href", "src", "action", "data-url"]) {
+      const v = el.getAttribute(attr);
+      if (v) el.setAttribute(attr, fixAmpersand(v));
+    }
+  });
+
+  return sanitizeHtml(root.innerHTML);
 }
+
 /** Last-resort heuristic: the block element with the most paragraph text. */
 function bodyByDensity(doc) {
   let best = null;
@@ -618,8 +671,8 @@ function bodyByDensity(doc) {
     }
   });
   if (!best) return "";
-  stripInside(best, "script, style, iframe, ins, nav, header, footer, form, .ads, .adsbygoogle");
-  return best.innerHTML;
+  stripInside(best, "script, style, iframe, ins, nav, header, footer, form, .ads, .adsbygoogle, a[href*='utm_'], a[href^='mailto:']");
+  return sanitizeHtml(best.innerHTML);
 }
 
 /**
