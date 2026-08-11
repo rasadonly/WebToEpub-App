@@ -70,7 +70,9 @@ function toXhtml(html = "") {
     const wrap = document.getElementById("__wrap__");
     if (!wrap) return escapeXml(html);
 
-    wrap.querySelectorAll("script, style, iframe, ins, form, input, button, noscript, svg, canvas, video, audio").forEach((el) => el.remove());
+    wrap.querySelectorAll(
+      "script, style, iframe, ins, form, input, button, noscript, svg, canvas, video, audio, .left-rail, .right-rail, #sticky-nav, .sidebar, .share-tools, .part-footer-actions, .component-wrapper, .author-info, .avatar, .reading-widget, .promoted-stories-container, figure.media-share, .share-buttons, [class*='share'], [class*='social'], .btn-fan, .follow-button, .report-story, .carousel-indicators, .social-icons-container, .image-options-container, a[href*='pinterest'], a[href*='facebook.com/sharer'], a[href*='twitter.com/intent'], a[href*='tumblr.com']"
+    ).forEach((el) => el.remove());
 
     wrap.querySelectorAll("*").forEach((el) => {
       [...el.attributes].forEach((attr) => {
@@ -88,6 +90,8 @@ function toXhtml(html = "") {
           name === "role"
         ) {
           el.removeAttribute(attr.name);
+        } else if (attr.value && attr.value.includes('"')) {
+          el.setAttribute(attr.name, attr.value.replace(/"/g, "&quot;"));
         }
       });
     });

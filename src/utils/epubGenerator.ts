@@ -210,7 +210,7 @@ function toXhtml(html: string): string {
 
     // Drop things that are never valid/wanted inside an EPUB chapter.
     wrap
-      .querySelectorAll('script, style, iframe, ins, form, input, button, noscript, svg, canvas, video, audio')
+      .querySelectorAll('script, style, iframe, ins, form, input, button, noscript, svg, canvas, video, audio, .left-rail, .right-rail, #sticky-nav, .sidebar, .share-tools, .part-footer-actions, .component-wrapper, .author-info, .avatar, .reading-widget, .promoted-stories-container, figure.media-share, .share-buttons, [class*="share"], [class*="social"], .btn-fan, .follow-button, .report-story, .carousel-indicators, .social-icons-container, .image-options-container, a[href*="pinterest"], a[href*="facebook.com/sharer"], a[href*="twitter.com/intent"], a[href*="tumblr.com"]')
       .forEach((el) => el.remove());
 
     // Strip event handlers, microdata, ARIA, and other non-EPUB attributes.
@@ -230,6 +230,8 @@ function toXhtml(html: string): string {
           name === 'role'
         ) {
           el.removeAttribute(attr.name);
+        } else if (attr.value && attr.value.includes('"')) {
+          el.setAttribute(attr.name, attr.value.replace(/"/g, '&quot;'));
         }
       });
     });
