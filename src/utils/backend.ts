@@ -191,21 +191,23 @@ async function pingBackend(base: string, timeoutMs = 15_000): Promise<boolean> {
 }
 
 /**
- * Health check with automatic failover: if the active backend is down, try the
- * other known backends (Heroku ⇄ Hugging Face) and switch to the first that
- * answers, so a sleeping/dead host never takes the app down.
+ * Health check with dual-backend load balancing: tests BOTH Heroku and Hugging Face
+ * in parallel. If both are healthy, both stay in the active round-robin pool to
+ * split traffic 50/50, doubling throughput and preventing server overload.
  */
 export async function backendHealthy(): Promise<boolean> {
-  const active = getBackendUrl();
-  if (await pingBackend(active)) return true;
+  const results = await Promise.all(
+    BACKEND_URLS.map(async (url) => {
+      // HF Spaces sleep — the first request wakes them, so allow more time.
+      const isUp = await pingBackend(url, url === HF_BACKEND_URL ? 35_000 : 12_000);
+      return { url, isUp };
+    })
+  );
 
-  for (const alt of BACKEND_URLS) {
-    if (alt === active) continue;
-    // HF Spaces sleep — the first request wakes them, so allow more time.
-    if (await pingBackend(alt, 45_000)) {
-      setBackendUrl(alt);
-      return true;
-    }
+  const healthy = results.filter(r => r.isUp).map(r => r.url);
+  if (healthy.length > 0) {
+    activePool = healthy;
+    return true;
   }
   return false;
 }

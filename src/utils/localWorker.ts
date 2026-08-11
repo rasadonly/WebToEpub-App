@@ -35,17 +35,19 @@ export const CORS_PROXY_LIST: Array<{ name: string; url: string }> = [
 ];
 
 const BACKEND_URL_KEY = 'backendUrl';
-const BACKEND_ENABLED_KEY = 'backendEnabled';
-const DEFAULT_BACKEND = 'https://link-to-epub-37130-dfa858b712fc.herokuapp.com';
+const HEROKU_BACKEND = 'https://link-to-epub-37130-dfa858b712fc.herokuapp.com';
+const HF_BACKEND = 'https://prasadonly-web-to-epub-bot.hf.space';
 
-/** Returns the Heroku proxy entry if backend is enabled, null otherwise. */
-function getHerokuProxy(): { name: string; url: string } | null {
+/** Returns active backend proxies (Heroku + Hugging Face) if backend is enabled. */
+function getBackendProxies(): Array<{ name: string; url: string }> {
   try {
-    if (localStorage.getItem(BACKEND_ENABLED_KEY) === 'false') return null;
-    const base = (localStorage.getItem(BACKEND_URL_KEY) || DEFAULT_BACKEND).replace(/\/$/, '');
-    return { name: 'Heroku Proxy', url: `${base}/api/proxy?url=` };
+    if (localStorage.getItem(BACKEND_ENABLED_KEY) === 'false') return [];
+    return [
+      { name: 'Heroku Proxy', url: `${HEROKU_BACKEND}/api/proxy?url=` },
+      { name: 'HuggingFace Proxy', url: `${HF_BACKEND}/api/proxy?url=` },
+    ];
   } catch {
-    return null;
+    return [];
   }
 }
 
@@ -59,8 +61,8 @@ function buildProxyUrl(proxyBase: string, targetUrl: string): string {
 }
 
 function getActiveCorsProxies(): Array<(url: string) => string> {
-  const heroku = getHerokuProxy();
-  const list = heroku ? [heroku, ...CORS_PROXY_LIST] : CORS_PROXY_LIST;
+  const backends = getBackendProxies();
+  const list = backends.length ? [...backends, ...CORS_PROXY_LIST] : CORS_PROXY_LIST;
   return list.map((p) => (url: string) => buildProxyUrl(p.url, url));
 }
 
