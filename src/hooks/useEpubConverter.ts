@@ -91,9 +91,22 @@ export function useEpubConverter() {
     const id = getActiveJobId();
     if (!id) return;
     jobIdRef.current = id;
-    stopPollRef.current = pollJob(id, applyJob);
+    stopPollRef.current = pollJob(id, j => {
+      applyJob(j);
+      if (j.status === 'done') {
+        addLog('Resuming completed server job — downloading EPUB…');
+        backendDownload(j)
+          .then(() => clearActiveJobId())
+          .catch(err => addLog(`Download failed: ${(err as Error).message}`));
+        toast({
+          title: 'Success!',
+          description: `Server job finished. Downloading EPUB…`,
+          duration: 5000,
+        });
+      }
+    });
     return () => stopPollRef.current?.();
-  }, [applyJob]);
+  }, [applyJob, addLog, toast]);
 
 
   const fetchChapters = useCallback(
