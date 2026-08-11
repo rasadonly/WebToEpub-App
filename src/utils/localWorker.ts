@@ -26,15 +26,12 @@ const DEFAULT_HEADERS: Record<string, string> = {
 // The Heroku backend proxy is prepended at runtime (if backend is enabled) so it
 // gets tried first — it's faster and more reliable than public proxies.
 export const CORS_PROXY_LIST: Array<{ name: string; url: string }> = [
+  { name: "Lovable Proxy", url: "https://loveable-proxy-forwebtoepub.lovable.app/api/proxy?url=" },
+  { name: "Alwaysdata Proxy", url: "https://prasadghanwat.alwaysdata.net/proxy?url=" },
+  { name: "Render Proxy", url: "https://render-proxy-1-181c.onrender.com/proxy?url=" },
   { name: "corsproxy.io (with key)", url: "https://corsproxy.io/?key=ab3170e1&url=" },
   { name: "allOrigins (raw)", url: "https://api.allorigins.win/raw?url=" },
-  { name: "CORS.SH", url: "https://proxy.cors.sh/" },
-  { name: "CodeTabs", url: "https://api.codetabs.com/v1/proxy?quest=" },
-  { name: "ThingProxy", url: "https://thingproxy.freeboard.io/fetch/" },
   { name: "cors.lol", url: "https://api.cors.lol/?url=" },
-  { name: "Render Proxy", url: "https://render-proxy-1-181c.onrender.com/proxy?url=" },
-  { name: "Alwaysdata Proxy", url: "https://prasadghanwat.alwaysdata.net/proxy?url=" },
-  { name: "Lovable Proxy", url: "https://loveable-proxy-forwebtoepub.lovable.app/api/proxy?url=" },
 ];
 
 const BACKEND_URL_KEY = 'backendUrl';
@@ -109,11 +106,22 @@ function parseHtml(html: string): Document {
   return new DOMParser().parseFromString(html, "text/html");
 }
 
+function unwrapProxyUrl(url: string): string {
+  if (!url) return url;
+  if (url.includes("/api/proxy?url=") || url.includes("?url=")) {
+    try {
+      const match = url.match(/[?&]url=([^&]+)/);
+      if (match) return decodeURIComponent(match[1]);
+    } catch {}
+  }
+  return url;
+}
+
 function absoluteUrl(base: string, rel: string): string {
   try {
-    return new URL(rel, base).href;
+    return unwrapProxyUrl(new URL(rel, base).href);
   } catch {
-    return rel;
+    return unwrapProxyUrl(rel);
   }
 }
 
@@ -355,9 +363,10 @@ async function tocNovelFull(
   let limit = 1;
   const lastPageEl = doc.querySelector("li.last a");
   if (lastPageEl) {
+    const rawHref = unwrapProxyUrl(lastPageEl.getAttribute("href") || "");
     const page =
       lastPageEl.getAttribute("data-page") ||
-      new URL(lastPageEl.getAttribute("href") || "", url).searchParams.get("page");
+      new URL(rawHref, url).searchParams.get("page");
     if (page) limit = parseInt(page) + 1;
   }
   const origin = new URL(url).origin;
