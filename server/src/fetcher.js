@@ -620,7 +620,7 @@ async function bodyWattpad(url) {
   const doc = parseHtml(`<div id="_wp_root">${html}</div>`);
   const root = doc.querySelector("#_wp_root");
 
-  // Remove share/send buttons, report links, author profile badges, follow buttons
+  // Remove share/send buttons, report links, author profile badges, follow buttons, and promoted stories
   stripInside(root, [
     "figure.media-share",
     ".share-buttons",
@@ -632,6 +632,8 @@ async function bodyWattpad(url) {
     ".report-story",
     ".author-info",
     ".follow-button",
+    ".reading-widget",
+    ".promoted-stories-container"
   ].join(", "));
 
   // 2. Fix bare & in all attribute values (& not followed by word chars + ;)

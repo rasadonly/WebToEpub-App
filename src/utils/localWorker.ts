@@ -617,6 +617,8 @@ async function bodyWattpad(url: string): Promise<string> {
     ".report-story",
     ".author-info",
     ".follow-button",
+    ".reading-widget",
+    ".promoted-stories-container"
   ].join(", "));
 
   const fixAmpersand = (val: string | null) =>
