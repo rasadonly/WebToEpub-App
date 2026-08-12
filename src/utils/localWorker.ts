@@ -41,7 +41,7 @@ const HF_BACKEND = 'https://prasadonly-web-to-epub-bot.hf.space';
 /** Returns active backend proxies (Heroku + Hugging Face) if backend is enabled. */
 function getBackendProxies(): Array<{ name: string; url: string }> {
   try {
-    if (localStorage.getItem(BACKEND_ENABLED_KEY) === 'false') return [];
+    if (localStorage.getItem('backendEnabled') === 'false') return [];
     return [
       { name: 'Heroku Proxy', url: `${HEROKU_BACKEND}/api/proxy?url=` },
       { name: 'HuggingFace Proxy', url: `${HF_BACKEND}/api/proxy?url=` },
