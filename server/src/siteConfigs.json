@@ -18,6 +18,17 @@
       "#content"
     ]
   },
+  "69shuba.com": {
+    "parser": "_69shuParser",
+    "toc": [
+      "#catalog ul a",
+      "#indexselect-top option"
+    ],
+    "content": [
+      "div.txtnav",
+      "#nr1"
+    ]
+  },
   "69shuba.tw": {
     "parser": "_69shuTwParser",
     "toc": [
@@ -32,115 +43,7 @@
       "div.txtnav"
     ]
   },
-  "m.88xiaoshuo.net": {
-    "parser": "_88xiaoshuoParser",
-    "toc": [
-      ".read a"
-    ],
-    "content": [
-      "div.content"
-    ]
-  },
   "88xiaoshuo.net": {
-    "parser": "_88xiaoshuoParser",
-    "toc": [
-      ".read a"
-    ],
-    "content": [
-      "div.content"
-    ]
-  },
-  "m.ilwxs.com": {
-    "parser": "_88xiaoshuoParser",
-    "toc": [
-      ".read a"
-    ],
-    "content": [
-      "div.content"
-    ]
-  },
-  "ilwxs.com": {
-    "parser": "_88xiaoshuoParser",
-    "toc": [
-      ".read a"
-    ],
-    "content": [
-      "div.content"
-    ]
-  },
-  "m.ttshu8.com": {
-    "parser": "_88xiaoshuoParser",
-    "toc": [
-      ".read a"
-    ],
-    "content": [
-      "div.content"
-    ]
-  },
-  "ttshu8.com": {
-    "parser": "_88xiaoshuoParser",
-    "toc": [
-      ".read a"
-    ],
-    "content": [
-      "div.content"
-    ]
-  },
-  "m.xpaoshuba.com": {
-    "parser": "_88xiaoshuoParser",
-    "toc": [
-      ".read a"
-    ],
-    "content": [
-      "div.content"
-    ]
-  },
-  "xpaoshuba.com": {
-    "parser": "_88xiaoshuoParser",
-    "toc": [
-      ".read a"
-    ],
-    "content": [
-      "div.content"
-    ]
-  },
-  "m.shuhaige.net": {
-    "parser": "_88xiaoshuoParser",
-    "toc": [
-      ".read a"
-    ],
-    "content": [
-      "div.content"
-    ]
-  },
-  "shuhaige.net": {
-    "parser": "_88xiaoshuoParser",
-    "toc": [
-      ".read a"
-    ],
-    "content": [
-      "div.content"
-    ]
-  },
-  "m.qbxsw.com": {
-    "parser": "_88xiaoshuoParser",
-    "toc": [
-      ".read a"
-    ],
-    "content": [
-      "div.content"
-    ]
-  },
-  "qbxsw.com": {
-    "parser": "_88xiaoshuoParser",
-    "toc": [
-      ".read a"
-    ],
-    "content": [
-      "div.content"
-    ]
-  },
-  "m.38xs.com": {
     "parser": "_88xiaoshuoParser",
     "toc": [
       ".read a"
@@ -181,6 +84,41 @@
       ".read-content"
     ]
   },
+  "allnovel.org": {
+    "parser": "NovelfullParser",
+    "toc": [
+      "ul.list-chapter a"
+    ],
+    "content": [
+      "#chr-content",
+      "#chapter-content",
+      "div.chapter-content",
+      ".chapter-c",
+      "#chapterContent"
+    ]
+  },
+  "allnovelbook.com": {
+    "parser": "ReadnoveldailyParser",
+    "toc": [
+      "#viewchapter .row a"
+    ],
+    "content": [
+      "#content"
+    ]
+  },
+  "allnovelnext.com": {
+    "parser": "NovelfullParser",
+    "toc": [
+      "ul.list-chapter a"
+    ],
+    "content": [
+      "#chr-content",
+      "#chapter-content",
+      "div.chapter-content",
+      ".chapter-c",
+      "#chapterContent"
+    ]
+  },
   "alphapolis.co.jp": {
     "parser": "AlphapolisParser",
     "toc": [
@@ -190,6 +128,25 @@
       "div#novelBody"
     ]
   },
+  "alternatehistory.com": {
+    "parser": "SpacebattlesParser",
+    "toc": [
+      "div.structItem--threadmark a"
+    ],
+    "content": [
+      "article.message-body",
+      "div.bbWrapper"
+    ]
+  },
+  "arcanetranslations.com": {
+    "parser": "NoblemtlParser",
+    "toc": [
+      "div.eplister a"
+    ],
+    "content": [
+      ".entry-content"
+    ]
+  },
   "archiveofourown.org": {
     "parser": "ArchiveOfOurOwnParser",
     "toc": [
@@ -197,6 +154,15 @@
     ],
     "content": [
       "div#chapters"
+    ]
+  },
+  "asianfanfics.com": {
+    "parser": "AsianfanficsParser",
+    "toc": [
+      "aside ul a"
+    ],
+    "content": [
+      "div#user-submitted-body"
     ]
   },
   "asianhobbyist.com": {
@@ -212,15 +178,6 @@
       ".wp-block-cover__inner-container"
     ]
   },
-  "asianfanfics.com": {
-    "parser": "AsianfanficsParser",
-    "toc": [
-      "aside ul a"
-    ],
-    "content": [
-      "div#user-submitted-body"
-    ]
-  },
   "asianovel.net": {
     "parser": "AsianovelParser",
     "toc": [
@@ -228,6 +185,54 @@
     ],
     "content": [
       "#chapter-content"
+    ]
+  },
+  "asuracomic.net": {
+    "parser": "GenericParser",
+    "toc": [
+      "a[href*='/chapter/']"
+    ],
+    "content": [
+      ".entry-content",
+      "main article"
+    ]
+  },
+  "b.faloo.com": {
+    "parser": "FalooParser",
+    "toc": [
+      "div.DivTable div div a",
+      ".DivVip a",
+      "div.DivTable:nth-child(3) a"
+    ],
+    "content": [
+      ".noveContent"
+    ]
+  },
+  "bakapervert.wordpress.com": {
+    "parser": "WordpressBaseParser",
+    "toc": [
+      "div.entry-content a",
+      "div.post-content a",
+      "ul.wp-block-post-template a",
+      "#content a"
+    ],
+    "content": [
+      "div.entry-content",
+      "div.post-content",
+      "ul.wp-block-post-template",
+      ".wp-block-cover__inner-container"
+    ]
+  },
+  "bednovel.com": {
+    "parser": "FreeWebNovelParser",
+    "toc": [
+      "option",
+      "ul#idData a",
+      "#indexselect a"
+    ],
+    "content": [
+      "div#article",
+      "div.txt"
     ]
   },
   "betwixtedbutterfly.com": {
@@ -249,30 +254,15 @@
       "#chaptercontent"
     ]
   },
-  "nhvnovels.com": {
-    "parser": "BlogusParser",
+  "bixiange.me": {
+    "parser": "GenericParser",
     "toc": [
-      ".chapter-item[data-url]",
-      ".chapter-section .paid-class2[href]",
-      ".chapter-section .dropdown-content a[href]:not(.paid-class2)",
-      ".chapter-title a",
-      ".ch-ul-li p a"
+      "#list dd a",
+      "div.listmain a"
     ],
     "content": [
-      ".chapter-text"
-    ]
-  },
-  "pienovels.com": {
-    "parser": "BlogusParser",
-    "toc": [
-      ".chapter-item[data-url]",
-      ".chapter-section .paid-class2[href]",
-      ".chapter-section .dropdown-content a[href]:not(.paid-class2)",
-      ".chapter-title a",
-      ".ch-ul-li p a"
-    ],
-    "content": [
-      ".chapter-text"
+      "#chaptercontent",
+      "#content"
     ]
   },
   "book18.org": {
@@ -296,6 +286,15 @@
       ".wp-block-cover__inner-container"
     ]
   },
+  "boxnovel.net": {
+    "parser": "NovelUpdatesOnlineParser",
+    "toc": [
+      "#chapter-section ul a"
+    ],
+    "content": [
+      "div.reading-content"
+    ]
+  },
   "boxnovel.org": {
     "parser": "BoxnovelOrgParser",
     "toc": [
@@ -312,16 +311,6 @@
     ],
     "content": [
       "section.reader-cartoon-chapter"
-    ]
-  },
-  "m.bqg225.com": {
-    "parser": "Bqg225Parser",
-    "toc": [
-      "div.book_more a a",
-      "div.book_last a"
-    ],
-    "content": [
-      "div#chaptercontent"
     ]
   },
   "brittanypage43.com": {
@@ -342,6 +331,19 @@
       "#chapter-content"
     ]
   },
+  "cangji.net": {
+    "parser": "CangjiParser",
+    "toc": [
+      "#content .entry-title a",
+      "div.entry-content a",
+      "div.post-content a",
+      "ul.wp-block-post-template a",
+      "#content a"
+    ],
+    "content": [
+      "div.entry-content"
+    ]
+  },
   "cclawtranslations.home.blog": {
     "parser": "CClawTranslationsParser",
     "toc": [
@@ -357,17 +359,17 @@
       ".wp-block-cover__inner-container"
     ]
   },
-  "cangji.net": {
-    "parser": "CangjiParser",
+  "cherrymist.cafe": {
+    "parser": "FictioneerParser",
     "toc": [
-      "#content .entry-title a",
-      "div.entry-content a",
-      "div.post-content a",
-      "ul.wp-block-post-template a",
-      "#content a"
+      ".chapter-group__list ._publish a",
+      "._future a",
+      ".chapter-group__list-item a"
     ],
     "content": [
-      "div.entry-content"
+      ".chapter-formatting",
+      "#chapter-content",
+      ".chapter__footnotes"
     ]
   },
   "chosentwofanfic.com": {
@@ -404,6 +406,24 @@
       "div.layout-content-wrapper"
     ]
   },
+  "ckandawrites.online": {
+    "parser": "KnoxtspaceParser",
+    "toc": [
+      "div.eplister a"
+    ],
+    "content": [
+      ".entry-content"
+    ]
+  },
+  "comics.8muses.com": {
+    "parser": "EightMusesParser",
+    "toc": [
+      "div.gallery a"
+    ],
+    "content": [
+      "div#content"
+    ]
+  },
   "creativenovels.com": {
     "parser": "CreativeNovelsParser",
     "toc": [
@@ -411,6 +431,21 @@
     ],
     "content": [
       "div.entry-content.content"
+    ]
+  },
+  "crimsonmagic.me": {
+    "parser": "WordpressBaseParser",
+    "toc": [
+      "div.entry-content a",
+      "div.post-content a",
+      "ul.wp-block-post-template a",
+      "#content a"
+    ],
+    "content": [
+      "div.entry-content",
+      "div.post-content",
+      "ul.wp-block-post-template",
+      ".wp-block-cover__inner-container"
     ]
   },
   "crimsontranslations.com": {
@@ -434,6 +469,15 @@
       ".chapter-content"
     ]
   },
+  "cyborg-tl.com": {
+    "parser": "CyborgTlParser",
+    "toc": [
+      "div.eplister a"
+    ],
+    "content": [
+      ".entry-content"
+    ]
+  },
   "czbooks.net": {
     "parser": "CzbooksParser",
     "toc": [
@@ -441,6 +485,25 @@
     ],
     "content": [
       ".content"
+    ]
+  },
+  "daonovel.com": {
+    "parser": "MadaraParser",
+    "toc": [
+      "li.wp-manga-chapter a"
+    ],
+    "content": [
+      "div.reading-content .text-left",
+      "div.entry-content"
+    ]
+  },
+  "daotranslate.com": {
+    "parser": "NoblemtlParser",
+    "toc": [
+      "div.eplister a"
+    ],
+    "content": [
+      ".entry-content"
     ]
   },
   "dark-novels.ru": {
@@ -504,22 +567,17 @@
       "article div[property='schema:text']"
     ]
   },
-  "www.8muses.com": {
-    "parser": "EightMusesParser",
+  "emberlib731.xyz": {
+    "parser": "FictioneerParser",
     "toc": [
-      "div.gallery a"
+      ".chapter-group__list ._publish a",
+      "._future a",
+      ".chapter-group__list-item a"
     ],
     "content": [
-      "div#content"
-    ]
-  },
-  "comics.8muses.com": {
-    "parser": "EightMusesParser",
-    "toc": [
-      "div.gallery a"
-    ],
-    "content": [
-      "div#content"
+      ".chapter-formatting",
+      "#chapter-content",
+      ".chapter__footnotes"
     ]
   },
   "empirenovel.com": {
@@ -551,29 +609,31 @@
       "div.entry-content"
     ]
   },
-  "b.faloo.com": {
-    "parser": "FalooParser",
+  "faloomtl.com": {
+    "parser": "NoblemtlParser",
     "toc": [
-      "div.DivTable div div a",
-      ".DivVip a",
-      "div.DivTable:nth-child(3) a"
+      "div.eplister a"
     ],
     "content": [
-      ".noveContent"
+      ".entry-content"
     ]
   },
-  "www.fanfiction.net": {
-    "parser": "FanFictionParser",
-    "toc": [],
+  "fanfiction.com.br": {
+    "parser": "NyahFanfictionParser",
+    "toc": [
+      "div.container_chapter_list a"
+    ],
     "content": [
-      "div.storytext"
+      "div.historia"
     ]
   },
-  "www.fictionpress.com": {
-    "parser": "FanFictionParser",
-    "toc": [],
+  "fanfictionero.com": {
+    "parser": "FicbookParser",
+    "toc": [
+      "a.part-link"
+    ],
     "content": [
-      "div.storytext"
+      "#content"
     ]
   },
   "fanficus.com": {
@@ -585,16 +645,43 @@
       "div#start"
     ]
   },
-  "fastnovel.net": {
-    "parser": "FastNovelParser",
+  "fanmtl.com": {
+    "parser": "ReadwnParser",
     "toc": [
-      "div#list-chapters li a"
+      "ul.chapter-list a"
     ],
     "content": [
-      "div#chapter-body"
+      "div.chapter-content"
     ]
   },
-  "novelgate.net": {
+  "fannovel.com": {
+    "parser": "ReadwnParser",
+    "toc": [
+      "ul.chapter-list a"
+    ],
+    "content": [
+      "div.chapter-content"
+    ]
+  },
+  "fannovels.com": {
+    "parser": "ReadwnParser",
+    "toc": [
+      "ul.chapter-list a"
+    ],
+    "content": [
+      "div.chapter-content"
+    ]
+  },
+  "fansmtl.com": {
+    "parser": "ReadwnParser",
+    "toc": [
+      "ul.chapter-list a"
+    ],
+    "content": [
+      "div.chapter-content"
+    ]
+  },
+  "fastnovel.net": {
     "parser": "FastNovelParser",
     "toc": [
       "div#list-chapters li a"
@@ -621,25 +708,7 @@
       "div.content"
     ]
   },
-  "ficbook.net": {
-    "parser": "FicbookParser",
-    "toc": [
-      "a.part-link"
-    ],
-    "content": [
-      "#content"
-    ]
-  },
   "fic.fan": {
-    "parser": "FicbookParser",
-    "toc": [
-      "a.part-link"
-    ],
-    "content": [
-      "#content"
-    ]
-  },
-  "fanfictionero.com": {
     "parser": "FicbookParser",
     "toc": [
       "a.part-link"
@@ -657,92 +726,13 @@
       "#content"
     ]
   },
-  "fictionmania.tv": {
-    "parser": "FictionManiaParser",
+  "ficbook.net": {
+    "parser": "FicbookParser",
     "toc": [
-      "body a"
+      "a.part-link"
     ],
     "content": [
-      "pre",
-      "div"
-    ]
-  },
-  "lilyonthevalley.com": {
-    "parser": "FictioneerParser",
-    "toc": [
-      ".chapter-group__list ._publish a",
-      "._future a",
-      ".chapter-group__list-item a"
-    ],
-    "content": [
-      ".chapter-formatting",
-      "#chapter-content",
-      ".chapter__footnotes"
-    ]
-  },
-  "cherrymist.cafe": {
-    "parser": "FictioneerParser",
-    "toc": [
-      ".chapter-group__list ._publish a",
-      "._future a",
-      ".chapter-group__list-item a"
-    ],
-    "content": [
-      ".chapter-formatting",
-      "#chapter-content",
-      ".chapter__footnotes"
-    ]
-  },
-  "emberlib731.xyz": {
-    "parser": "FictioneerParser",
-    "toc": [
-      ".chapter-group__list ._publish a",
-      "._future a",
-      ".chapter-group__list-item a"
-    ],
-    "content": [
-      ".chapter-formatting",
-      "#chapter-content",
-      ".chapter__footnotes"
-    ]
-  },
-  "flyonthewalls.blog": {
-    "parser": "FictioneerParser",
-    "toc": [
-      ".chapter-group__list ._publish a",
-      "._future a",
-      ".chapter-group__list-item a"
-    ],
-    "content": [
-      ".chapter-formatting",
-      "#chapter-content",
-      ".chapter__footnotes"
-    ]
-  },
-  "novelib.com": {
-    "parser": "FictioneerParser",
-    "toc": [
-      ".chapter-group__list ._publish a",
-      "._future a",
-      ".chapter-group__list-item a"
-    ],
-    "content": [
-      ".chapter-formatting",
-      "#chapter-content",
-      ".chapter__footnotes"
-    ]
-  },
-  "springofromance.com": {
-    "parser": "FictioneerParser",
-    "toc": [
-      ".chapter-group__list ._publish a",
-      "._future a",
-      ".chapter-group__list-item a"
-    ],
-    "content": [
-      ".chapter-formatting",
-      "#chapter-content",
-      ".chapter__footnotes"
+      "#content"
     ]
   },
   "fictionhunt.com": {
@@ -752,6 +742,26 @@
     ],
     "content": [
       "div.StoryChapter__text"
+    ]
+  },
+  "fictionlog.co": {
+    "parser": "GenericParser",
+    "toc": [
+      "a[href*='/chapter/']"
+    ],
+    "content": [
+      "div.chapter-content",
+      "main article"
+    ]
+  },
+  "fictionmania.tv": {
+    "parser": "FictionManiaParser",
+    "toc": [
+      "body a"
+    ],
+    "content": [
+      "pre",
+      "div"
     ]
   },
   "ficwad.com": {
@@ -772,6 +782,25 @@
       "div#chapter"
     ]
   },
+  "findnovel.net": {
+    "parser": "FindNovelParser",
+    "toc": [
+      "ul.chapter-list a"
+    ],
+    "content": [
+      "div.chapter-content",
+      "div#content"
+    ]
+  },
+  "finestories.com": {
+    "parser": "WLPublishingParser",
+    "toc": [
+      "div#index-list a"
+    ],
+    "content": [
+      "article"
+    ]
+  },
   "flying-lines.com": {
     "parser": "FlyingLinesParser",
     "toc": [
@@ -779,6 +808,58 @@
     ],
     "content": [
       "div.main_body"
+    ]
+  },
+  "flyonthewalls.blog": {
+    "parser": "FictioneerParser",
+    "toc": [
+      ".chapter-group__list ._publish a",
+      "._future a",
+      ".chapter-group__list-item a"
+    ],
+    "content": [
+      ".chapter-formatting",
+      "#chapter-content",
+      ".chapter__footnotes"
+    ]
+  },
+  "forum.questionablequesting.com": {
+    "parser": "SpacebattlesParser",
+    "toc": [
+      "div.structItem--threadmark a"
+    ],
+    "content": [
+      "article.message-body",
+      "div.bbWrapper"
+    ]
+  },
+  "forums.nrvnqsr.com": {
+    "parser": "NrvnqsrParser",
+    "toc": [
+      "div.postlist a"
+    ],
+    "content": [
+      "div.postbody div.content"
+    ]
+  },
+  "forums.spacebattles.com": {
+    "parser": "SpacebattlesParser",
+    "toc": [
+      "div.structItem--threadmark a"
+    ],
+    "content": [
+      "article.message-body",
+      "div.bbWrapper"
+    ]
+  },
+  "forums.sufficientvelocity.com": {
+    "parser": "SpacebattlesParser",
+    "toc": [
+      "div.structItem--threadmark a"
+    ],
+    "content": [
+      "article.message-body",
+      "div.bbWrapper"
     ]
   },
   "foxteller.com": {
@@ -790,84 +871,19 @@
       "article"
     ]
   },
-  "bednovel.com": {
-    "parser": "FreeWebNovelParser",
+  "frostfire10.wordpress.com": {
+    "parser": "WordpressBaseParser",
     "toc": [
-      "option",
-      "ul#idData a",
-      "#indexselect a"
+      "div.entry-content a",
+      "div.post-content a",
+      "ul.wp-block-post-template a",
+      "#content a"
     ],
     "content": [
-      "div#article",
-      "div.txt"
-    ]
-  },
-  "libread.com": {
-    "parser": "FreeWebNovelParser",
-    "toc": [
-      "option",
-      "ul#idData a",
-      "#indexselect a"
-    ],
-    "content": [
-      "div#article",
-      "div.txt"
-    ]
-  },
-  "novellive.com": {
-    "parser": "NovelliveParser",
-    "toc": [
-      "ul li a",
-      ".m-newest2 a",
-      "option",
-      "ul#idData a",
-      "#indexselect a"
-    ],
-    "content": [
-      "div#article",
-      "div.txt"
-    ]
-  },
-  "novellive.app": {
-    "parser": "NovelliveParser",
-    "toc": [
-      "ul li a",
-      ".m-newest2 a",
-      "option",
-      "ul#idData a",
-      "#indexselect a"
-    ],
-    "content": [
-      "div#article",
-      "div.txt"
-    ]
-  },
-  "novellive.net": {
-    "parser": "NovelliveParser",
-    "toc": [
-      "ul li a",
-      ".m-newest2 a",
-      "option",
-      "ul#idData a",
-      "#indexselect a"
-    ],
-    "content": [
-      "div#article",
-      "div.txt"
-    ]
-  },
-  "readwn.org": {
-    "parser": "NovelliveParser",
-    "toc": [
-      "ul li a",
-      ".m-newest2 a",
-      "option",
-      "ul#idData a",
-      "#indexselect a"
-    ],
-    "content": [
-      "div#article",
-      "div.txt"
+      "div.entry-content",
+      "div.post-content",
+      "ul.wp-block-post-template",
+      ".wp-block-cover__inner-container"
     ]
   },
   "fuhuzz.pro": {
@@ -888,6 +904,15 @@
     ],
     "content": [
       "#faqwrap"
+    ]
+  },
+  "genesistls.com": {
+    "parser": "NoblemtlParser",
+    "toc": [
+      "div.eplister a"
+    ],
+    "content": [
+      ".entry-content"
     ]
   },
   "goldennovel.com": {
@@ -940,6 +965,22 @@
       "section#chapter-content"
     ]
   },
+  "greenztl2.com": {
+    "parser": "MadaraVariantParser",
+    "toc": [
+      "li.wp-manga-chapter a:not([title])",
+      "#manga-chapters-holder a",
+      ".wp-manga-action-btn a"
+    ],
+    "content": [
+      ".reading-content .text-left",
+      "div.reading-content",
+      "div.entry-content",
+      "div.post-content",
+      "ul.wp-block-post-template",
+      ".wp-block-cover__inner-container"
+    ]
+  },
   "gunnerkrigg.com": {
     "parser": "GunnerkriggParser",
     "toc": [],
@@ -976,6 +1017,16 @@
       "section#picBox div.boxbody"
     ]
   },
+  "hiraethtranslation.com": {
+    "parser": "MadaraParser",
+    "toc": [
+      "li.wp-manga-chapter a"
+    ],
+    "content": [
+      "div.reading-content .text-left",
+      "div.entry-content"
+    ]
+  },
   "hiscension.com": {
     "parser": "HiscensionParser",
     "toc": [
@@ -996,6 +1047,15 @@
     ],
     "content": [
       "div.fontchanger"
+    ]
+  },
+  "hoxionia.com": {
+    "parser": "NoblemtlParser",
+    "toc": [
+      "div.eplister a"
+    ],
+    "content": [
+      ".entry-content"
     ]
   },
   "hui3r.wordpress.com": {
@@ -1020,6 +1080,15 @@
       "div[itemprop='articleBody']"
     ]
   },
+  "ilwxs.com": {
+    "parser": "_88xiaoshuoParser",
+    "toc": [
+      ".read a"
+    ],
+    "content": [
+      "div.content"
+    ]
+  },
   "indowebnovel.id": {
     "parser": "IndowebnovelParser",
     "toc": [
@@ -1029,6 +1098,22 @@
       "div.entry-content"
     ]
   },
+  "indratranslations.com": {
+    "parser": "KdtnovelsParser",
+    "toc": [
+      "li.wp-manga-chapter a:not([title])",
+      "#manga-chapters-holder a",
+      ".wp-manga-action-btn a"
+    ],
+    "content": [
+      ".reading-content .text-left",
+      "div.reading-content",
+      "div.entry-content",
+      "div.post-content",
+      "ul.wp-block-post-template",
+      ".wp-block-cover__inner-container"
+    ]
+  },
   "inkitt.com": {
     "parser": "InkittParser",
     "toc": [
@@ -1036,6 +1121,21 @@
     ],
     "content": [
       "#story-text-container"
+    ]
+  },
+  "isekaicyborg.wordpress.com": {
+    "parser": "WordpressBaseParser",
+    "toc": [
+      "div.entry-content a",
+      "div.post-content a",
+      "ul.wp-block-post-template a",
+      "#content a"
+    ],
+    "content": [
+      "div.entry-content",
+      "div.post-content",
+      "ul.wp-block-post-template",
+      ".wp-block-cover__inner-container"
     ]
   },
   "isotls.com": {
@@ -1088,6 +1188,15 @@
       "div.novelbody"
     ]
   },
+  "jobnib.com": {
+    "parser": "NoblemtlParser",
+    "toc": [
+      "div.eplister a"
+    ],
+    "content": [
+      ".entry-content"
+    ]
+  },
   "jonaxxstories.com": {
     "parser": "JonaxxstoriesParser",
     "toc": [
@@ -1134,6 +1243,31 @@
       "div.wp-block-columns"
     ]
   },
+  "kdtnovels.com": {
+    "parser": "KdtnovelsParser",
+    "toc": [
+      "li.wp-manga-chapter a:not([title])",
+      "#manga-chapters-holder a",
+      ".wp-manga-action-btn a"
+    ],
+    "content": [
+      ".reading-content .text-left",
+      "div.reading-content",
+      "div.entry-content",
+      "div.post-content",
+      "ul.wp-block-post-template",
+      ".wp-block-cover__inner-container"
+    ]
+  },
+  "knoxt.space": {
+    "parser": "KnoxtspaceParser",
+    "toc": [
+      "div.eplister a"
+    ],
+    "content": [
+      ".entry-content"
+    ]
+  },
   "ko-fi.com": {
     "parser": "KofiParser",
     "toc": [],
@@ -1142,6 +1276,17 @@
       ".fr-view, .article-body",
       "template[shadowrootmode]",
       ".article-body, #post-container, .post-content-container, .post-body, .p-post-content, article"
+    ]
+  },
+  "lazygirltranslations.com": {
+    "parser": "LazygirltranslationsParser",
+    "toc": [
+      "div.eplister a a",
+      ".page a",
+      "div.eplister a"
+    ],
+    "content": [
+      ".entry-content"
     ]
   },
   "leafstudio.site": {
@@ -1153,6 +1298,18 @@
       ".small"
     ]
   },
+  "libread.com": {
+    "parser": "FreeWebNovelParser",
+    "toc": [
+      "option",
+      "ul#idData a",
+      "#indexselect a"
+    ],
+    "content": [
+      "div#article",
+      "div.txt"
+    ]
+  },
   "libri7.com": {
     "parser": "Libri7Parser",
     "toc": [
@@ -1160,16 +1317,6 @@
     ],
     "content": [
       "div.c-chapter"
-    ]
-  },
-  "findnovel.net": {
-    "parser": "FindNovelParser",
-    "toc": [
-      "ul.chapter-list a"
-    ],
-    "content": [
-      "div.chapter-content",
-      "div#content"
     ]
   },
   "lightnovelcave.com": {
@@ -1180,6 +1327,48 @@
     "content": [
       "div.chapter-content",
       "div#content"
+    ]
+  },
+  "lightnovelfr.com": {
+    "parser": "LightnovelfrParser",
+    "toc": [
+      ".eplister a"
+    ],
+    "content": [
+      ".entry-content",
+      ".postbody"
+    ]
+  },
+  "lightnovelpub.com": {
+    "parser": "LightNovelPubParser",
+    "toc": [
+      "ul.chapter-list a"
+    ],
+    "content": [
+      "div.chapter-content",
+      "div#content"
+    ]
+  },
+  "lightnovels.live": {
+    "parser": "LightnovelsmeParser",
+    "toc": [
+      "ul.chapter-list a"
+    ],
+    "content": [
+      "div.chapter-content"
+    ]
+  },
+  "lightnovelstranslations.com": {
+    "parser": "LightNovelsTranslationsParser",
+    "toc": [
+      "li.chapter-item a"
+    ],
+    "content": [
+      "div.text_story",
+      "div.entry-content",
+      "div.post-content",
+      "ul.wp-block-post-template",
+      ".wp-block-cover__inner-container"
     ]
   },
   "lightnovelworld.co": {
@@ -1202,86 +1391,17 @@
       "div#content"
     ]
   },
-  "lightnovelpub.com": {
-    "parser": "LightNovelPubParser",
+  "lilyonthevalley.com": {
+    "parser": "FictioneerParser",
     "toc": [
-      "ul.chapter-list a"
+      ".chapter-group__list ._publish a",
+      "._future a",
+      ".chapter-group__list-item a"
     ],
     "content": [
-      "div.chapter-content",
-      "div#content"
-    ]
-  },
-  "novelbob.org": {
-    "parser": "LightNovelWorldParser",
-    "toc": [
-      "ul.chapter-list a"
-    ],
-    "content": [
-      "div.chapter-content",
-      "div#content"
-    ]
-  },
-  "novelpub.com": {
-    "parser": "LightNovelWorldParser",
-    "toc": [
-      "ul.chapter-list a"
-    ],
-    "content": [
-      "div.chapter-content",
-      "div#content"
-    ]
-  },
-  "webnovelpub.com": {
-    "parser": "LightNovelWorldParser",
-    "toc": [
-      "ul.chapter-list a"
-    ],
-    "content": [
-      "div.chapter-content",
-      "div#content"
-    ]
-  },
-  "pandanovel.co": {
-    "parser": "LightNovelWorldParser",
-    "toc": [
-      "ul.chapter-list a"
-    ],
-    "content": [
-      "div.chapter-content",
-      "div#content"
-    ]
-  },
-  "lightnovelstranslations.com": {
-    "parser": "LightNovelsTranslationsParser",
-    "toc": [
-      "li.chapter-item a"
-    ],
-    "content": [
-      "div.text_story",
-      "div.entry-content",
-      "div.post-content",
-      "ul.wp-block-post-template",
-      ".wp-block-cover__inner-container"
-    ]
-  },
-  "lightnovelfr.com": {
-    "parser": "LightnovelfrParser",
-    "toc": [
-      ".eplister a"
-    ],
-    "content": [
-      ".entry-content",
-      ".postbody"
-    ]
-  },
-  "lightnovels.live": {
-    "parser": "LightnovelsmeParser",
-    "toc": [
-      "ul.chapter-list a"
-    ],
-    "content": [
-      "div.chapter-content"
+      ".chapter-formatting",
+      "#chapter-content",
+      ".chapter__footnotes"
     ]
   },
   "literotica.com": {
@@ -1309,129 +1429,106 @@
       "div.entry-content.wp-block-post-content"
     ]
   },
-  "novelnice.com": {
-    "parser": "NovelniceParser",
+  "m.38xs.com": {
+    "parser": "_88xiaoshuoParser",
     "toc": [
-      "li.wp-manga-chapter a:not([title])",
-      "#manga-chapters-holder a",
-      ".wp-manga-action-btn a"
+      ".read a"
     ],
     "content": [
-      ".reading-content",
-      ".text-left",
-      ".chapter-content",
-      ".entry-content",
-      ".cha-content",
-      "#chapter-content"
+      "div.content"
     ]
   },
-  "readwebnovel.xyz": {
-    "parser": "MadaraParser",
+  "m.88xiaoshuo.net": {
+    "parser": "_88xiaoshuoParser",
     "toc": [
-      "li.wp-manga-chapter a:not([title])",
-      "#manga-chapters-holder a",
-      ".wp-manga-action-btn a"
+      ".read a"
     ],
     "content": [
-      ".reading-content .text-left",
-      "div.reading-content",
-      "div.entry-content",
-      "div.post-content",
-      "ul.wp-block-post-template",
-      ".wp-block-cover__inner-container"
+      "div.content"
     ]
   },
-  "wuxiaworld.site": {
-    "parser": "MadaraParser",
+  "m.bqg225.com": {
+    "parser": "Bqg225Parser",
     "toc": [
-      "li.wp-manga-chapter a:not([title])",
-      "#manga-chapters-holder a",
-      ".wp-manga-action-btn a"
+      "div.book_more a a",
+      "div.book_last a"
     ],
     "content": [
-      ".reading-content .text-left",
-      "div.reading-content",
-      "div.entry-content",
-      "div.post-content",
-      "ul.wp-block-post-template",
-      ".wp-block-cover__inner-container"
+      "div#chaptercontent"
     ]
   },
-  "mangasushi.net": {
-    "parser": "MadaraParser",
+  "m.ilwxs.com": {
+    "parser": "_88xiaoshuoParser",
     "toc": [
-      "li.wp-manga-chapter a:not([title])",
-      "#manga-chapters-holder a",
-      ".wp-manga-action-btn a"
+      ".read a"
     ],
     "content": [
-      ".reading-content .text-left",
-      "div.reading-content",
-      "div.entry-content",
-      "div.post-content",
-      "ul.wp-block-post-template",
-      ".wp-block-cover__inner-container"
+      "div.content"
     ]
   },
-  "greenztl2.com": {
-    "parser": "MadaraVariantParser",
+  "m.metanovel.org": {
+    "parser": "MetanovelParser",
     "toc": [
-      "li.wp-manga-chapter a:not([title])",
-      "#manga-chapters-holder a",
-      ".wp-manga-action-btn a"
+      ".section-list a"
     ],
     "content": [
-      ".reading-content .text-left",
-      "div.reading-content",
-      "div.entry-content",
-      "div.post-content",
-      "ul.wp-block-post-template",
-      ".wp-block-cover__inner-container"
+      "#content"
     ]
   },
-  "indratranslations.com": {
-    "parser": "KdtnovelsParser",
+  "m.qbxsw.com": {
+    "parser": "_88xiaoshuoParser",
     "toc": [
-      "li.wp-manga-chapter a:not([title])",
-      "#manga-chapters-holder a",
-      ".wp-manga-action-btn a"
+      ".read a"
     ],
     "content": [
-      ".reading-content .text-left",
-      "div.reading-content",
-      "div.entry-content",
-      "div.post-content",
-      "ul.wp-block-post-template",
-      ".wp-block-cover__inner-container"
+      "div.content"
     ]
   },
-  "kdtnovels.com": {
-    "parser": "KdtnovelsParser",
+  "m.shuhaige.net": {
+    "parser": "_88xiaoshuoParser",
     "toc": [
-      "li.wp-manga-chapter a:not([title])",
-      "#manga-chapters-holder a",
-      ".wp-manga-action-btn a"
+      ".read a"
     ],
     "content": [
-      ".reading-content .text-left",
-      "div.reading-content",
-      "div.entry-content",
-      "div.post-content",
-      "ul.wp-block-post-template",
-      ".wp-block-cover__inner-container"
+      "div.content"
+    ]
+  },
+  "m.sjks88.com": {
+    "parser": "Sjks88Parser",
+    "toc": [
+      "div.list a"
+    ],
+    "content": [
+      ".content"
+    ]
+  },
+  "m.tapas.io": {
+    "parser": "TapasParser",
+    "toc": [],
+    "content": [
+      "#viewport",
+      "article"
+    ]
+  },
+  "m.ttshu8.com": {
+    "parser": "_88xiaoshuoParser",
+    "toc": [
+      ".read a"
+    ],
+    "content": [
+      "div.content"
+    ]
+  },
+  "m.xpaoshuba.com": {
+    "parser": "_88xiaoshuoParser",
+    "toc": [
+      ".read a"
+    ],
+    "content": [
+      "div.content"
     ]
   },
   "madnovel.com": {
-    "parser": "MadnovelParser",
-    "toc": [
-      ".chapter-list, ul.divide-y.divide-border a",
-      "strong, span.truncate a"
-    ],
-    "content": [
-      ".content-inner, #chapter-content, .chapter-content, #article, .reading-content, .novel-reader-content, .novel-tts-content"
-    ]
-  },
-  "novelbuddy.io": {
     "parser": "MadnovelParser",
     "toc": [
       ".chapter-list, ul.divide-y.divide-border a",
@@ -1450,25 +1547,6 @@
       "#content article, .article_detail #main-content article, #article-body article, #primary-area section, section article, section, .article_detail #main-content"
     ]
   },
-  "www.mangahere.cc": {
-    "parser": "MangaHereParser",
-    "toc": [
-      "div#chapterlist li a"
-    ],
-    "content": [
-      "div.reader-main",
-      "#viewer"
-    ]
-  },
-  "mangaread.co": {
-    "parser": "MangaReadParser",
-    "toc": [
-      "li.wp-manga-chapter a"
-    ],
-    "content": [
-      "div.reading-content"
-    ]
-  },
   "mangakakalot.com": {
     "parser": "MangakakalotParser",
     "toc": [
@@ -1485,6 +1563,31 @@
     ],
     "content": [
       "div.container-chapter-reader"
+    ]
+  },
+  "mangaread.co": {
+    "parser": "MangaReadParser",
+    "toc": [
+      "li.wp-manga-chapter a"
+    ],
+    "content": [
+      "div.reading-content"
+    ]
+  },
+  "mangasushi.net": {
+    "parser": "MadaraParser",
+    "toc": [
+      "li.wp-manga-chapter a:not([title])",
+      "#manga-chapters-holder a",
+      ".wp-manga-action-btn a"
+    ],
+    "content": [
+      ".reading-content .text-left",
+      "div.reading-content",
+      "div.entry-content",
+      "div.post-content",
+      "ul.wp-block-post-template",
+      ".wp-block-cover__inner-container"
     ]
   },
   "manhwaden.com": {
@@ -1537,15 +1640,6 @@
       "div.reading-content"
     ]
   },
-  "m.metanovel.org": {
-    "parser": "MetanovelParser",
-    "toc": [
-      ".section-list a"
-    ],
-    "content": [
-      "#content"
-    ]
-  },
   "midnightrambles.in": {
     "parser": "MidnightramblesParser",
     "toc": [
@@ -1582,6 +1676,21 @@
       "main"
     ]
   },
+  "moonbunnycafe.com": {
+    "parser": "WordpressBaseParser",
+    "toc": [
+      "div.entry-content a",
+      "div.post-content a",
+      "ul.wp-block-post-template a",
+      "#content a"
+    ],
+    "content": [
+      "div.entry-content",
+      "div.post-content",
+      "ul.wp-block-post-template",
+      ".wp-block-cover__inner-container"
+    ]
+  },
   "moonquill.com": {
     "parser": "MoonqQillParser",
     "toc": [
@@ -1589,6 +1698,17 @@
     ],
     "content": [
       "div#content"
+    ]
+  },
+  "mvlempyr.com": {
+    "parser": "GenericParser",
+    "toc": [
+      "a[href*='/chapter/']",
+      ".chapter-link"
+    ],
+    "content": [
+      "div.chapter-content",
+      ".text-left"
     ]
   },
   "mvlempyr.io": {
@@ -1601,6 +1721,16 @@
     "content": [
       "div#chapter",
       "#chapter-content"
+    ]
+  },
+  "my-novel.online": {
+    "parser": "MyNovelOnlineParser",
+    "toc": [
+      "div.eplister a"
+    ],
+    "content": [
+      ".epwrapper .epcontent",
+      ".entry-content"
     ]
   },
   "mydramanovel.com": {
@@ -1641,6 +1771,17 @@
       "article div.pt-10"
     ]
   },
+  "ncode.syosetu.com": {
+    "parser": "SyosetuParser",
+    "toc": [
+      ".p-eplist__chapter-title, a",
+      "div.index_box a",
+      "div.p-eplist a"
+    ],
+    "content": [
+      "div.p-novel__body"
+    ]
+  },
   "neobook.org": {
     "parser": "NeobookParser",
     "toc": [
@@ -1649,6 +1790,19 @@
     "content": [
       "div.book-text",
       "article"
+    ]
+  },
+  "nhvnovels.com": {
+    "parser": "BlogusParser",
+    "toc": [
+      ".chapter-item[data-url]",
+      ".chapter-section .paid-class2[href]",
+      ".chapter-section .dropdown-content a[href]:not(.paid-class2)",
+      ".chapter-title a",
+      ".ch-ul-li p a"
+    ],
+    "content": [
+      ".chapter-text"
     ]
   },
   "nineheavens.org": {
@@ -1669,69 +1823,6 @@
       "div.text-base"
     ]
   },
-  "arcanetranslations.com": {
-    "parser": "NoblemtlParser",
-    "toc": [
-      "div.eplister a"
-    ],
-    "content": [
-      ".entry-content"
-    ]
-  },
-  "ckandawrites.online": {
-    "parser": "KnoxtspaceParser",
-    "toc": [
-      "div.eplister a"
-    ],
-    "content": [
-      ".entry-content"
-    ]
-  },
-  "daotranslate.com": {
-    "parser": "NoblemtlParser",
-    "toc": [
-      "div.eplister a"
-    ],
-    "content": [
-      ".entry-content"
-    ]
-  },
-  "faloomtl.com": {
-    "parser": "NoblemtlParser",
-    "toc": [
-      "div.eplister a"
-    ],
-    "content": [
-      ".entry-content"
-    ]
-  },
-  "genesistls.com": {
-    "parser": "NoblemtlParser",
-    "toc": [
-      "div.eplister a"
-    ],
-    "content": [
-      ".entry-content"
-    ]
-  },
-  "hoxionia.com": {
-    "parser": "NoblemtlParser",
-    "toc": [
-      "div.eplister a"
-    ],
-    "content": [
-      ".entry-content"
-    ]
-  },
-  "jobnib.com": {
-    "parser": "NoblemtlParser",
-    "toc": [
-      "div.eplister a"
-    ],
-    "content": [
-      ".entry-content"
-    ]
-  },
   "noblemtl.com": {
     "parser": "NoblemtlParser",
     "toc": [
@@ -1741,218 +1832,14 @@
       ".entry-content"
     ]
   },
-  "novelsparadise.net": {
-    "parser": "NoblemtlParser",
+  "nocturnetranslations.com": {
+    "parser": "WordpressBaseParser",
     "toc": [
-      "div.eplister a"
+      ".entry-content a",
+      "ul.lcp_catlist a"
     ],
     "content": [
       ".entry-content"
-    ]
-  },
-  "readfreebooksonline.org": {
-    "parser": "NoblemtlParser",
-    "toc": [
-      "div.eplister a"
-    ],
-    "content": [
-      ".entry-content"
-    ]
-  },
-  "knoxt.space": {
-    "parser": "KnoxtspaceParser",
-    "toc": [
-      "div.eplister a"
-    ],
-    "content": [
-      ".entry-content"
-    ]
-  },
-  "lazygirltranslations.com": {
-    "parser": "LazygirltranslationsParser",
-    "toc": [
-      "div.eplister a a",
-      ".page a",
-      "div.eplister a"
-    ],
-    "content": [
-      ".entry-content"
-    ]
-  },
-  "novelsknight.com": {
-    "parser": "NoblemtlParser",
-    "toc": [
-      "div.eplister a"
-    ],
-    "content": [
-      ".entry-content"
-    ]
-  },
-  "novelsknight.punchmanga.online": {
-    "parser": "NovelsknightlParser",
-    "toc": [
-      "div.eplister a"
-    ],
-    "content": [
-      ".entry-content"
-    ]
-  },
-  "cyborg-tl.com": {
-    "parser": "CyborgTlParser",
-    "toc": [
-      "div.eplister a"
-    ],
-    "content": [
-      ".entry-content"
-    ]
-  },
-  "universalnovel.com": {
-    "parser": "NoblemtlParser",
-    "toc": [
-      "div.eplister a"
-    ],
-    "content": [
-      ".entry-content"
-    ]
-  },
-  "whitemoonlightnovels.com": {
-    "parser": "WhitemoonlightnovelsParser",
-    "toc": [
-      "div.eplister a"
-    ],
-    "content": [
-      ".entry-content"
-    ]
-  },
-  "my-novel.online": {
-    "parser": "MyNovelOnlineParser",
-    "toc": [
-      "div.eplister a"
-    ],
-    "content": [
-      ".epwrapper .epcontent",
-      ".entry-content"
-    ]
-  },
-  "novel543.com": {
-    "parser": "Novel543Parser",
-    "toc": [
-      "div.chaplist ul:nth-of-type(2) a"
-    ],
-    "content": [
-      "div.chapter-content"
-    ]
-  },
-  "novelfever.com": {
-    "parser": "NovelFeverParser",
-    "toc": [
-      "#list-chapters a"
-    ],
-    "content": [
-      "div#chapter-content"
-    ]
-  },
-  "novel.naver.com": {
-    "parser": "NovelNaverParser",
-    "toc": [
-      "div.cont_sub > ul.list_type2 a",
-      "p.subj a"
-    ],
-    "content": [
-      "div.viewer_container"
-    ]
-  },
-  "novelonlinefree.info": {
-    "parser": "NovelOnlineFreeParser",
-    "toc": [
-      "div.chapter-list a"
-    ],
-    "content": [
-      "div.vung_doc",
-      "div.content-area"
-    ]
-  },
-  "novelonlinefull.com": {
-    "parser": "NovelOnlineFreeParser",
-    "toc": [
-      "div.chapter-list a"
-    ],
-    "content": [
-      "div.vung_doc",
-      "div.content-area"
-    ]
-  },
-  "wuxiaworld.online": {
-    "parser": "NovelOnlineFreeParser",
-    "toc": [
-      "div.chapter-list a"
-    ],
-    "content": [
-      "div.vung_doc",
-      "div.content-area"
-    ]
-  },
-  "wuxia-world.online": {
-    "parser": "NovelOnlineFreeParser",
-    "toc": [
-      "div.chapter-list a"
-    ],
-    "content": [
-      "div.vung_doc",
-      "div.content-area"
-    ]
-  },
-  "boxnovel.net": {
-    "parser": "NovelUpdatesOnlineParser",
-    "toc": [
-      "#chapter-section ul a"
-    ],
-    "content": [
-      "div.reading-content"
-    ]
-  },
-  "novelcool.com": {
-    "parser": "NovelcoolParser",
-    "toc": [
-      ".chapter-item-list a"
-    ],
-    "content": [
-      ".chapter-reading-section-list, .overflow-hidden"
-    ]
-  },
-  "novelebook.com": {
-    "parser": "NovelebookParser",
-    "toc": [
-      ".chapters-table a[ord]"
-    ],
-    "content": [
-      ".readerbody-wg"
-    ]
-  },
-  "allnovel.org": {
-    "parser": "NovelfullParser",
-    "toc": [
-      "ul.list-chapter a"
-    ],
-    "content": [
-      "#chr-content",
-      "#chapter-content",
-      "div.chapter-content",
-      ".chapter-c",
-      "#chapterContent"
-    ]
-  },
-  "allnovelnext.com": {
-    "parser": "NovelfullParser",
-    "toc": [
-      "ul.list-chapter a"
-    ],
-    "content": [
-      "#chr-content",
-      "#chapter-content",
-      "div.chapter-content",
-      ".chapter-c",
-      "#chapterContent"
     ]
   },
   "novel-bin.com": {
@@ -1994,6 +1881,76 @@
       "#chapterContent"
     ]
   },
+  "novel.naver.com": {
+    "parser": "NovelNaverParser",
+    "toc": [
+      "div.cont_sub > ul.list_type2 a",
+      "p.subj a"
+    ],
+    "content": [
+      "div.viewer_container"
+    ]
+  },
+  "novel18.syosetu.com": {
+    "parser": "SyosetuParser",
+    "toc": [
+      ".p-eplist__chapter-title, a",
+      "div.index_box a",
+      "div.p-eplist a"
+    ],
+    "content": [
+      "div.p-novel__body"
+    ]
+  },
+  "novel543.com": {
+    "parser": "Novel543Parser",
+    "toc": [
+      "div.chaplist ul:nth-of-type(2) a"
+    ],
+    "content": [
+      "div.chapter-content"
+    ]
+  },
+  "novelbin.me": {
+    "parser": "NovelBinParser",
+    "toc": [
+      "#list-chapter a",
+      ".list-chapter a"
+    ],
+    "content": [
+      "#chr-content",
+      ".chr-c"
+    ]
+  },
+  "novelbob.org": {
+    "parser": "LightNovelWorldParser",
+    "toc": [
+      "ul.chapter-list a"
+    ],
+    "content": [
+      "div.chapter-content",
+      "div#content"
+    ]
+  },
+  "novelbuddy.io": {
+    "parser": "MadnovelParser",
+    "toc": [
+      ".chapter-list, ul.divide-y.divide-border a",
+      "strong, span.truncate a"
+    ],
+    "content": [
+      ".content-inner, #chapter-content, .chapter-content, #article, .reading-content, .novel-reader-content, .novel-tts-content"
+    ]
+  },
+  "novelcool.com": {
+    "parser": "NovelcoolParser",
+    "toc": [
+      ".chapter-item-list a"
+    ],
+    "content": [
+      ".chapter-reading-section-list, .overflow-hidden"
+    ]
+  },
   "noveldrama.org": {
     "parser": "NovelfullParser",
     "toc": [
@@ -2007,6 +1964,162 @@
       "#chapterContent"
     ]
   },
+  "novelebook.com": {
+    "parser": "NovelebookParser",
+    "toc": [
+      ".chapters-table a[ord]"
+    ],
+    "content": [
+      ".readerbody-wg"
+    ]
+  },
+  "novelfever.com": {
+    "parser": "NovelFeverParser",
+    "toc": [
+      "#list-chapters a"
+    ],
+    "content": [
+      "div#chapter-content"
+    ]
+  },
+  "novelgate.net": {
+    "parser": "FastNovelParser",
+    "toc": [
+      "div#list-chapters li a"
+    ],
+    "content": [
+      "div#chapter-body"
+    ]
+  },
+  "novelgo.id": {
+    "parser": "NovelgoParser",
+    "toc": [
+      "div.chapter-list a",
+      "ul.main a"
+    ],
+    "content": [
+      "div#chapter-post-content"
+    ]
+  },
+  "novelgreat.net": {
+    "parser": "NovelgreatParser",
+    "toc": [
+      "ul.list-chapter a"
+    ],
+    "content": [
+      "div#chapter-c",
+      "#chr-content",
+      "#chapter-content",
+      "div.chapter-content",
+      ".chapter-c",
+      "#chapterContent"
+    ]
+  },
+  "novelhi.com": {
+    "parser": "NovelhiParser",
+    "toc": [
+      "div.dirList a",
+      "div.bookChapter a.fr a"
+    ],
+    "content": [
+      "#readcontent #showReading"
+    ]
+  },
+  "novelhold.com": {
+    "parser": "GenericParser",
+    "toc": [
+      ".list-chapter a",
+      "#list-chapter a"
+    ],
+    "content": [
+      "#chapter-content",
+      ".chapter-content"
+    ]
+  },
+  "novelib.com": {
+    "parser": "FictioneerParser",
+    "toc": [
+      ".chapter-group__list ._publish a",
+      "._future a",
+      ".chapter-group__list-item a"
+    ],
+    "content": [
+      ".chapter-formatting",
+      "#chapter-content",
+      ".chapter__footnotes"
+    ]
+  },
+  "novelingua.com": {
+    "parser": "NovelinguaParser",
+    "toc": [
+      ".pagelayer-text-holder a"
+    ],
+    "content": [
+      ".entry-content",
+      "article"
+    ]
+  },
+  "novellive.app": {
+    "parser": "NovelliveParser",
+    "toc": [
+      "ul li a",
+      ".m-newest2 a",
+      "option",
+      "ul#idData a",
+      "#indexselect a"
+    ],
+    "content": [
+      "div#article",
+      "div.txt"
+    ]
+  },
+  "novellive.com": {
+    "parser": "NovelliveParser",
+    "toc": [
+      "ul li a",
+      ".m-newest2 a",
+      "option",
+      "ul#idData a",
+      "#indexselect a"
+    ],
+    "content": [
+      "div#article",
+      "div.txt"
+    ]
+  },
+  "novellive.net": {
+    "parser": "NovelliveParser",
+    "toc": [
+      "ul li a",
+      ".m-newest2 a",
+      "option",
+      "ul#idData a",
+      "#indexselect a"
+    ],
+    "content": [
+      "div#article",
+      "div.txt"
+    ]
+  },
+  "novelmania.com.br": {
+    "parser": "NovelmaniaParser",
+    "toc": [
+      "ol.list-inline a",
+      "small a"
+    ],
+    "content": [
+      "div#chapter-content"
+    ]
+  },
+  "novelmao.com": {
+    "parser": "NovelmaoParser",
+    "toc": [
+      "ul.chapter-list a"
+    ],
+    "content": [
+      "article"
+    ]
+  },
   "novelmax.net": {
     "parser": "NovelfullParser",
     "toc": [
@@ -2018,6 +2131,36 @@
       "div.chapter-content",
       ".chapter-c",
       "#chapterContent"
+    ]
+  },
+  "novelmic.com": {
+    "parser": "MadaraParser",
+    "toc": [
+      "li.wp-manga-chapter a"
+    ],
+    "content": [
+      "div.reading-content .text-left",
+      "div.entry-content"
+    ]
+  },
+  "novelmt.com": {
+    "parser": "GenericParser",
+    "toc": [
+      ".list-chapter a",
+      "#list-chapter a"
+    ],
+    "content": [
+      "#chr-content",
+      ".chapter-content"
+    ]
+  },
+  "novelmtl.com": {
+    "parser": "ReadwnParser",
+    "toc": [
+      "ul.chapter-list a"
+    ],
+    "content": [
+      "div.chapter-content"
     ]
   },
   "novelnext.com": {
@@ -2059,67 +2202,40 @@
       "#chapterContent"
     ]
   },
-  "novelgo.id": {
-    "parser": "NovelgoParser",
+  "novelnice.com": {
+    "parser": "NovelniceParser",
     "toc": [
-      "div.chapter-list a",
-      "ul.main a"
+      "li.wp-manga-chapter a:not([title])",
+      "#manga-chapters-holder a",
+      ".wp-manga-action-btn a"
     ],
     "content": [
-      "div#chapter-post-content"
-    ]
-  },
-  "novelgreat.net": {
-    "parser": "NovelgreatParser",
-    "toc": [
-      "ul.list-chapter a"
-    ],
-    "content": [
-      "div#chapter-c",
-      "#chr-content",
-      "#chapter-content",
-      "div.chapter-content",
-      ".chapter-c",
-      "#chapterContent"
-    ]
-  },
-  "novelhi.com": {
-    "parser": "NovelhiParser",
-    "toc": [
-      "div.dirList a",
-      "div.bookChapter a.fr a"
-    ],
-    "content": [
-      "#readcontent #showReading"
-    ]
-  },
-  "novelingua.com": {
-    "parser": "NovelinguaParser",
-    "toc": [
-      ".pagelayer-text-holder a"
-    ],
-    "content": [
+      ".reading-content",
+      ".text-left",
+      ".chapter-content",
       ".entry-content",
-      "article"
+      ".cha-content",
+      "#chapter-content"
     ]
   },
-  "novelmania.com.br": {
-    "parser": "NovelmaniaParser",
+  "novelonlinefree.info": {
+    "parser": "NovelOnlineFreeParser",
     "toc": [
-      "ol.list-inline a",
-      "small a"
+      "div.chapter-list a"
     ],
     "content": [
-      "div#chapter-content"
+      "div.vung_doc",
+      "div.content-area"
     ]
   },
-  "novelmao.com": {
-    "parser": "NovelmaoParser",
+  "novelonlinefull.com": {
+    "parser": "NovelOnlineFreeParser",
     "toc": [
-      "ul.chapter-list a"
+      "div.chapter-list a"
     ],
     "content": [
-      "article"
+      "div.vung_doc",
+      "div.content-area"
     ]
   },
   "novelonomicon.com": {
@@ -2142,6 +2258,52 @@
       "div#c_ct"
     ]
   },
+  "novelpub.com": {
+    "parser": "LightNovelWorldParser",
+    "toc": [
+      "ul.chapter-list a"
+    ],
+    "content": [
+      "div.chapter-content",
+      "div#content"
+    ]
+  },
+  "novels.pl": {
+    "parser": "NovelsplParser",
+    "toc": [
+      "tbody#chapters a"
+    ],
+    "content": [
+      "div.article"
+    ]
+  },
+  "novelshub.org": {
+    "parser": "NovelshubParser",
+    "toc": [
+      "div.mt-4 a"
+    ],
+    "content": [
+      "div.p-6"
+    ]
+  },
+  "novelsknight.com": {
+    "parser": "NoblemtlParser",
+    "toc": [
+      "div.eplister a"
+    ],
+    "content": [
+      ".entry-content"
+    ]
+  },
+  "novelsknight.punchmanga.online": {
+    "parser": "NovelsknightlParser",
+    "toc": [
+      "div.eplister a"
+    ],
+    "content": [
+      ".entry-content"
+    ]
+  },
   "novelsonline.net": {
     "parser": "NovelsOnlineParser",
     "toc": [
@@ -2160,22 +2322,13 @@
       "div#contentall"
     ]
   },
-  "novelshub.org": {
-    "parser": "NovelshubParser",
+  "novelsparadise.net": {
+    "parser": "NoblemtlParser",
     "toc": [
-      "div.mt-4 a"
+      "div.eplister a"
     ],
     "content": [
-      "div.p-6"
-    ]
-  },
-  "novels.pl": {
-    "parser": "NovelsplParser",
-    "toc": [
-      "tbody#chapters a"
-    ],
-    "content": [
-      "div.article"
+      ".entry-content"
     ]
   },
   "novelsquare.blog": {
@@ -2196,6 +2349,15 @@
       "div.watch-chapter-detail"
     ]
   },
+  "novelupdates.cc": {
+    "parser": "WuxiaworldCoParser",
+    "toc": [
+      "ul.chapter-list a"
+    ],
+    "content": [
+      "div.section-list"
+    ]
+  },
   "novelversetranslations.com": {
     "parser": "NovelversetranslationsParser",
     "toc": [
@@ -2208,13 +2370,15 @@
       ".wp-block-cover__inner-container"
     ]
   },
-  "forums.nrvnqsr.com": {
-    "parser": "NrvnqsrParser",
+  "novgo.net": {
+    "parser": "GenericParser",
     "toc": [
-      "div.postlist a"
+      "option[value]",
+      ".list-chapter a"
     ],
     "content": [
-      "div.postbody div.content"
+      "#chapter-content",
+      "#chr-content"
     ]
   },
   "ntruyen.vn": {
@@ -2224,15 +2388,6 @@
     ],
     "content": [
       "#chapter-content"
-    ]
-  },
-  "fanfiction.com.br": {
-    "parser": "NyahFanfictionParser",
-    "toc": [
-      "div.container_chapter_list a"
-    ],
-    "content": [
-      "div.historia"
     ]
   },
   "nyantl.wordpress.com": {
@@ -2257,13 +2412,6 @@
       ".reader-container"
     ]
   },
-  "ranobelib.me": {
-    "parser": "OldranobelibParser",
-    "toc": [],
-    "content": [
-      ".reader-container"
-    ]
-  },
   "ontimestory.eu": {
     "parser": "OntimestoryParser",
     "toc": [
@@ -2278,6 +2426,16 @@
     "toc": [],
     "content": [
       "#novelArticle2"
+    ]
+  },
+  "pandanovel.co": {
+    "parser": "LightNovelWorldParser",
+    "toc": [
+      "ul.chapter-list a"
+    ],
+    "content": [
+      "div.chapter-content",
+      "div#content"
     ]
   },
   "pandasnovel.com": {
@@ -2323,6 +2481,30 @@
       ".kenta-article-content"
     ]
   },
+  "piaotia.com": {
+    "parser": "PtwxzParser",
+    "toc": [
+      "#content table tbody tr td table caption a a",
+      "div.centent a"
+    ],
+    "content": [
+      "#content",
+      "body"
+    ]
+  },
+  "pienovels.com": {
+    "parser": "BlogusParser",
+    "toc": [
+      ".chapter-item[data-url]",
+      ".chapter-section .paid-class2[href]",
+      ".chapter-section .dropdown-content a[href]:not(.paid-class2)",
+      ".chapter-title a",
+      ".ch-ul-li p a"
+    ],
+    "content": [
+      ".chapter-text"
+    ]
+  },
   "pindangscans.com": {
     "parser": "PindangscansParser",
     "toc": [
@@ -2343,15 +2525,15 @@
       "#mycontent"
     ]
   },
-  "piaotia.com": {
-    "parser": "PtwxzParser",
+  "ptwxz.com": {
+    "parser": "GenericParser",
     "toc": [
-      "#content table tbody tr td table caption a a",
-      "div.centent a"
+      "div.centent a",
+      "div.mainbody a"
     ],
     "content": [
-      "#content",
-      "body"
+      "div.content",
+      "#content"
     ]
   },
   "puretl.com": {
@@ -2364,23 +2546,13 @@
       "div.sqs-html-content"
     ]
   },
-  "webnovel.com": {
-    "parser": "QidianParser",
+  "qbxsw.com": {
+    "parser": "_88xiaoshuoParser",
     "toc": [
-      "ul.content-list a",
-      "div.volume-item ol a"
+      ".read a"
     ],
     "content": [
-      "div.chapter_content"
-    ]
-  },
-  "quanben5.io": {
-    "parser": "Quanben5Parser",
-    "toc": [
-      "ul.list a"
-    ],
-    "content": [
-      "#content"
+      "div.content"
     ]
   },
   "quanben.io": {
@@ -2392,6 +2564,15 @@
       "div#content"
     ]
   },
+  "quanben5.io": {
+    "parser": "Quanben5Parser",
+    "toc": [
+      "ul.list a"
+    ],
+    "content": [
+      "#content"
+    ]
+  },
   "queenrosenovel.blogspot.com": {
     "parser": "QueenrosenovelblogspotParser",
     "toc": [
@@ -2399,6 +2580,16 @@
     ],
     "content": [
       "div.Novel"
+    ]
+  },
+  "questionablequesting.com": {
+    "parser": "SpacebattlesParser",
+    "toc": [
+      "div.structItem--threadmark a"
+    ],
+    "content": [
+      "article.message-body",
+      "div.bbWrapper"
     ]
   },
   "quotev.com": {
@@ -2418,6 +2609,23 @@
     ],
     "content": [
       "div.zoomdesc-cont"
+    ]
+  },
+  "ranobelib.me": {
+    "parser": "OldranobelibParser",
+    "toc": [],
+    "content": [
+      ".reader-container"
+    ]
+  },
+  "ranobes.com": {
+    "parser": "RanobesParser",
+    "toc": [
+      "#dle-content a",
+      ".navigation a"
+    ],
+    "content": [
+      "div#arrticle"
     ]
   },
   "ranobes.net": {
@@ -2440,16 +2648,6 @@
       "div#arrticle"
     ]
   },
-  "ranobes.com": {
-    "parser": "RanobesParser",
-    "toc": [
-      "#dle-content a",
-      ".navigation a"
-    ],
-    "content": [
-      "div#arrticle"
-    ]
-  },
   "re-library.com": {
     "parser": "ReLibraryParser",
     "toc": [
@@ -2462,24 +2660,6 @@
       ".wp-block-cover__inner-container"
     ]
   },
-  "readlightnovel.cc": {
-    "parser": "ReadLightNovelCcParser",
-    "toc": [
-      "a.chapter-item"
-    ],
-    "content": [
-      "section.section"
-    ]
-  },
-  "readlightnovel.me": {
-    "parser": "ReadLightNovelParser",
-    "toc": [
-      "div.chapters a"
-    ],
-    "content": [
-      "div[class^='chapter-content']"
-    ]
-  },
   "readernovel.net": {
     "parser": "ReaderNovelParser",
     "toc": [
@@ -2488,6 +2668,15 @@
     "content": [
       "div#chapter-container",
       "#chapter-content"
+    ]
+  },
+  "readfreebooksonline.org": {
+    "parser": "NoblemtlParser",
+    "toc": [
+      "div.eplister a"
+    ],
+    "content": [
+      ".entry-content"
     ]
   },
   "readhive.org": {
@@ -2510,13 +2699,22 @@
       "main > div:not(.advertisement):not(.promo-container):not(.comments):not([style])"
     ]
   },
-  "allnovelbook.com": {
-    "parser": "ReadnoveldailyParser",
+  "readlightnovel.cc": {
+    "parser": "ReadLightNovelCcParser",
     "toc": [
-      "#viewchapter .row a"
+      "a.chapter-item"
     ],
     "content": [
-      "#content"
+      "section.section"
+    ]
+  },
+  "readlightnovel.me": {
+    "parser": "ReadLightNovelParser",
+    "toc": [
+      "div.chapters a"
+    ],
+    "content": [
+      "div[class^='chapter-content']"
     ]
   },
   "readnovelmtl.com": {
@@ -2529,49 +2727,20 @@
       "#content"
     ]
   },
-  "fannovel.com": {
-    "parser": "ReadwnParser",
+  "readwebnovel.xyz": {
+    "parser": "MadaraParser",
     "toc": [
-      "ul.chapter-list a"
+      "li.wp-manga-chapter a:not([title])",
+      "#manga-chapters-holder a",
+      ".wp-manga-action-btn a"
     ],
     "content": [
-      "div.chapter-content"
-    ]
-  },
-  "fannovels.com": {
-    "parser": "ReadwnParser",
-    "toc": [
-      "ul.chapter-list a"
-    ],
-    "content": [
-      "div.chapter-content"
-    ]
-  },
-  "fansmtl.com": {
-    "parser": "ReadwnParser",
-    "toc": [
-      "ul.chapter-list a"
-    ],
-    "content": [
-      "div.chapter-content"
-    ]
-  },
-  "fanmtl.com": {
-    "parser": "ReadwnParser",
-    "toc": [
-      "ul.chapter-list a"
-    ],
-    "content": [
-      "div.chapter-content"
-    ]
-  },
-  "novelmtl.com": {
-    "parser": "ReadwnParser",
-    "toc": [
-      "ul.chapter-list a"
-    ],
-    "content": [
-      "div.chapter-content"
+      ".reading-content .text-left",
+      "div.reading-content",
+      "div.entry-content",
+      "div.post-content",
+      "ul.wp-block-post-template",
+      ".wp-block-cover__inner-container"
     ]
   },
   "readwn.com": {
@@ -2583,40 +2752,18 @@
       "div.chapter-content"
     ]
   },
-  "wuxiafox.com": {
-    "parser": "ReadwnParser",
+  "readwn.org": {
+    "parser": "NovelliveParser",
     "toc": [
-      "ul.chapter-list a"
+      "ul li a",
+      ".m-newest2 a",
+      "option",
+      "ul#idData a",
+      "#indexselect a"
     ],
     "content": [
-      "div.chapter-content"
-    ]
-  },
-  "wuxiamtl.com": {
-    "parser": "ReadwnParser",
-    "toc": [
-      "ul.chapter-list a"
-    ],
-    "content": [
-      "div.chapter-content"
-    ]
-  },
-  "wuxiapub.com": {
-    "parser": "ReadwnParser",
-    "toc": [
-      "ul.chapter-list a"
-    ],
-    "content": [
-      "div.chapter-content"
-    ]
-  },
-  "wuxiaspot.com": {
-    "parser": "ReadwnParser",
-    "toc": [
-      "ul.chapter-list a"
-    ],
-    "content": [
-      "div.chapter-content"
+      "div#article",
+      "div.txt"
     ]
   },
   "reddit.com": {
@@ -2641,7 +2788,7 @@
       "div.epcontent"
     ]
   },
-  "royalroadl.com": {
+  "royalroad.com": {
     "parser": "RoyalRoadParser",
     "toc": [
       "table#chapters a",
@@ -2654,7 +2801,7 @@
       "div.portlet-body"
     ]
   },
-  "royalroad.com": {
+  "royalroadl.com": {
     "parser": "RoyalRoadParser",
     "toc": [
       "table#chapters a",
@@ -2697,17 +2844,6 @@
       "div.entry-content"
     ]
   },
-  "tl.rulate.ru": {
-    "parser": "RulateParser",
-    "toc": [
-      ".chapter_row",
-      "[data-price] a",
-      ".t a a"
-    ],
-    "content": [
-      ".content-text"
-    ]
-  },
   "ruvers.ru": {
     "parser": "RuversParser",
     "toc": [
@@ -2716,6 +2852,30 @@
     "content": [
       "books-chapters-text-component",
       "div.book_description"
+    ]
+  },
+  "sasakitomyiano.wordpress.com": {
+    "parser": "WordpressBaseParser",
+    "toc": [
+      "div.entry-content a",
+      "div.post-content a",
+      "ul.wp-block-post-template a",
+      "#content a"
+    ],
+    "content": [
+      "div.entry-content",
+      "div.post-content",
+      "ul.wp-block-post-template",
+      ".wp-block-cover__inner-container"
+    ]
+  },
+  "scifistories.com": {
+    "parser": "WLPublishingParser",
+    "toc": [
+      "div#index-list a"
+    ],
+    "content": [
+      "article"
     ]
   },
   "scribblehub.com": {
@@ -2753,6 +2913,21 @@
     ],
     "content": [
       "div#story_center_panel"
+    ]
+  },
+  "shalvationtranslations.wordpress.com": {
+    "parser": "WordpressBaseParser",
+    "toc": [
+      "div.entry-content a",
+      "div.post-content a",
+      "ul.wp-block-post-template a",
+      "#content a"
+    ],
+    "content": [
+      "div.entry-content",
+      "div.post-content",
+      "ul.wp-block-post-template",
+      ".wp-block-cover__inner-container"
     ]
   },
   "shanghaifantasy.com": {
@@ -2835,16 +3010,16 @@
       "#chaptercontent"
     ]
   },
-  "sjks88.com": {
-    "parser": "Sjks88Parser",
+  "shuhaige.net": {
+    "parser": "_88xiaoshuoParser",
     "toc": [
-      "div.list a"
+      ".read a"
     ],
     "content": [
-      ".content"
+      "div.content"
     ]
   },
-  "m.sjks88.com": {
+  "sjks88.com": {
     "parser": "Sjks88Parser",
     "toc": [
       "div.list a"
@@ -2900,6 +3075,15 @@
       ".wp-block-cover__inner-container"
     ]
   },
+  "sonako.fandom.com": {
+    "parser": "SonakoParser",
+    "toc": [
+      "div.mw-content-ltr a"
+    ],
+    "content": [
+      "div.mw-content-ltr"
+    ]
+  },
   "sonako.wikia.com": {
     "parser": "SonakoParser",
     "toc": [
@@ -2909,13 +3093,14 @@
       "div.mw-content-ltr"
     ]
   },
-  "sonako.fandom.com": {
-    "parser": "SonakoParser",
+  "sonicmtl.com": {
+    "parser": "MadaraParser",
     "toc": [
-      "div.mw-content-ltr a"
+      "li.wp-manga-chapter a"
     ],
     "content": [
-      "div.mw-content-ltr"
+      "div.reading-content .text-left",
+      "div.entry-content"
     ]
   },
   "soverse.com": {
@@ -2927,56 +3112,6 @@
       "div.entry-content"
     ]
   },
-  "forums.spacebattles.com": {
-    "parser": "SpacebattlesParser",
-    "toc": [
-      "div.structItem--threadmark a"
-    ],
-    "content": [
-      "article.message-body",
-      "div.bbWrapper"
-    ]
-  },
-  "forums.sufficientvelocity.com": {
-    "parser": "SpacebattlesParser",
-    "toc": [
-      "div.structItem--threadmark a"
-    ],
-    "content": [
-      "article.message-body",
-      "div.bbWrapper"
-    ]
-  },
-  "alternatehistory.com": {
-    "parser": "SpacebattlesParser",
-    "toc": [
-      "div.structItem--threadmark a"
-    ],
-    "content": [
-      "article.message-body",
-      "div.bbWrapper"
-    ]
-  },
-  "forum.questionablequesting.com": {
-    "parser": "SpacebattlesParser",
-    "toc": [
-      "div.structItem--threadmark a"
-    ],
-    "content": [
-      "article.message-body",
-      "div.bbWrapper"
-    ]
-  },
-  "questionablequesting.com": {
-    "parser": "SpacebattlesParser",
-    "toc": [
-      "div.structItem--threadmark a"
-    ],
-    "content": [
-      "article.message-body",
-      "div.bbWrapper"
-    ]
-  },
   "spiritfanfiction.com": {
     "parser": "SpiritfanfictionParser",
     "toc": [
@@ -2984,6 +3119,19 @@
     ],
     "content": [
       "div.texto-capitulo"
+    ]
+  },
+  "springofromance.com": {
+    "parser": "FictioneerParser",
+    "toc": [
+      ".chapter-group__list ._publish a",
+      "._future a",
+      ".chapter-group__list-item a"
+    ],
+    "content": [
+      ".chapter-formatting",
+      "#chapter-content",
+      ".chapter__footnotes"
     ]
   },
   "sspai.com": {
@@ -2995,6 +3143,15 @@
       "div.wangEditor-txt"
     ]
   },
+  "storiesonline.net": {
+    "parser": "WLPublishingParser",
+    "toc": [
+      "div#index-list a"
+    ],
+    "content": [
+      "article"
+    ]
+  },
   "storyseedling.com": {
     "parser": "StorySeedlingParser",
     "toc": [
@@ -3003,28 +3160,6 @@
     "content": [
       "div.prose .mb-4",
       "#chapter-content"
-    ]
-  },
-  "ncode.syosetu.com": {
-    "parser": "SyosetuParser",
-    "toc": [
-      ".p-eplist__chapter-title, a",
-      "div.index_box a",
-      "div.p-eplist a"
-    ],
-    "content": [
-      "div.p-novel__body"
-    ]
-  },
-  "novel18.syosetu.com": {
-    "parser": "SyosetuParser",
-    "toc": [
-      ".p-eplist__chapter-title, a",
-      "div.index_box a",
-      "div.p-eplist a"
-    ],
-    "content": [
-      "div.p-novel__body"
     ]
   },
   "taffygirl13.wordpress.com": {
@@ -3042,14 +3177,6 @@
     ]
   },
   "tapas.io": {
-    "parser": "TapasParser",
-    "toc": [],
-    "content": [
-      "#viewport",
-      "article"
-    ]
-  },
-  "m.tapas.io": {
     "parser": "TapasParser",
     "toc": [],
     "content": [
@@ -3113,6 +3240,17 @@
       ".chapter-content"
     ]
   },
+  "tl.rulate.ru": {
+    "parser": "RulateParser",
+    "toc": [
+      ".chapter_row",
+      "[data-price] a",
+      ".t a a"
+    ],
+    "content": [
+      ".content-text"
+    ]
+  },
   "toctruyen.net": {
     "parser": "ToctruyenParser",
     "toc": [],
@@ -3127,6 +3265,15 @@
     ],
     "content": [
       "section.entry"
+    ]
+  },
+  "tongrenshe.cc": {
+    "parser": "TrxsParser",
+    "toc": [
+      ".book_list a"
+    ],
+    "content": [
+      ".read_chapterDetail"
     ]
   },
   "translationchicken.com": {
@@ -3154,6 +3301,15 @@
       "div.chapter-c"
     ]
   },
+  "truyenfull.vn": {
+    "parser": "TruyenfullParser",
+    "toc": [
+      "ul.list-chapter a"
+    ],
+    "content": [
+      "div.chapter-c"
+    ]
+  },
   "truyennhabo.com": {
     "parser": "TruyenParser",
     "toc": [
@@ -3162,15 +3318,6 @@
     ],
     "content": [
       "article.blog"
-    ]
-  },
-  "truyenfull.vn": {
-    "parser": "TruyenfullParser",
-    "toc": [
-      "ul.list-chapter a"
-    ],
-    "content": [
-      "div.chapter-c"
     ]
   },
   "truyenyy.com": {
@@ -3191,13 +3338,13 @@
       ".read_chapterDetail"
     ]
   },
-  "tongrenshe.cc": {
-    "parser": "TrxsParser",
+  "ttshu8.com": {
+    "parser": "_88xiaoshuoParser",
     "toc": [
-      ".book_list a"
+      ".read a"
     ],
     "content": [
-      ".read_chapterDetail"
+      "div.content"
     ]
   },
   "twkan.com": {
@@ -3218,6 +3365,15 @@
       ".article"
     ]
   },
+  "universalnovel.com": {
+    "parser": "NoblemtlParser",
+    "toc": [
+      "div.eplister a"
+    ],
+    "content": [
+      ".entry-content"
+    ]
+  },
   "unlimitednovelfailures.mangamatters.com": {
     "parser": "UnlimitedNovelFailuresParser",
     "toc": [
@@ -3231,6 +3387,17 @@
       "div.post-content",
       "ul.wp-block-post-template",
       ".wp-block-cover__inner-container"
+    ]
+  },
+  "uukanshu.com": {
+    "parser": "UukanshuParser",
+    "toc": [
+      "#chapterList a",
+      "#chapterList li a"
+    ],
+    "content": [
+      "#contentbox",
+      "#content"
     ]
   },
   "velvet-reverie.org": {
@@ -3269,31 +3436,19 @@
       ".content"
     ]
   },
-  "finestories.com": {
-    "parser": "WLPublishingParser",
+  "wanderertl130.id": {
+    "parser": "Wanderertl130Parser",
     "toc": [
-      "div#index-list a"
+      "div.entry-content a",
+      "div.post-content a",
+      "ul.wp-block-post-template a",
+      "#content a"
     ],
     "content": [
-      "article"
-    ]
-  },
-  "scifistories.com": {
-    "parser": "WLPublishingParser",
-    "toc": [
-      "div#index-list a"
-    ],
-    "content": [
-      "article"
-    ]
-  },
-  "storiesonline.net": {
-    "parser": "WLPublishingParser",
-    "toc": [
-      "div#index-list a"
-    ],
-    "content": [
-      "article"
+      "div.entry-content",
+      "div.post-content",
+      "ul.wp-block-post-template",
+      ".wp-block-cover__inner-container"
     ]
   },
   "wanderinginn.com": {
@@ -3318,6 +3473,16 @@
       "div#wtr-content"
     ]
   },
+  "webnovel.com": {
+    "parser": "QidianParser",
+    "toc": [
+      "ul.content-list a",
+      "div.volume-item ol a"
+    ],
+    "content": [
+      "div.chapter_content"
+    ]
+  },
   "webnovelonline.com": {
     "parser": "WebNovelOnlineParser",
     "toc": [
@@ -3326,6 +3491,27 @@
     "content": [
       "div#raw",
       "div.chapter-content"
+    ]
+  },
+  "webnovelpub.com": {
+    "parser": "LightNovelWorldParser",
+    "toc": [
+      "ul.chapter-list a"
+    ],
+    "content": [
+      "div.chapter-content",
+      "div#content"
+    ]
+  },
+  "webnovelworld.org": {
+    "parser": "GenericParser",
+    "toc": [
+      ".chapter-list a",
+      "#chapterlist a"
+    ],
+    "content": [
+      "#chapter-content",
+      ".chapter-content"
     ]
   },
   "wenku8.net": {
@@ -3337,6 +3523,17 @@
       "#contentmain"
     ]
   },
+  "wetriedtls.com": {
+    "parser": "MadaraParser",
+    "toc": [
+      "li.wp-manga-chapter a",
+      "#chapterlist a"
+    ],
+    "content": [
+      "div.entry-content",
+      "#chaptercontent"
+    ]
+  },
   "wfxs.tw": {
     "parser": "WfxsParser",
     "toc": [
@@ -3346,6 +3543,15 @@
     "content": [
       "#content",
       "div.read-content"
+    ]
+  },
+  "whitemoonlightnovels.com": {
+    "parser": "WhitemoonlightnovelsParser",
+    "toc": [
+      "div.eplister a"
+    ],
+    "content": [
+      ".entry-content"
     ]
   },
   "wnmtl.com": {
@@ -3376,126 +3582,6 @@
       "div.reading-content div.text-left"
     ]
   },
-  "bakapervert.wordpress.com": {
-    "parser": "WordpressBaseParser",
-    "toc": [
-      "div.entry-content a",
-      "div.post-content a",
-      "ul.wp-block-post-template a",
-      "#content a"
-    ],
-    "content": [
-      "div.entry-content",
-      "div.post-content",
-      "ul.wp-block-post-template",
-      ".wp-block-cover__inner-container"
-    ]
-  },
-  "crimsonmagic.me": {
-    "parser": "WordpressBaseParser",
-    "toc": [
-      "div.entry-content a",
-      "div.post-content a",
-      "ul.wp-block-post-template a",
-      "#content a"
-    ],
-    "content": [
-      "div.entry-content",
-      "div.post-content",
-      "ul.wp-block-post-template",
-      ".wp-block-cover__inner-container"
-    ]
-  },
-  "shalvationtranslations.wordpress.com": {
-    "parser": "WordpressBaseParser",
-    "toc": [
-      "div.entry-content a",
-      "div.post-content a",
-      "ul.wp-block-post-template a",
-      "#content a"
-    ],
-    "content": [
-      "div.entry-content",
-      "div.post-content",
-      "ul.wp-block-post-template",
-      ".wp-block-cover__inner-container"
-    ]
-  },
-  "frostfire10.wordpress.com": {
-    "parser": "WordpressBaseParser",
-    "toc": [
-      "div.entry-content a",
-      "div.post-content a",
-      "ul.wp-block-post-template a",
-      "#content a"
-    ],
-    "content": [
-      "div.entry-content",
-      "div.post-content",
-      "ul.wp-block-post-template",
-      ".wp-block-cover__inner-container"
-    ]
-  },
-  "isekaicyborg.wordpress.com": {
-    "parser": "WordpressBaseParser",
-    "toc": [
-      "div.entry-content a",
-      "div.post-content a",
-      "ul.wp-block-post-template a",
-      "#content a"
-    ],
-    "content": [
-      "div.entry-content",
-      "div.post-content",
-      "ul.wp-block-post-template",
-      ".wp-block-cover__inner-container"
-    ]
-  },
-  "moonbunnycafe.com": {
-    "parser": "WordpressBaseParser",
-    "toc": [
-      "div.entry-content a",
-      "div.post-content a",
-      "ul.wp-block-post-template a",
-      "#content a"
-    ],
-    "content": [
-      "div.entry-content",
-      "div.post-content",
-      "ul.wp-block-post-template",
-      ".wp-block-cover__inner-container"
-    ]
-  },
-  "wanderertl130.id": {
-    "parser": "Wanderertl130Parser",
-    "toc": [
-      "div.entry-content a",
-      "div.post-content a",
-      "ul.wp-block-post-template a",
-      "#content a"
-    ],
-    "content": [
-      "div.entry-content",
-      "div.post-content",
-      "ul.wp-block-post-template",
-      ".wp-block-cover__inner-container"
-    ]
-  },
-  "sasakitomyiano.wordpress.com": {
-    "parser": "WordpressBaseParser",
-    "toc": [
-      "div.entry-content a",
-      "div.post-content a",
-      "ul.wp-block-post-template a",
-      "#content a"
-    ],
-    "content": [
-      "div.entry-content",
-      "div.post-content",
-      "ul.wp-block-post-template",
-      ".wp-block-cover__inner-container"
-    ]
-  },
   "wtnovels.com": {
     "parser": "WtnovelsParser",
     "toc": [
@@ -3510,6 +3596,16 @@
       ".wp-block-cover__inner-container"
     ]
   },
+  "wuxia-world.online": {
+    "parser": "NovelOnlineFreeParser",
+    "toc": [
+      "div.chapter-list a"
+    ],
+    "content": [
+      "div.vung_doc",
+      "div.content-area"
+    ]
+  },
   "wuxia.city": {
     "parser": "WuxiacityParser",
     "toc": [
@@ -3519,13 +3615,58 @@
       "#chapter-content"
     ]
   },
-  "novelupdates.cc": {
-    "parser": "WuxiaworldCoParser",
+  "wuxia.click": {
+    "parser": "WuxiaworldeuParser",
+    "toc": [],
+    "content": [
+      "#chapterText"
+    ]
+  },
+  "wuxiabox.com": {
+    "parser": "GenericParser",
+    "toc": [
+      ".chapter-list a",
+      "#chapterlist a"
+    ],
+    "content": [
+      "#chapter-content",
+      ".chapter-content"
+    ]
+  },
+  "wuxiafox.com": {
+    "parser": "ReadwnParser",
     "toc": [
       "ul.chapter-list a"
     ],
     "content": [
-      "div.section-list"
+      "div.chapter-content"
+    ]
+  },
+  "wuxiamtl.com": {
+    "parser": "ReadwnParser",
+    "toc": [
+      "ul.chapter-list a"
+    ],
+    "content": [
+      "div.chapter-content"
+    ]
+  },
+  "wuxiapub.com": {
+    "parser": "ReadwnParser",
+    "toc": [
+      "ul.chapter-list a"
+    ],
+    "content": [
+      "div.chapter-content"
+    ]
+  },
+  "wuxiaspot.com": {
+    "parser": "ReadwnParser",
+    "toc": [
+      "ul.chapter-list a"
+    ],
+    "content": [
+      "div.chapter-content"
     ]
   },
   "wuxiaworld.com": {
@@ -3547,11 +3688,63 @@
       "#chapterText"
     ]
   },
-  "wuxia.click": {
-    "parser": "WuxiaworldeuParser",
+  "wuxiaworld.online": {
+    "parser": "NovelOnlineFreeParser",
+    "toc": [
+      "div.chapter-list a"
+    ],
+    "content": [
+      "div.vung_doc",
+      "div.content-area"
+    ]
+  },
+  "wuxiaworld.site": {
+    "parser": "MadaraParser",
+    "toc": [
+      "li.wp-manga-chapter a:not([title])",
+      "#manga-chapters-holder a",
+      ".wp-manga-action-btn a"
+    ],
+    "content": [
+      ".reading-content .text-left",
+      "div.reading-content",
+      "div.entry-content",
+      "div.post-content",
+      "ul.wp-block-post-template",
+      ".wp-block-cover__inner-container"
+    ]
+  },
+  "www.8muses.com": {
+    "parser": "EightMusesParser",
+    "toc": [
+      "div.gallery a"
+    ],
+    "content": [
+      "div#content"
+    ]
+  },
+  "www.fanfiction.net": {
+    "parser": "FanFictionParser",
     "toc": [],
     "content": [
-      "#chapterText"
+      "div.storytext"
+    ]
+  },
+  "www.fictionpress.com": {
+    "parser": "FanFictionParser",
+    "toc": [],
+    "content": [
+      "div.storytext"
+    ]
+  },
+  "www.mangahere.cc": {
+    "parser": "MangaHereParser",
+    "toc": [
+      "div#chapterlist li a"
+    ],
+    "content": [
+      "div.reader-main",
+      "#viewer"
     ]
   },
   "wxscs.com": {
@@ -3591,6 +3784,15 @@
       "div.post-title"
     ]
   },
+  "xpaoshuba.com": {
+    "parser": "_88xiaoshuoParser",
+    "toc": [
+      ".read a"
+    ],
+    "content": [
+      "div.content"
+    ]
+  },
   "yeduge.com": {
     "parser": "YedugeParser",
     "toc": [
@@ -3621,6 +3823,16 @@
     ],
     "content": [
       "div#content"
+    ]
+  },
+  "zetrotranslation.com": {
+    "parser": "MadaraParser",
+    "toc": [
+      "li.wp-manga-chapter a"
+    ],
+    "content": [
+      "div.reading-content .text-left",
+      "div.entry-content"
     ]
   },
   "zhenhunxiaoshuo.com": {
