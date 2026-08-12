@@ -122,8 +122,19 @@ export function backendProxyUrl(): string {
   return `${getBackendUrl()}/api/proxy?url=`;
 }
 
+/** Backends confirmed healthy by the last health check (round-robin pool). */
+let activePool: string[] = [];
+let poolCursor = 0;
+
 export function getBackendUrl(): string {
-  return (localStorage.getItem(URL_KEY) || DEFAULT_BACKEND_URL).replace(/\/$/, '');
+  const stored = localStorage.getItem(URL_KEY);
+  if (stored) return stored.replace(/\/$/, '');
+  if (activePool.length > 0) {
+    const url = activePool[poolCursor % activePool.length];
+    poolCursor++;
+    return url.replace(/\/$/, '');
+  }
+  return DEFAULT_BACKEND_URL.replace(/\/$/, '');
 }
 
 export function setBackendUrl(url: string) {
