@@ -959,6 +959,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
             <Button
               type="submit"
               disabled={isConverting}
+              aria-label={isConverting ? 'Working, please wait' : hasFetchedChapters ? 'Generate EPUB' : 'Fetch Chapters'}
               className="w-full bg-gradient-primary hover:shadow-glow transition-smooth text-lg py-6"
             >
               {isConverting ? (

@@ -95,7 +95,7 @@ const Index = () => {
       className="min-h-screen bg-gradient-hero"
       style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
-      <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-8 space-y-6 sm:space-y-8 max-w-full">
+      <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-8 space-y-6 sm:space-y-8 max-w-full">
 
         {/* Main Content */}
         <div className="space-y-6">
@@ -151,7 +151,7 @@ const Index = () => {
           </div>
         </div>
 
-      </div>
+      </main>
     </div>
   );
 };

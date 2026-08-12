@@ -38,11 +38,15 @@
       gtag('config', 'G-Q5R86ZENND');
     </script>
 
-    <!-- Google Fonts: load only UI fonts upfront with display=optional to prevent layout-shifting font swaps -->
+    <!-- Preconnect to font + API origins BEFORE any blocking resources -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Figtree:wght@300;400;500;600;700&display=optional" rel="stylesheet">
-    <!-- EPUB reader fonts loaded after page is interactive to avoid render-blocking -->
+    <link rel="preconnect" href="https://link-to-epub-37130-dfa858b712fc.herokuapp.com" crossorigin>
+
+    <!-- Google Fonts: NON-render-blocking via media print trick (saves ~780ms on mobile) -->
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Figtree:wght@300;400;500;600;700&display=optional" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Figtree:wght@300;400;500;600;700&display=optional"></noscript>
+    <!-- EPUB reader fonts loaded after page is interactive -->
     <script>
       window.addEventListener('load', function() {
         var link = document.createElement('link');
