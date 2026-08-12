@@ -1,53 +1,41 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <!-- Main app -->
   <url>
     <loc>https://linktoepub.com/</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
+  <!-- Static subpages -->
   <url>
-    <loc>https://linktoepub.com/#/sites</loc>
-    <changefreq>weekly</changefreq>
+    <loc>https://linktoepub.com/convert</loc>
+    <changefreq>monthly</changefreq>
     <priority>0.9</priority>
   </url>
-  <url>
-    <loc>https://linktoepub.com/#/guide</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://linktoepub.com/#/guide#royal-road</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://linktoepub.com/#/guide#novelbin</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://linktoepub.com/#/guide#novelfull</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://linktoepub.com/#/guide#scribblehub</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://linktoepub.com/#/guide#wtr-lab</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://linktoepub.com/#/guide#webnovel</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://linktoepub.com/#/privacy</loc>
-    <changefreq>yearly</changefreq>
-    <priority>0.4</priority>
-  </url>
+  <!-- Top 25 site-specific converter pages (single page, dynamic via ?site= param) -->
+  <url><loc>https://linktoepub.com/convert?site=novelfull.net</loc><changefreq>monthly</changefreq><priority>0.85</priority></url>
+  <url><loc>https://linktoepub.com/convert?site=wattpad.com</loc><changefreq>monthly</changefreq><priority>0.85</priority></url>
+  <url><loc>https://linktoepub.com/convert?site=royalroad.com</loc><changefreq>monthly</changefreq><priority>0.85</priority></url>
+  <url><loc>https://linktoepub.com/convert?site=scribblehub.com</loc><changefreq>monthly</changefreq><priority>0.85</priority></url>
+  <url><loc>https://linktoepub.com/convert?site=novelbin.com</loc><changefreq>monthly</changefreq><priority>0.84</priority></url>
+  <url><loc>https://linktoepub.com/convert?site=webnovel.com</loc><changefreq>monthly</changefreq><priority>0.84</priority></url>
+  <url><loc>https://linktoepub.com/convert?site=wtr-lab.com</loc><changefreq>monthly</changefreq><priority>0.83</priority></url>
+  <url><loc>https://linktoepub.com/convert?site=lightnovelworld.com</loc><changefreq>monthly</changefreq><priority>0.83</priority></url>
+  <url><loc>https://linktoepub.com/convert?site=ranobes.top</loc><changefreq>monthly</changefreq><priority>0.82</priority></url>
+  <url><loc>https://linktoepub.com/convert?site=novelfire.net</loc><changefreq>monthly</changefreq><priority>0.82</priority></url>
+  <url><loc>https://linktoepub.com/convert?site=novelcool.com</loc><changefreq>monthly</changefreq><priority>0.81</priority></url>
+  <url><loc>https://linktoepub.com/convert?site=readnovelfull.com</loc><changefreq>monthly</changefreq><priority>0.81</priority></url>
+  <url><loc>https://linktoepub.com/convert?site=allnovelfull.com</loc><changefreq>monthly</changefreq><priority>0.80</priority></url>
+  <url><loc>https://linktoepub.com/convert?site=novelbuddy.com</loc><changefreq>monthly</changefreq><priority>0.80</priority></url>
+  <url><loc>https://linktoepub.com/convert?site=freewebnovel.com</loc><changefreq>monthly</changefreq><priority>0.79</priority></url>
+  <url><loc>https://linktoepub.com/convert?site=mtlnovel.com</loc><changefreq>monthly</changefreq><priority>0.79</priority></url>
+  <url><loc>https://linktoepub.com/convert?site=novelhall.com</loc><changefreq>monthly</changefreq><priority>0.78</priority></url>
+  <url><loc>https://linktoepub.com/convert?site=fanfiction.net</loc><changefreq>monthly</changefreq><priority>0.78</priority></url>
+  <url><loc>https://linktoepub.com/convert?site=archiveofourown.org</loc><changefreq>monthly</changefreq><priority>0.78</priority></url>
+  <url><loc>https://linktoepub.com/convert?site=novelarrow.com</loc><changefreq>monthly</changefreq><priority>0.77</priority></url>
+  <url><loc>https://linktoepub.com/convert?site=boxnovel.com</loc><changefreq>monthly</changefreq><priority>0.77</priority></url>
+  <url><loc>https://linktoepub.com/convert?site=novelpub.com</loc><changefreq>monthly</changefreq><priority>0.77</priority></url>
+  <url><loc>https://linktoepub.com/convert?site=mtlnation.com</loc><changefreq>monthly</changefreq><priority>0.76</priority></url>
+  <url><loc>https://linktoepub.com/convert?site=novgo.com</loc><changefreq>monthly</changefreq><priority>0.76</priority></url>
+  <url><loc>https://linktoepub.com/convert?site=novelbin.net</loc><changefreq>monthly</changefreq><priority>0.75</priority></url>
 </urlset>

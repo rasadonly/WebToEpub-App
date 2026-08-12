@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, startTransition } from 'react';
 import { ConversionProgress } from '@/types';
 import { ConversionFormData } from '@/components/ConversionForm';
 import { useToast } from '@/hooks/use-toast';
@@ -136,11 +136,16 @@ export function useEpubConverter() {
             title: c.title || `Chapter ${liveChaptersRef.current.length + i + 1}`,
           }));
           liveChaptersRef.current = [...liveChaptersRef.current, ...newItems];
-          setChapterList([...liveChaptersRef.current]);
-          updateProgress({
-            status: 'fetching-toc',
-            totalChapters: liveChaptersRef.current.length,
-            message: `Found ${liveChaptersRef.current.length} chapter${liveChaptersRef.current.length === 1 ? '' : 's'}…`,
+          const snapshot = [...liveChaptersRef.current];
+          // Use startTransition so chapter list re-renders are low-priority —
+          // keeps button clicks and inputs instant even when streaming 500+ chapters.
+          startTransition(() => {
+            setChapterList(snapshot);
+            updateProgress({
+              status: 'fetching-toc',
+              totalChapters: snapshot.length,
+              message: `Found ${snapshot.length} chapter${snapshot.length === 1 ? '' : 's'}…`,
+            });
           });
         };
 

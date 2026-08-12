@@ -38,10 +38,19 @@
       gtag('config', 'G-Q5R86ZENND');
     </script>
 
-    <!-- Google Fonts -->
+    <!-- Google Fonts: load only UI fonts upfront with display=optional to prevent layout-shifting font swaps -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Figtree:wght@300;400;500;600;700&family=Merriweather:wght@300;400;700&family=Crimson+Text:wght@400;600;700&family=Libre+Baskerville:wght@400;700&family=Source+Serif+Pro:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Figtree:wght@300;400;500;600;700&display=optional" rel="stylesheet">
+    <!-- EPUB reader fonts loaded after page is interactive to avoid render-blocking -->
+    <script>
+      window.addEventListener('load', function() {
+        var link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = 'https://fonts.googleapis.com/css2?family=Merriweather:wght@300;400;700&family=Crimson+Text:wght@400;600;700&family=Libre+Baskerville:wght@400;700&family=Source+Serif+Pro:wght@400;600;700&display=swap';
+        document.head.appendChild(link);
+      });
+    </script>
 
     <meta property="og:title" content="LinkToEpub — Convert Web Novels to EPUB Free Online" />
     <meta property="og:description" content="Paste a novel's table of contents URL and get a clean, device-ready EPUB in seconds. Supports 380+ web novel sites." />

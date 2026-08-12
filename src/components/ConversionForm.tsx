@@ -923,12 +923,18 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                       placeholder="https://…/cover.jpg"
                     />
                     {metadata.coverUrl && (
-                      <img
-                        src={metadata.coverUrl}
-                        alt="Cover preview"
-                        className="mt-2 h-32 w-auto rounded border border-border object-cover"
-                        onError={(e) => ((e.currentTarget.style.display = 'none'))}
-                      />
+                      <div className="mt-2 w-24 shrink-0" style={{ aspectRatio: '2/3', minHeight: '144px' }}>
+                        <img
+                          src={metadata.coverUrl}
+                          alt="Cover preview"
+                          width={96}
+                          height={144}
+                          className="h-full w-full rounded border border-border object-cover"
+                          onError={(e) => ((e.currentTarget.parentElement!.style.display = 'none'))}
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      </div>
                     )}
                   </div>
                   <div className="space-y-2">

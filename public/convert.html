@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title id="page-title">Convert Web Novels to EPUB — LinkToEpub</title>
+  <meta id="meta-description" name="description" content="Free online converter — paste any web novel URL and download a clean EPUB in seconds. Supports 526+ sites." />
+  <link rel="canonical" id="canonical-link" href="https://linktoepub.com/convert" />
+  <meta id="og-title" property="og:title" content="Convert Web Novels to EPUB — LinkToEpub" />
+  <meta id="og-description" property="og:description" content="Free online EPUB converter for web novels. Supports 526+ sites." />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="LinkToEpub" />
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-Q5R86ZENND"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-Q5R86ZENND');</script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:system-ui,-apple-system,sans-serif;background:#0f0f12;color:#f1f1f1;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2rem 1rem;text-align:center}
+    .logo{font-size:1.1rem;font-weight:700;color:#e11d48;margin-bottom:2rem;letter-spacing:-0.02em}
+    h1{font-size:clamp(1.5rem,4vw,2.5rem);font-weight:800;line-height:1.2;margin-bottom:1rem;max-width:640px}
+    .badge{display:inline-flex;align-items:center;background:#e11d4820;border:1px solid #e11d4840;color:#e11d48;border-radius:9999px;padding:.25rem .85rem;font-size:.85rem;font-weight:600;margin-bottom:1.2rem}
+    p{color:#9ca3af;max-width:520px;line-height:1.7;margin-bottom:2rem;font-size:1.05rem}
+    .btn{display:inline-flex;align-items:center;gap:.5rem;background:#e11d48;color:#fff;border:none;border-radius:10px;padding:.85rem 2rem;font-size:1rem;font-weight:700;cursor:pointer;text-decoration:none;transition:background .15s,transform .1s;box-shadow:0 4px 24px #e11d4840}
+    .btn:hover{background:#be123c;transform:translateY(-1px)}
+    .steps{margin-top:3rem;display:flex;gap:2rem;flex-wrap:wrap;justify-content:center;max-width:640px}
+    .step{flex:1;min-width:140px;max-width:180px}
+    .step-num{width:2rem;height:2rem;border-radius:50%;background:#e11d4820;border:1px solid #e11d4840;color:#e11d48;font-weight:700;font-size:.9rem;display:flex;align-items:center;justify-content:center;margin:0 auto .5rem}
+    .step p{font-size:.82rem;color:#6b7280;margin:0}
+    footer{margin-top:3rem;font-size:.78rem;color:#4b5563}
+    footer a{color:#6b7280;text-decoration:none}
+    footer a:hover{color:#9ca3af}
+  </style>
+  <script>
+    var SITE_META={
+      'novelfull.net':{name:'NovelFull',genre:'Chinese & Korean web novels'},
+      'novelbin.com':{name:'NovelBin',genre:'light novels and web novels'},
+      'wattpad.com':{name:'Wattpad',genre:'stories and romance novels'},
+      'royalroad.com':{name:'Royal Road',genre:'progression fantasy and LitRPG'},
+      'scribblehub.com':{name:'ScribbleHub',genre:'Japanese-style web novels'},
+      'webnovel.com':{name:'WebNovel',genre:'Chinese web novels'},
+      'wtr-lab.com':{name:'WTR-LAB',genre:'machine-translated Chinese novels'},
+      'lightnovelworld.com':{name:'LightNovelWorld',genre:'Japanese light novels'},
+      'ranobes.top':{name:'Ranobes',genre:'Russian-translated light novels'},
+      'novelfire.net':{name:'NovelFire',genre:'web novels and light novels'},
+      'novelcool.com':{name:'NovelCool',genre:'manga and light novels'},
+      'readnovelfull.com':{name:'ReadNovelFull',genre:'translated Chinese novels'},
+      'allnovelfull.com':{name:'AllNovelFull',genre:'cultivation and xianxia novels'},
+      'novelbuddy.com':{name:'NovelBuddy',genre:'Korean and Chinese web novels'},
+      'freewebnovel.com':{name:'FreeWebNovel',genre:'free translated web novels'},
+      'mtlnovel.com':{name:'MTL Novel',genre:'machine-translated Chinese novels'},
+      'novelhall.com':{name:'NovelHall',genre:'Chinese web novels'},
+      'fanfiction.net':{name:'FanFiction.Net',genre:'fan fiction stories'},
+      'archiveofourown.org':{name:'Archive of Our Own',genre:'fan works and original fiction'},
+      'novelarrow.com':{name:'NovelArrow',genre:'Korean and Chinese web novels'},
+      'boxnovel.com':{name:'BoxNovel',genre:'translated Chinese web novels'},
+      'novelpub.com':{name:'NovelPub',genre:'light novels and web novels'},
+      'novgo.com':{name:'NovGo',genre:'web novels'},
+      'novelbin.net':{name:'NovelBin',genre:'light novels and web novels'},
+      'mtlnation.com':{name:'MTL Nation',genre:'machine-translated Chinese novels'}
+    };
+    function toTitle(d){return d.split('.')[0].replace(/-/g,' ').replace(/\b\w/g,function(c){return c.toUpperCase()});}
+    function init(){
+      var p=new URLSearchParams(window.location.search);
+      var site=(p.get('site')||'').toLowerCase().replace(/^www\./,'');
+      var meta=SITE_META[site]||null;
+      var name=meta?meta.name:(site?toTitle(site):null);
+      var genre=meta?meta.genre:'web novels and light novels';
+      if(name&&site){
+        var pt='Convert '+name+' to EPUB Free — LinkToEpub';
+        var pd='Download any '+name+' novel as a clean, device-ready EPUB. Paste the '+name+' novel URL into LinkToEpub and convert '+genre+' for free — no sign-up needed.';
+        var cu='https://linktoepub.com/convert?site='+encodeURIComponent(site);
+        document.title=pt;
+        document.getElementById('meta-description').setAttribute('content',pd);
+        document.getElementById('og-title').setAttribute('content',pt);
+        document.getElementById('og-description').setAttribute('content',pd);
+        document.getElementById('canonical-link').setAttribute('href',cu);
+        document.getElementById('main-h1').textContent='Convert '+name+' novels to EPUB';
+        document.getElementById('site-badge').textContent=name+' → EPUB';
+        document.getElementById('main-desc').textContent=pd;
+        document.getElementById('convert-btn').href='https://linktoepub.com/#/?site='+encodeURIComponent(site);
+      }
+    }
+    document.addEventListener('DOMContentLoaded',init);
+  </script>
+</head>
+<body>
+  <div class="logo">LinkToEpub</div>
+  <span class="badge" id="site-badge">Web Novel → EPUB</span>
+  <h1 id="main-h1">Convert any web novel to EPUB — free</h1>
+  <p id="main-desc">Paste a novel's table-of-contents URL and download a clean, device-ready EPUB in seconds. Supports 526+ sites including NovelFull, Wattpad, Royal Road, ScribbleHub and more. No sign-up. No ads. No limits.</p>
+  <a id="convert-btn" href="https://linktoepub.com/" class="btn">⚡ Convert to EPUB — it's free</a>
+  <div class="steps">
+    <div class="step"><div class="step-num">1</div><p>Paste the novel's main page URL</p></div>
+    <div class="step"><div class="step-num">2</div><p>Select chapters you want</p></div>
+    <div class="step"><div class="step-num">3</div><p>Download your clean EPUB file</p></div>
+  </div>
+  <footer>
+    <a href="https://linktoepub.com/">Home</a> ·
+    <a href="https://linktoepub.com/#/sites">526+ Supported Sites</a> ·
+    <a href="https://linktoepub.com/#/privacy">Privacy</a>
+  </footer>
+</body>
+</html>
