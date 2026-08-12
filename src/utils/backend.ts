@@ -100,32 +100,19 @@ function matches(host: string, hosts: Iterable<string>): boolean {
   return false;
 }
 
-/** Synchronous best-effort check (static list + whatever is already cached). */
+/** Synchronous check — returns true for any valid web URL. Backend handles all sites (526+ site configs + generic fallback). */
 export function isBackendSupportedUrl(url: string): boolean {
   try {
-    const host = new URL(url).hostname.replace(/^www\./, '').toLowerCase();
-    if (matches(host, BACKEND_SUPPORTED_HOSTS)) return true;
-    const known = dynamicHosts ?? readSitesCache();
-    if (known) {
-      dynamicHosts = known;
-      return matches(host, known);
-    }
-    return false;
+    const u = new URL(url);
+    return u.protocol === 'http:' || u.protocol === 'https:';
   } catch {
     return false;
   }
 }
 
-/** Authoritative check — fetches the backend's live domain table if needed. */
+/** Authoritative check — returns true for any valid web URL. */
 export async function isBackendSupportedUrlAsync(url: string): Promise<boolean> {
-  let host = '';
-  try {
-    host = new URL(url).hostname.replace(/^www\./, '').toLowerCase();
-  } catch {
-    return false;
-  }
-  if (matches(host, BACKEND_SUPPORTED_HOSTS)) return true;
-  return matches(host, await loadBackendHosts());
+  return isBackendSupportedUrl(url);
 }
 
 /** URL format for the Heroku CORS proxy — use as a drop-in CORS proxy. */
