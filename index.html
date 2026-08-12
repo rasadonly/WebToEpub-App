@@ -29,13 +29,21 @@
     <link rel="canonical" href="https://linktoepub.com/" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
 
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-Q5R86ZENND"></script>
+    <!-- Google Analytics: dataLayer defined immediately so no events are lost,
+         but the 162KB GTM script loads AFTER the page is interactive (removes
+         91ms + 57ms long tasks from the critical path → lowers INP) -->
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
       gtag('config', 'G-Q5R86ZENND');
+      // Inject the actual GTM script after load — keeps main thread free during LCP
+      window.addEventListener('load', function() {
+        var s = document.createElement('script');
+        s.src = 'https://www.googletagmanager.com/gtag/js?id=G-Q5R86ZENND';
+        s.async = true;
+        document.head.appendChild(s);
+      }, { once: true });
     </script>
 
     <!-- Preconnect to font + API origins BEFORE any blocking resources -->
