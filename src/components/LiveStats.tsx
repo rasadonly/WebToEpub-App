@@ -39,11 +39,17 @@ export function LiveStats() {
       }
     };
 
-    poll();
-    const timer = window.setInterval(poll, 30_000);
+    let timer: number;
+    // Delay initial poll by 3s so it never competes with critical page render resources on mobile
+    const initialTimeout = window.setTimeout(() => {
+      poll();
+      timer = window.setInterval(poll, 30_000);
+    }, 3000);
+
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      window.clearTimeout(initialTimeout);
+      if (timer) window.clearInterval(timer);
     };
   }, []);
 

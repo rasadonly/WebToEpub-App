@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,15 +10,17 @@ import { useToast } from '@/hooks/use-toast';
 import { SUPPORTED_SITES, getSiteConfig, extractDomain } from '@/utils/siteConfigs';
 import { NovelSite, EpubMetadata } from '@/types';
 import { BookOpen, Globe, Settings, Hash, Type, List, Search, Sparkles, ArrowRight, ExternalLink, X, BookOpenCheck, MoreVertical, Library as LibraryIcon, BookMarked, Download, MessagesSquare, Wand2 } from 'lucide-react';
-import { AdminPanel } from './AdminPanel';
-import { SupportedSites } from './SupportedSites';
 import { engineSearch, cancelSearch, engineLoadMetadata, EngineSearchResult } from '@/utils/webtoepub/bridge';
-import { LiveReaderModal } from './LiveReaderModal';
-import { LibraryModal } from './LibraryModal';
-import { EpubReaderModal } from './EpubReaderModal';
-import { ForumModal } from './ForumModal';
 import { LiveStats } from '@/components/LiveStats';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+
+// Lazy load modals so heavy dependencies (epubjs, supabase) aren't in the initial bundle
+const AdminPanel = lazy(() => import('./AdminPanel').then(m => ({ default: m.AdminPanel })));
+const SupportedSites = lazy(() => import('./SupportedSites').then(m => ({ default: m.SupportedSites })));
+const LiveReaderModal = lazy(() => import('./LiveReaderModal').then(m => ({ default: m.LiveReaderModal })));
+const LibraryModal = lazy(() => import('./LibraryModal').then(m => ({ default: m.LibraryModal })));
+const EpubReaderModal = lazy(() => import('./EpubReaderModal').then(m => ({ default: m.EpubReaderModal })));
+const ForumModal = lazy(() => import('./ForumModal').then(m => ({ default: m.ForumModal })));
 
 
 
@@ -432,11 +434,15 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
 
   return (
     <div className="w-full max-w-5xl mx-auto">
-      <LiveReaderModal
-        open={liveReaderOpen}
-        url={liveReaderUrl}
-        onClose={() => setLiveReaderOpen(false)}
-      />
+      <Suspense fallback={null}>
+        {liveReaderOpen && (
+          <LiveReaderModal
+            open={liveReaderOpen}
+            url={liveReaderUrl}
+            onClose={() => setLiveReaderOpen(false)}
+          />
+        )}
+      </Suspense>
       <form onSubmit={handleSubmit} className="space-y-10">
         {/* Search-engine style hero */}
         <div className="flex flex-col items-center justify-center gap-5 sm:gap-8 pt-4 sm:pt-10">
@@ -707,12 +713,14 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
           {/* Modal triggers via custom events from the NavBar */}
 
 
-          {/* Menu-controlled dialogs (headless triggers) */}
-          <SupportedSites open={supportedOpen} onOpenChange={setSupportedOpen} hideTrigger />
-          <AdminPanel open={adminOpen} onOpenChange={setAdminOpen} hideTrigger />
-          <LibraryModal open={libraryOpen} onClose={() => setLibraryOpen(false)} />
-          <EpubReaderModal open={epubReaderOpen} onClose={() => setEpubReaderOpen(false)} />
-          <ForumModal open={forumOpen} onClose={() => setForumOpen(false)} />
+          {/* Menu-controlled dialogs (headless triggers, loaded lazily) */}
+          <Suspense fallback={null}>
+            {supportedOpen && <SupportedSites open={supportedOpen} onOpenChange={setSupportedOpen} hideTrigger />}
+            {adminOpen && <AdminPanel open={adminOpen} onOpenChange={setAdminOpen} hideTrigger />}
+            {libraryOpen && <LibraryModal open={libraryOpen} onClose={() => setLibraryOpen(false)} />}
+            {epubReaderOpen && <EpubReaderModal open={epubReaderOpen} onClose={() => setEpubReaderOpen(false)} />}
+            {forumOpen && <ForumModal open={forumOpen} onClose={() => setForumOpen(false)} />}
+          </Suspense>
 
 
         </div>
@@ -949,10 +957,12 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                   </div>
                 </div>
 
-                <div className="flex flex-wrap gap-2 justify-center pt-2">
-                  <SupportedSites />
-                  <AdminPanel />
-                </div>
+                <Suspense fallback={null}>
+                  <div className="flex flex-wrap gap-2 justify-center pt-2">
+                    <SupportedSites />
+                    <AdminPanel />
+                  </div>
+                </Suspense>
               </div>
             )}
 
