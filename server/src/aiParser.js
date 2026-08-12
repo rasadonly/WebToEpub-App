@@ -15,7 +15,7 @@ export function aiEnabled() {
   return process.env.AI_PARSE_DISABLED !== "1";
 }
 
-/** Strip scripts/styles/noise so the model sees structure, not payload. */
+/** Strip scripts/styles/noise and collapse long text so the model sees DOM structure instantly. */
 export function simplifyHtml(html) {
   return String(html || "")
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
@@ -29,6 +29,7 @@ export function simplifyHtml(html) {
     .replace(/\s+(aria-[\w-]+|role)\s*=\s*("[^"]*"|'[^']*')/gi, "")
     .replace(/\s+(srcset|sizes|loading|decoding)\s*=\s*("[^"]*"|'[^']*')/gi, "")
     .replace(/\s+(src|href)\s*=\s*("data:[^"]*"|'data:[^']*')/gi, "")
+    .replace(/>([^<]{25,})</g, (_m, t) => `>${t.trim().slice(0, 20)}...<`)
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -50,7 +51,7 @@ function extractJson(text) {
 const NV_KEY = process.env.NVIDIA_API_KEY || "";
 const POLL_KEY = process.env.POLLINATIONS_API_KEY || "";
 
-async function fetchWithTimeout(url, options = {}, timeoutMs = 25000) {
+async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
@@ -61,7 +62,7 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 25000) {
   }
 }
 
-async function chatJson(system, user, timeoutMs = 25000) {
+async function chatJson(system, user, timeoutMs = 15000) {
   const messages = [
     { role: "system", content: system },
     { role: "user", content: user },
@@ -69,7 +70,24 @@ async function chatJson(system, user, timeoutMs = 25000) {
 
   let res = null;
 
-  if (NV_KEY) {
+  // 1. Try Pollinations free text API (fastest, no key needed, ~1-2s response)
+  try {
+    const r = await fetchWithTimeout("https://text.pollinations.ai/openai/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "openai",
+        messages,
+        temperature: 0,
+      }),
+    }, 10000);
+    if (r.ok) res = r;
+  } catch {
+    /* try next */
+  }
+
+  // 2. Try NVIDIA API key if configured
+  if (!res && NV_KEY) {
     try {
       const r = await fetchWithTimeout("https://integrate.api.nvidia.com/v1/chat/completions", {
         method: "POST",
@@ -83,14 +101,14 @@ async function chatJson(system, user, timeoutMs = 25000) {
           response_format: { type: "json_object" },
           messages,
         }),
-      }, timeoutMs);
+      }, 10000);
       if (r.ok) res = r;
-      else console.warn("[aiParser] NVIDIA request failed", r.status);
-    } catch (e) {
-      console.warn("[aiParser] NVIDIA error:", e?.name === 'AbortError' ? 'timed out' : (e?.message || e));
+    } catch {
+      /* try next */
     }
   }
 
+  // 3. Try Pollinations key endpoint if configured
   if (!res && POLL_KEY) {
     try {
       const r = await fetchWithTimeout("https://gen.pollinations.ai/v1/chat/completions", {
@@ -100,14 +118,14 @@ async function chatJson(system, user, timeoutMs = 25000) {
           "Authorization": `Bearer ${POLL_KEY}`,
         },
         body: JSON.stringify({ model: "nova-fast", temperature: 0, messages }),
-      }, timeoutMs);
+      }, 10000);
       if (r.ok) res = r;
-      else console.warn("[aiParser] Pollinations request failed", r.status);
-    } catch (e) {
-      console.warn("[aiParser] Pollinations error:", e?.name === 'AbortError' ? 'timed out' : (e?.message || e));
+    } catch {
+      /* try next */
     }
   }
 
+  // 4. Fallback to Supabase Edge Function proxy
   if (!res) {
     try {
       const r = await fetchWithTimeout(AI_ENDPOINT, {
@@ -117,11 +135,9 @@ async function chatJson(system, user, timeoutMs = 25000) {
           "Authorization": `Bearer ${AI_ANON}`,
         },
         body: JSON.stringify({ temperature: 0, messages }),
-      }, timeoutMs);
+      }, 12000);
       if (r.ok) {
         res = r;
-      } else {
-        console.warn("[aiParser] proxy request failed", r.status, (await r.text()).slice(0, 200));
       }
     } catch (e) {
       console.warn("[aiParser] proxy error:", e?.name === 'AbortError' ? 'timed out' : (e?.message || e));
@@ -132,13 +148,9 @@ async function chatJson(system, user, timeoutMs = 25000) {
 
   try {
     const json = await res.json();
-    if (json?.error) {
-      console.warn("[aiParser] provider error", JSON.stringify(json.error).slice(0, 200));
-      return null;
-    }
+    if (json?.error) return null;
     return extractJson(json?.choices?.[0]?.message?.content || "");
-  } catch (e) {
-    console.warn("[aiParser] json parse error", e?.message || e);
+  } catch {
     return null;
   }
 }
@@ -164,7 +176,7 @@ Return JSON: {"content":"selector for the element holding the story text","title
 Prefer a single specific selector for "content". Never return "body".
 
 HTML:
-${simplifyHtml(html).slice(0, 30000)}`
+${simplifyHtml(html).slice(0, 6000)}`
   );
 
   let result = null;
@@ -202,7 +214,7 @@ Return JSON: {"toc":["css selector matching the chapter <a> links, most specific
 The "toc" selectors must match anchor elements (or their direct container). Exclude navigation, recommendations and footer links.
 
 HTML:
-${simplifyHtml(html).slice(0, 30000)}`
+${simplifyHtml(html).slice(0, 6000)}`
   );
 
   let result = null;
