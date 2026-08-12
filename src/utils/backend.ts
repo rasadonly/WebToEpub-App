@@ -33,6 +33,17 @@ export const BACKEND_SUPPORTED_HOSTS: readonly string[] = [
   'novelbin.com', 'novelbin.net', 'novlove.com',
   'wtr-lab.com',
   'wattpad.com',
+  'royalroad.com', 'royalroadl.com',
+  'scribblehub.com',
+  'lightnovelworld.com', 'lightnovelcave.com', 'lightnovelpub.com', 'novelpub.com', 'webnovelpub.com',
+  'ranobes.top', 'ranobes.net',
+  'webnovel.com',
+  'mtlnovel.com', 'mtlnation.com',
+  'readnovelfull.com', 'allnovelfull.com', 'novelusb.com', 'vipnovel.com', 'novelsonline.net',
+  'syosetu.com', 'kakuyomu.jp',
+  'novelcool.com',
+  'archiveofourown.org', 'fanfiction.net',
+  'boxnovel.com', 'wuxiaworld.site', 'foxaholic.com', 'znovel.com'
 ];
 
 /** Domains reported live by the backend's /api/sites (526+ entries). */
