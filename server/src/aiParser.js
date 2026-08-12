@@ -50,71 +50,87 @@ function extractJson(text) {
 const NV_KEY = process.env.NVIDIA_API_KEY || "";
 const POLL_KEY = process.env.POLLINATIONS_API_KEY || "";
 
-async function chatJson(system, user, timeoutMs = 45000) {
+async function fetchWithTimeout(url, options = {}, timeoutMs = 25000) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: ctrl.signal });
+    return res;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function chatJson(system, user, timeoutMs = 25000) {
   const messages = [
     { role: "system", content: system },
     { role: "user", content: user },
   ];
-  try {
-    let res = null;
 
-    if (NV_KEY) {
-      res = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+  let res = null;
+
+  if (NV_KEY) {
+    try {
+      const r = await fetchWithTimeout("https://integrate.api.nvidia.com/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${NV_KEY}`,
         },
-        signal: ctrl.signal,
         body: JSON.stringify({
           model: "meta/llama-3.1-70b-instruct",
           temperature: 0,
           response_format: { type: "json_object" },
           messages,
         }),
-      });
-      if (!res.ok) {
-        console.warn("[aiParser] NVIDIA request failed", res.status);
-        res = null;
-      }
+      }, timeoutMs);
+      if (r.ok) res = r;
+      else console.warn("[aiParser] NVIDIA request failed", r.status);
+    } catch (e) {
+      console.warn("[aiParser] NVIDIA error:", e?.name === 'AbortError' ? 'timed out' : (e?.message || e));
     }
+  }
 
-    if (!res && POLL_KEY) {
-      res = await fetch("https://gen.pollinations.ai/v1/chat/completions", {
+  if (!res && POLL_KEY) {
+    try {
+      const r = await fetchWithTimeout("https://gen.pollinations.ai/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${POLL_KEY}`,
         },
-        signal: ctrl.signal,
         body: JSON.stringify({ model: "nova-fast", temperature: 0, messages }),
-      });
-      if (!res.ok) {
-        console.warn("[aiParser] Pollinations request failed", res.status);
-        res = null;
-      }
+      }, timeoutMs);
+      if (r.ok) res = r;
+      else console.warn("[aiParser] Pollinations request failed", r.status);
+    } catch (e) {
+      console.warn("[aiParser] Pollinations error:", e?.name === 'AbortError' ? 'timed out' : (e?.message || e));
     }
+  }
 
-    // No local provider keys (or both failed) — use the ai-parse proxy, which
-    // holds the keys server-side.
-    if (!res) {
-      res = await fetch(AI_ENDPOINT, {
+  if (!res) {
+    try {
+      const r = await fetchWithTimeout(AI_ENDPOINT, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${AI_ANON}`,
         },
-        signal: ctrl.signal,
         body: JSON.stringify({ temperature: 0, messages }),
-      });
+      }, timeoutMs);
+      if (r.ok) {
+        res = r;
+      } else {
+        console.warn("[aiParser] proxy request failed", r.status, (await r.text()).slice(0, 200));
+      }
+    } catch (e) {
+      console.warn("[aiParser] proxy error:", e?.name === 'AbortError' ? 'timed out' : (e?.message || e));
     }
+  }
 
-    if (!res.ok) {
-      console.warn("[aiParser] request failed", res.status, (await res.text()).slice(0, 200));
-      return null;
-    }
+  if (!res) return null;
+
+  try {
     const json = await res.json();
     if (json?.error) {
       console.warn("[aiParser] provider error", JSON.stringify(json.error).slice(0, 200));
@@ -122,10 +138,8 @@ async function chatJson(system, user, timeoutMs = 45000) {
     }
     return extractJson(json?.choices?.[0]?.message?.content || "");
   } catch (e) {
-    console.warn("[aiParser] request error", e?.message || e);
+    console.warn("[aiParser] json parse error", e?.message || e);
     return null;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
