@@ -24,6 +24,14 @@ app.use(cors({ origin: true, exposedHeaders: ["Content-Disposition"] }));
 app.use(compression());
 app.use(express.json({ limit: "10mb" }));
 
+// Handle invalid JSON payload errors gracefully (e.g. probes/bots sending non-JSON body)
+app.use((err, _req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && "body" in err) {
+    return res.status(400).json({ error: "Invalid JSON payload" });
+  }
+  next(err);
+});
+
 const PORT = process.env.PORT || 3000;
 const CONCURRENCY = Number(process.env.FETCH_CONCURRENCY || 12);
 const JOB_TTL_MS = Number(process.env.JOB_TTL_MS || 6 * 60 * 60 * 1000); // 6h
