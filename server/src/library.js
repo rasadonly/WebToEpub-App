@@ -36,6 +36,7 @@ function slug(name) {
  */
 export async function uploadToLibrary(buffer, filename, meta = {}) {
   if (!libraryEnabled()) throw new Error("HUGGINGFACE_TOKEN not configured");
+  if (buffer.length < 100 * 1024) throw new Error("file too small for community library (min 100 KB)");
   if (buffer.length > MAX_BYTES) throw new Error("file too large for the library");
 
   const base = slug(filename.replace(/\.epub$/i, ""));

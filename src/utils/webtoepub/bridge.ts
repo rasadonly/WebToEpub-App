@@ -947,6 +947,8 @@ export interface LibraryBook {
   source: 'telegram' | 'hf' | 'mega' | 'archive';
 }
 
+const MIN_COMMUNITY_BOOK_SIZE = 100 * 1024; // 100 KB minimum
+
 async function fetchHFBooks(mode: 'telegram' | 'hf'): Promise<LibraryBook[]> {
   const repoId = mode === 'telegram' ? HF_OLD_REPO_ID : HF_OLD_REPO_ID;
   const list = await fetchJsonWithProxyFallback<HFBookEntry[]>(
@@ -955,7 +957,8 @@ async function fetchHFBooks(mode: 'telegram' | 'hf'): Promise<LibraryBook[]> {
   );
   if (!Array.isArray(list)) return [];
 
-  return list
+  const books: LibraryBook[] = list
+    .filter((item) => item.size === undefined || item.size >= MIN_COMMUNITY_BOOK_SIZE)
     .map((item) => ({
       id: item.id,
       title: item.title || 'Untitled',
@@ -971,6 +974,18 @@ async function fetchHFBooks(mode: 'telegram' | 'hf'): Promise<LibraryBook[]> {
       const bTime = Date.parse(b.uploadedAt || '');
       return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
     });
+
+  // Deduplicate books by normalized title
+  const seen = new Map<string, LibraryBook>();
+  for (const book of books) {
+    const key = book.title.toLowerCase().replace(/[^a-z0-9]+/g, '');
+    if (!key) continue;
+    if (!seen.has(key)) {
+      seen.set(key, book);
+    }
+  }
+
+  return Array.from(seen.values());
 }
 
 export const libraryGetTelegram = () => fetchHFBooks('telegram');
@@ -999,8 +1014,15 @@ export async function libraryGetCommunity(): Promise<LibraryBook[]> {
   );
   if (!Array.isArray(list)) return [];
 
-  return list
-    .filter((item) => item.type === 'file' && /\.epub(\.txt)?$/i.test(item.path))
+  // Remove files smaller than 100 KB (102,400 bytes)
+  const valid = list.filter(
+    (item) =>
+      item.type === 'file' &&
+      /\.epub(\.txt)?$/i.test(item.path) &&
+      (item.size === undefined || item.size >= MIN_COMMUNITY_BOOK_SIZE)
+  );
+
+  const books: LibraryBook[] = valid
     .map((item) => {
       const dateMatch = item.path.match(/books\/(\d{4}-\d{2}-\d{2})\//);
       return {
@@ -1014,7 +1036,19 @@ export async function libraryGetCommunity(): Promise<LibraryBook[]> {
         source: 'hf' as const,
       };
     })
-    .sort((a, b) => (b.uploadedAt || '').localeCompare(a.uploadedAt || '') || a.title.localeCompare(b.title));
+    .sort((a, b) => (b.uploadedAt || '').localeCompare(a.uploadedAt || '') || (b.size || 0) - (a.size || 0));
+
+  // Deduplicate books by title (keeps the newest/largest release per title)
+  const seen = new Map<string, LibraryBook>();
+  for (const book of books) {
+    const key = book.title.toLowerCase().replace(/[^a-z0-9]+/g, '');
+    if (!key) continue;
+    if (!seen.has(key)) {
+      seen.set(key, book);
+    }
+  }
+
+  return Array.from(seen.values());
 }
 
 
