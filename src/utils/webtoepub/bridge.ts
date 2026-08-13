@@ -739,6 +739,19 @@ export async function engineSearch(
       let siteResults: EngineSearchResult[] = [];
       try {
         siteResults = await promiseTimeout(SSE.fetchSiteResults(site, query), PER_SITE_TIMEOUT_MS);
+        // FILTER: Only keep results that look like TOC/Main pages.
+        // If a result is a chapter (contains 'chapter', 'read', 'v1/c1', etc. in URL), skip it.
+        siteResults = siteResults.filter((r: EngineSearchResult) => {
+          if (!r.url) return false;
+          const u = r.url.toLowerCase();
+          // Exclude URLs that are clearly chapters
+          const isChapter = /\/chapter-?\d+/i.test(u) || 
+                            /\/ch-?\d+/i.test(u) ||
+                            /\/read\//i.test(u) ||
+                            /\/c\d+/i.test(u) ||
+                            /-chapter-\d+/i.test(u);
+          return !isChapter;
+        });
       } catch (e) {
         done++;
         report(site.name, (e as Error)?.message === 'timeout' ? 'timed out' : 'failed');
