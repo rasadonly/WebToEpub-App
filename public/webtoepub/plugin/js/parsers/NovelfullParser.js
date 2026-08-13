@@ -27,8 +27,8 @@ parserFactory.register("novelbin.org", () => new NovelbinParser());
 parserFactory.register("noveldrama.org", () => new NovelfullParser());
 //dead url
 parserFactory.registerDeadSite("novelebook.net", () => new NovelfullParser());
-parserFactory.register("novelfull.com", () => new NovelfullParser());
-parserFactory.register("novelfull.net", () => new NovelfullParser());
+parserFactory.register("novelfull.com", () => new NovelfullComParser());
+parserFactory.register("novelfull.net", () => new NovelfullNetParser());
 parserFactory.register("novelfullbook.com", () => new NovelfullParser());
 parserFactory.register("novelfulll.com", () => new NovelfullParser());
 //dead url
@@ -282,5 +282,19 @@ class NovelbinParser extends NovelfullParser {
     removeUnwantedElementsFromContentElement(element) {
         util.removeChildElementsMatchingSelector(element, ".unlock-buttons");
         super.removeUnwantedElementsFromContentElement(element);
+    }
+}
+
+class NovelfullComParser extends NovelfullParser {
+    constructor() {
+        super();
+        this.minimumThrottle = 1000;
+    }
+}
+
+class NovelfullNetParser extends NovelfullParser {
+    constructor() {
+        super();
+        this.minimumThrottle = 500;
     }
 }

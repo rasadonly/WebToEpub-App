@@ -45,6 +45,29 @@ class SiteSearchEngine {
         return [
             {
                 name: "NovelFull",
+                hostname: "novelfull.net",
+                searchUrl: (q) => `https://novelfull.net/search?keyword=${encodeURIComponent(q)}`,
+                parseResults: (dom) => {
+                    let results = [];
+                    let items = dom.querySelectorAll(".list-truyen .row");
+                    if (items.length === 0) items = dom.querySelectorAll(".archive .list-truyen-item-wrap");
+                    for (let item of items) {
+                        let a = item.querySelector(".truyen-title a") || item.querySelector("h3 a") || item.querySelector("a");
+                        if (a && a.href) {
+                            let snippet = item.querySelector(".text-primary") || item.querySelector(".author");
+                            results.push({
+                                title: a.textContent.trim(),
+                                url: SiteSearchEngine.resolveUrl("https://novelfull.net", a.getAttribute("href")),
+                                snippet: snippet ? snippet.textContent.trim() : "",
+                                source: "NovelFull (.net)"
+                            });
+                        }
+                    }
+                    return results;
+                }
+            },
+            {
+                name: "NovelFull (.com)",
                 hostname: "novelfull.com",
                 searchUrl: (q) => `https://novelfull.com/search?keyword=${encodeURIComponent(q)}`,
                 parseResults: (dom) => {
@@ -59,7 +82,7 @@ class SiteSearchEngine {
                                 title: a.textContent.trim(),
                                 url: SiteSearchEngine.resolveUrl("https://novelfull.com", a.getAttribute("href")),
                                 snippet: snippet ? snippet.textContent.trim() : "",
-                                source: "NovelFull"
+                                source: "NovelFull (.com)"
                             });
                         }
                     }

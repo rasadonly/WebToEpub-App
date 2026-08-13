@@ -816,6 +816,7 @@ export function supportedDomains() {
     "novelbuddy.com",
     "novelarrow.com",
     "novelfull.com",
+    "novelfull.net",
     "novelbin.com",
     "wtr-lab.com",
     "wattpad.com",
@@ -1857,6 +1858,8 @@ function siteKey(hostname) {
   if (host.includes("novgo.")) return "novgo";
   if (host.includes("novelbuddy.com")) return "novelbuddy";
   if (host.includes("novelarrow.com")) return "novelarrow";
+  if (host.includes("novelfull.net")) return "novelfullnet";
+  if (host.includes("novelfull.com")) return "novelfullcom";
   if (host.includes("novelfull.")) return "novelfull";
   if (host.includes("novelbin") || host.includes("novlove")) return "novelbin";
   if (host.includes("wtr-lab.com")) return "wtrlab";
@@ -1889,6 +1892,8 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         return tocNovelBuddy(tocUrl);
       case "novelarrow":
         return tocNovelArrow(tocUrl);
+      case "novelfullnet":
+      case "novelfullcom":
       case "novelfull":
         return tocNovelFull(tocUrl);
       case "novelbin":

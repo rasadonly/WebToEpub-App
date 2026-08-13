@@ -520,6 +520,8 @@ function siteKey(hostname: string): string {
   if (hostname.includes("novgo.")) return "novgo";
   if (hostname.includes("novelbuddy.com")) return "novelbuddy";
   if (hostname.includes("novelarrow.com")) return "novelarrow";
+  if (hostname.includes("novelfull.net")) return "novelfullnet";
+  if (hostname.includes("novelfull.com")) return "novelfullcom";
   if (hostname.includes("novelfull")) return "novelfull";
   if (hostname.includes("novelbin") || hostname.includes("novlove")) return "novelbin";
   if (hostname.includes("wtr-lab.com")) return "wtrlab";
@@ -679,6 +681,8 @@ export async function fetchChapterLinks(tocUrl: string, linkSelector: string): P
       case "novgo":        return await tocNovGo(tocUrl);
       case "novelbuddy":   return await tocNovelBuddy(tocUrl);
       case "novelarrow":   return await tocNovelArrow(tocUrl);
+      case "novelfullnet": return await tocNovelFull(tocUrl);
+      case "novelfullcom": return await tocNovelFull(tocUrl);
       case "novelfull":    return await tocNovelFull(tocUrl);
       case "novelbin":     return await tocNovelBin(tocUrl);
       case "wtrlab":       return await tocWtrLab(tocUrl);
@@ -721,6 +725,8 @@ export async function fetchChapterLinksLive(
     switch (key) {
       case "freewebnovel": await tocFreeWebNovel(tocUrl, wrap); break;
       case "novelfire":    await tocNovelFire(tocUrl, wrap); break;
+      case "novelfullnet": await tocNovelFull(tocUrl, wrap); break;
+      case "novelfullcom": await tocNovelFull(tocUrl, wrap); break;
       case "novelfull":    await tocNovelFull(tocUrl, wrap); break;
       case "novelbin":     await tocNovelBin(tocUrl, wrap); break;
       default: {
