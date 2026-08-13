@@ -10,6 +10,7 @@ import {
   libraryGetMega,
   libraryGetArchive,
   libraryGetCommunity,
+  libraryGetMyDownloads,
   libraryDownloadHF,
   libraryDownloadMega,
   libraryDownloadArchive,
@@ -20,7 +21,7 @@ interface LibraryModalProps {
   onClose: () => void;
 }
 
-type Tab = 'community' | 'telegram' | 'mega' | 'archive';
+type Tab = 'community' | 'my-downloads' | 'telegram' | 'mega' | 'archive';
 
 const DEFAULT_MEGA_URL = 'https://mega.nz/folder/Ci4ETASB#KIFVuPI99P1Ytg0dxmtYlw';
 const INITIAL_VISIBLE_BOOKS = 80;
@@ -28,6 +29,7 @@ const LOAD_MORE_COUNT = 80;
 
 const TABS: { id: Tab; label: string; icon: typeof Send }[] = [
   { id: 'community', label: 'Community', icon: BookOpen },
+  { id: 'my-downloads', label: 'My Saved Books', icon: Download },
   { id: 'telegram', label: 'Telegram (HF)', icon: Send },
   { id: 'mega', label: 'Mega Cloud', icon: Cloud },
   { id: 'archive', label: 'Archive.org', icon: Archive },
@@ -66,6 +68,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
     try {
       let list: LibraryBook[] = [];
       if (which === 'community') list = await libraryGetCommunity();
+      else if (which === 'my-downloads') list = await libraryGetMyDownloads();
       else if (which === 'telegram') list = await libraryGetTelegram();
       else if (which === 'archive') list = await libraryGetArchive();
       else list = await libraryGetMega(megaOverride ?? megaUrl);

@@ -22,6 +22,7 @@ import {
   clearActiveJobId,
   BackendJob,
 } from '@/utils/backend';
+import { saveRecentDownload } from '@/utils/recentDownloads';
 
 
 export interface ChapterItem {
@@ -312,6 +313,13 @@ export function useEpubConverter() {
             });
           }
         );
+
+        saveRecentDownload({
+          id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          title: data.metadata.title || 'Novel',
+          author: data.metadata.author || '',
+          size: 150000,
+        });
 
         updateProgress({
           status: 'complete',

@@ -1,5 +1,6 @@
 import { CORS_PROXY_LIST } from '../localWorker';
 import { getDownHosts } from '../siteHealth';
+import { getRecentDownloads } from '@/utils/recentDownloads';
 
 /**
  * Bridge to the vendored WebToEpub engine (public/webtoepub/index.html).
@@ -1155,3 +1156,16 @@ export async function libraryDownloadMega(handle: unknown): Promise<Blob> {
   return new Blob([buf], { type: 'application/epub+zip' });
 }
 
+export async function libraryGetMyDownloads(): Promise<LibraryBook[]> {
+  const recent = await getRecentDownloads();
+  return recent.map((r) => ({
+    id: r.id,
+    title: r.title,
+    author: r.author || 'Local Conversion',
+    description: 'Saved local conversion (available when you close and come back)',
+    size: r.size,
+    uploadedAt: new Date(r.createdAt).toISOString(),
+    handle: { url: r.downloadUrl },
+    source: 'hf' as const,
+  }));
+}
