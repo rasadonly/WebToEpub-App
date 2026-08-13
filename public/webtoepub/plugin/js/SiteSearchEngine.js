@@ -828,9 +828,10 @@ class SiteSearchEngine {
         let seenUrls = new Set();
         let currentIndex = startIndex;
 
-        // Search one by one (or in very small batches) until we hit the target count
-        // Using small batches (3) to balance speed vs. "don't over-load" requirement
-        const BATCH_SIZE = 6; // increased from 3 — proxy racing handles per-site timeouts
+        // Search all sites in parallel for maximum speed.
+        // Proxy racing inside fetchViaProxy handles per-site failures/timeouts.
+        const BATCH_SIZE = 1000; 
+
 
         while (currentIndex < sites.length) {
             let batch = sites.slice(currentIndex, currentIndex + BATCH_SIZE);
@@ -861,11 +862,9 @@ class SiteSearchEngine {
             currentIndex += batch.length;
 
             let sitesProcessedSoFar = currentIndex - startIndex;
-            // Stop if we have enough results AND we've searched at least 10 sites.
-            if (results.length >= targetResultCount && sitesProcessedSoFar >= 10) break;
-            // If we have at least one result AND we've searched at least 10 sites, we can stop.
-            if (results.length > 0 && sitesProcessedSoFar >= 10) break;
-            // Otherwise, keep searching (if results.length === 0, we continue until we find something or run out of sites).
+            // Stop early if we have enough results.
+            if (results.length >= targetResultCount) break;
+
         }
 
         return {
