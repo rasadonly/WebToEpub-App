@@ -1000,26 +1000,23 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
               </div>
             )}
 
-            <Button
-              type="submit"
-              disabled={isConverting}
-              aria-label={isConverting ? 'Working, please wait' : hasFetchedChapters ? 'Generate EPUB' : 'Fetch Chapters'}
-              className="w-full bg-gradient-primary hover:shadow-glow transition-smooth text-lg py-6"
-            >
-              {isConverting ? (
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Working...
-                </div>
-              ) : hasFetchedChapters ? (
-                <div className="flex items-center gap-2">
-                  <BookOpen className="w-5 h-5" />
-                  Generate EPUB
-                </div>
-              ) : (
-                'Fetch Chapters'
-              )}
-            </Button>
+            {!hasFetchedChapters && (
+              <Button
+                type="submit"
+                disabled={isConverting}
+                aria-label={isConverting ? 'Working, please wait' : 'Fetch Chapters'}
+                className="w-full bg-gradient-primary hover:shadow-glow transition-smooth text-lg py-6"
+              >
+                {isConverting ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Working...
+                  </div>
+                ) : (
+                  'Fetch Chapters'
+                )}
+              </Button>
+            )}
           </Card>
         )}
       </form>
