@@ -760,7 +760,14 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
             {/* Load & Analyse — auto-fetches title, author, language, cover, description */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 rounded-lg border border-dashed border-primary/30 bg-primary/5 p-3">
               <div className="text-xs sm:text-sm text-muted-foreground">
-                Auto-fetch book details (title, author, language, cover, description) from the URL.
+                {isAnalysing ? (
+                  <span className="flex items-center gap-2">
+                    <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                    Analysing…
+                  </span>
+                ) : (
+                  "Auto-fetch book details (title, author, language, cover, description) from the URL."
+                )}
               </div>
               <Button
                 type="button"
