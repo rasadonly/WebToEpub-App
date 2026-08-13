@@ -229,7 +229,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
   // link is pasted or typed — no button press needed, works for any site.
   useEffect(() => {
     const url = cleanUrl(tocUrl);
-    if (!isUrlLike(url) || url === analysedUrlRef.current) return;
+    if (!isUrlLike(url) || url === analysedUrlRef.current || hasFetchedChapters) return;
     const timer = window.setTimeout(() => {
       analysedUrlRef.current = url;
       // Instant slug-based guess, then the real title once the engine answers.
@@ -240,7 +240,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
     }, 600);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tocUrl]);
+  }, [tocUrl, hasFetchedChapters]);
 
 
 
