@@ -119,6 +119,8 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
   // Remembers what auto-fill wrote, so we never clobber a value the user typed.
   const autoFilledRef = useRef<Partial<EpubMetadata>>({});
   const analysedUrlRef = useRef<string>('');
+  // Prevents auto-start if we just successfully analysed this exact URL.
+  const autoStartedUrlRef = useRef<string>('');
 
   const isUrlLike = (s: string) => /^https?:\/\//i.test(s.trim());
 
@@ -152,7 +154,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
     });
   };
 
-  const analyse = async (rawUrl: string, silent: boolean) => {
+  const analyse = async (rawUrl: string, silent: boolean, autoStartFetch: boolean = false) => {
     const url = cleanUrl(rawUrl);
     if (!url || !isUrlLike(url)) {
       if (!silent) {
@@ -179,6 +181,30 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
         toast({
           title: 'Metadata loaded',
           description: info.title ? `Detected: ${info.title}` : 'Fields populated from the page.',
+        });
+      }
+
+      // Auto-start chapter fetching if requested and analysis succeeded.
+      if (autoStartFetch && autoStartedUrlRef.current !== url) {
+        autoStartedUrlRef.current = url;
+        // Construct the full data object needed for fetchChapters.
+        const site = getSiteConfig(url);
+        onSubmit({
+          tocUrl: url,
+          tocSelector: site?.tocSelector || tocSelector,
+          contentSelector: site?.contentSelector || contentSelector,
+          metadata: {
+            title: info.title || metadata.title || extractTitleFromUrl(url) || 'Novel',
+            author: info.author && info.author !== '<unknown>' ? info.author : metadata.author,
+            language: info.language || metadata.language,
+            description: info.description || metadata.description,
+            fileName: info.fileName || metadata.fileName,
+            coverUrl: info.coverUrl || metadata.coverUrl
+          },
+          chapterRange,
+          fontFamily,
+          includeIndex,
+          editableUrls
         });
       }
     } catch (err) {
@@ -209,7 +235,8 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
       // Instant slug-based guess, then the real title once the engine answers.
       const slugTitle = extractTitleFromUrl(url);
       if (slugTitle) mergeAuto({ title: slugTitle });
-      void analyse(url, true);
+      // Trigger analysis with auto-start enabled for seamless flow.
+      void analyse(url, true, true);
     }, 600);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
