@@ -229,7 +229,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
   // link is pasted or typed — no button press needed, works for any site.
   useEffect(() => {
     const url = cleanUrl(tocUrl);
-    if (!isUrlLike(url) || url === analysedUrlRef.current) return;
+    if (!isUrlLike(url) || url === analysedUrlRef.current || hasFetchedChapters) return;
     const timer = window.setTimeout(() => {
       analysedUrlRef.current = url;
       // Instant slug-based guess, then the real title once the engine answers.
@@ -240,7 +240,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
     }, 600);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tocUrl]);
+  }, [tocUrl, hasFetchedChapters]);
 
 
 
@@ -755,40 +755,41 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
 
 
         {/* Settings card — hidden once chapters are loaded; ChapterManager handles the rest */}
-        {hasUrl && !hasFetchedChapters && (
+        {hasUrl && (
           <Card className="p-4 sm:p-6 bg-gradient-card shadow-card border-0 space-y-5 sm:space-y-6 animate-in fade-in slide-in-from-top-2 duration-300">
-            {/* Load & Analyse — auto-fetches title, author, language, cover, description */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 rounded-lg border border-dashed border-primary/30 bg-primary/5 p-3">
-              <div className="text-xs sm:text-sm text-muted-foreground">
-                {isAnalysing ? (
-                  <span className="flex items-center gap-2">
-                    <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                    Analysing…
-                  </span>
-                ) : (
-                  "Auto-fetch book details (title, author, language, cover, description) from the URL."
-                )}
+            {!hasFetchedChapters && (
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 rounded-lg border border-dashed border-primary/30 bg-primary/5 p-3">
+                <div className="text-xs sm:text-sm text-muted-foreground">
+                  {isAnalysing ? (
+                    <span className="flex items-center gap-2">
+                      <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                      Analysing…
+                    </span>
+                  ) : (
+                    "Auto-fetch book details (title, author, language, cover, description) from the URL."
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  onClick={handleLoadAnalyse}
+                  disabled={isAnalysing || isConverting}
+                  variant="secondary"
+                  className="gap-2 shrink-0"
+                >
+                  {isAnalysing ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-current/40 border-t-current rounded-full animate-spin" />
+                      Analysing…
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="w-4 h-4" />
+                      Load & Analyse
+                    </>
+                  )}
+                </Button>
               </div>
-              <Button
-                type="button"
-                onClick={handleLoadAnalyse}
-                disabled={isAnalysing || isConverting}
-                variant="secondary"
-                className="gap-2 shrink-0"
-              >
-                {isAnalysing ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-current/40 border-t-current rounded-full animate-spin" />
-                    Analysing…
-                  </>
-                ) : (
-                  <>
-                    <Wand2 className="w-4 h-4" />
-                    Load & Analyse
-                  </>
-                )}
-              </Button>
-            </div>
+            )}
 
             {/* Title (required, kept visible) */}
             <div className="space-y-2">
@@ -999,26 +1000,23 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
               </div>
             )}
 
-            <Button
-              type="submit"
-              disabled={isConverting}
-              aria-label={isConverting ? 'Working, please wait' : hasFetchedChapters ? 'Generate EPUB' : 'Fetch Chapters'}
-              className="w-full bg-gradient-primary hover:shadow-glow transition-smooth text-lg py-6"
-            >
-              {isConverting ? (
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Working...
-                </div>
-              ) : hasFetchedChapters ? (
-                <div className="flex items-center gap-2">
-                  <BookOpen className="w-5 h-5" />
-                  Generate EPUB
-                </div>
-              ) : (
-                'Fetch Chapters'
-              )}
-            </Button>
+            {!hasFetchedChapters && (
+              <Button
+                type="submit"
+                disabled={isConverting}
+                aria-label={isConverting ? 'Working, please wait' : 'Fetch Chapters'}
+                className="w-full bg-gradient-primary hover:shadow-glow transition-smooth text-lg py-6"
+              >
+                {isConverting ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Working...
+                  </div>
+                ) : (
+                  'Fetch Chapters'
+                )}
+              </Button>
+            )}
           </Card>
         )}
       </form>
