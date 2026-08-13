@@ -40,12 +40,10 @@ function NavBar() {
         </Link>
 
         {/* Page nav */}
-        <nav className="hidden md:flex items-center gap-4">
-          <Link to="/converter" className={linkClass("/converter")}>EPUB Converter</Link>
-          <Link to="/web-to-epub" className={linkClass("/web-to-epub")}>Web to EPUB</Link>
-          <Link to="/alternatives" className={linkClass("/alternatives")}>WebToEpub Alt</Link>
-          <Link to="/sites" className={linkClass("/sites")}>Sites</Link>
-          <Link to="/guide" className={linkClass("/guide")}>Guide</Link>
+        <nav className="hidden sm:flex items-center gap-5">
+          <Link to="/" className={linkClass("/")}>Home</Link>
+          <Link to="/sites" className={linkClass("/sites")}>Supported Sites</Link>
+          <Link to="/guide" className={linkClass("/guide")}>How-to Guide</Link>
         </nav>
 
         {/* Right side: live stats + action menu */}
@@ -110,9 +108,9 @@ const App = () => (
         }>
           <Routes>
             <Route path="/" element={<Index />} />
-            <Route path="/converter" element={<ConverterPage />} />
-            <Route path="/web-to-epub" element={<WebToEpubPage />} />
-            <Route path="/alternatives" element={<AlternativesPage />} />
+            <Route path="/converter" element={<Index />} />
+            <Route path="/web-to-epub" element={<Index />} />
+            <Route path="/alternatives" element={<Index />} />
             <Route path="/sites" element={<SitesPage />} />
             <Route path="/guide" element={<GuidePage />} />
             <Route path="/privacy" element={<PrivacyPage />} />

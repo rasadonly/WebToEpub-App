@@ -143,11 +143,11 @@ const Index = () => {
             Free online web novel conversion with zero account required.
           </p>
           <div className="flex flex-wrap justify-center gap-3 sm:gap-5 text-xs text-muted-foreground font-medium">
-            <Link to="/converter" className="hover:text-primary transition-colors">Best EPUB Converter</Link>
+            <Link to="/" className="hover:text-primary transition-colors">Best EPUB Converter</Link>
             <span>·</span>
-            <Link to="/web-to-epub" className="hover:text-primary transition-colors">Web to EPUB Tool</Link>
+            <Link to="/" className="hover:text-primary transition-colors">Web to EPUB Tool</Link>
             <span>·</span>
-            <Link to="/alternatives" className="hover:text-primary transition-colors">WebToEpub Alternative</Link>
+            <Link to="/" className="hover:text-primary transition-colors">WebToEpub Alternative</Link>
             <span>·</span>
             <Link to="/sites" className="hover:text-primary transition-colors">Supported Sites</Link>
             <span>·</span>
