@@ -137,15 +137,21 @@ const Index = () => {
         )}
 
         {/* Below-the-fold SEO section — visible after scrolling or when idle */}
-        <div className="border-t border-border/40 pt-8 mt-4 text-center max-w-2xl mx-auto">
-          <p className="text-muted-foreground text-sm mb-4">
+        <div className="border-t border-border/40 pt-8 mt-4 text-center max-w-2xl mx-auto space-y-4">
+          <p className="text-muted-foreground text-sm">
             Works with <Link to="/sites" className="text-primary hover:underline font-medium">380+ sites</Link> — Royal Road, NovelBin, Scribble Hub, WTR-LAB and more.
-            No account, no install, no cost.
+            Free online web novel conversion with zero account required.
           </p>
-          <div className="flex justify-center gap-5 text-xs text-muted-foreground">
-            <Link to="/guide" className="hover:text-primary transition-colors">How-to guide</Link>
+          <div className="flex flex-wrap justify-center gap-3 sm:gap-5 text-xs text-muted-foreground font-medium">
+            <Link to="/converter" className="hover:text-primary transition-colors">Best EPUB Converter</Link>
             <span>·</span>
-            <Link to="/sites" className="hover:text-primary transition-colors">Supported sites</Link>
+            <Link to="/web-to-epub" className="hover:text-primary transition-colors">Web to EPUB Tool</Link>
+            <span>·</span>
+            <Link to="/alternatives" className="hover:text-primary transition-colors">WebToEpub Alternative</Link>
+            <span>·</span>
+            <Link to="/sites" className="hover:text-primary transition-colors">Supported Sites</Link>
+            <span>·</span>
+            <Link to="/guide" className="hover:text-primary transition-colors">How-to Guide</Link>
             <span>·</span>
             <Link to="/privacy" className="hover:text-primary transition-colors">Privacy</Link>
           </div>

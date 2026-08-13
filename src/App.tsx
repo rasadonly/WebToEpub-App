@@ -12,9 +12,13 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
 // Lazy-load secondary pages so homepage bundle stays small
+// Lazy-load secondary pages so homepage bundle stays small
 const SitesPage = lazy(() => import("./pages/SitesPage"));
 const GuidePage = lazy(() => import("./pages/GuidePage"));
 const PrivacyPage = lazy(() => import("./pages/PrivacyPage"));
+const ConverterPage = lazy(() => import("./pages/ConverterPage"));
+const WebToEpubPage = lazy(() => import("./pages/WebToEpubPage"));
+const AlternativesPage = lazy(() => import("./pages/AlternativesPage"));
 
 const queryClient = new QueryClient();
 
@@ -36,10 +40,12 @@ function NavBar() {
         </Link>
 
         {/* Page nav */}
-        <nav className="hidden sm:flex items-center gap-5">
+        <nav className="hidden md:flex items-center gap-4">
+          <Link to="/converter" className={linkClass("/converter")}>EPUB Converter</Link>
+          <Link to="/web-to-epub" className={linkClass("/web-to-epub")}>Web to EPUB</Link>
+          <Link to="/alternatives" className={linkClass("/alternatives")}>WebToEpub Alt</Link>
           <Link to="/sites" className={linkClass("/sites")}>Sites</Link>
           <Link to="/guide" className={linkClass("/guide")}>Guide</Link>
-          <Link to="/privacy" className={linkClass("/privacy")}>Privacy</Link>
         </nav>
 
         {/* Right side: live stats + action menu */}
@@ -104,6 +110,9 @@ const App = () => (
         }>
           <Routes>
             <Route path="/" element={<Index />} />
+            <Route path="/converter" element={<ConverterPage />} />
+            <Route path="/web-to-epub" element={<WebToEpubPage />} />
+            <Route path="/alternatives" element={<AlternativesPage />} />
             <Route path="/sites" element={<SitesPage />} />
             <Route path="/guide" element={<GuidePage />} />
             <Route path="/privacy" element={<PrivacyPage />} />
