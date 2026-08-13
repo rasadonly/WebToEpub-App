@@ -709,12 +709,24 @@ export async function engineSearch(
   const myToken = ++searchCancelToken;
   const isLive = () => myToken === searchCancelToken;
 
-  // Iterate ALL sites (primary + secondary) ourselves — the engine's
-  // built-in `search()` stops early after ~10 sites / 20 results.
-  // Sites already known to be down or parked are skipped entirely.
+  // Iterate ALL sites (primary + secondary)
   const allSites: any[] = [...(SSE.PRIMARY_SITES || []), ...(SSE.SECONDARY_SITES || [])];
+
+  // Non-blocking down-hosts check: grab local cache instantly without waiting for network/Supabase
   let downHosts = new Set<string>();
-  try { downHosts = await getDownHosts(); } catch { /* ignore */ }
+  try {
+    const raw = localStorage.getItem('siteHealthCache_v1');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const now = Date.now();
+      for (const [h, item] of Object.entries(parsed as Record<string, { status: string; checkedAt: number }>)) {
+        if ((item.status === 'down' || item.status === 'parked') && now - item.checkedAt < 7 * 24 * 3600 * 1000) {
+          downHosts.add(h.toLowerCase());
+        }
+      }
+    }
+  } catch { /* ignore */ }
+
   const sites = downHosts.size
     ? allSites.filter((s: any) => !downHosts.has(String(s.hostname || '').toLowerCase()))
     : allSites;
