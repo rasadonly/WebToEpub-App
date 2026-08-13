@@ -755,7 +755,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
 
 
         {/* Settings card — hidden once chapters are loaded; ChapterManager handles the rest */}
-        {hasUrl && !hasFetchedChapters && (
+        {hasUrl && (
           <Card className="p-4 sm:p-6 bg-gradient-card shadow-card border-0 space-y-5 sm:space-y-6 animate-in fade-in slide-in-from-top-2 duration-300">
             {/* Load & Analyse — auto-fetches title, author, language, cover, description */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 rounded-lg border border-dashed border-primary/30 bg-primary/5 p-3">
