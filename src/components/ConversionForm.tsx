@@ -154,7 +154,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
     });
   };
 
-  const analyse = async (rawUrl: string, silent: boolean, autoStartFetch: boolean = false) => {
+  const analyse = async (rawUrl: string, silent: boolean) => {
     const url = cleanUrl(rawUrl);
     if (!url || !isUrlLike(url)) {
       if (!silent) {
@@ -183,30 +183,6 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
           description: info.title ? `Detected: ${info.title}` : 'Fields populated from the page.',
         });
       }
-
-      // Auto-start chapter fetching if requested and analysis succeeded.
-      if (autoStartFetch && autoStartedUrlRef.current !== url) {
-        autoStartedUrlRef.current = url;
-        // Construct the full data object needed for fetchChapters.
-        const site = getSiteConfig(url);
-        onSubmit({
-          tocUrl: url,
-          tocSelector: site?.tocSelector || tocSelector,
-          contentSelector: site?.contentSelector || contentSelector,
-          metadata: {
-            title: info.title || metadata.title || extractTitleFromUrl(url) || 'Novel',
-            author: info.author && info.author !== '<unknown>' ? info.author : metadata.author,
-            language: info.language || metadata.language,
-            description: info.description || metadata.description,
-            fileName: info.fileName || metadata.fileName,
-            coverUrl: info.coverUrl || metadata.coverUrl
-          },
-          chapterRange,
-          fontFamily,
-          includeIndex,
-          editableUrls
-        });
-      }
     } catch (err) {
       // Fall back to the slug in the URL so the title box is never empty.
       const slugTitle = extractTitleFromUrl(url);
@@ -226,7 +202,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
   const handleLoadAnalyse = () => analyse(tocUrl, false);
 
   // Auto-grab the book title (and the rest of the metadata) as soon as a valid
-  // link is pasted or typed — no button press needed, works for any site.
+  // link is pasted or typed — populates form fields without auto-submitting.
   useEffect(() => {
     const url = cleanUrl(tocUrl);
     if (!isUrlLike(url) || url === analysedUrlRef.current || hasFetchedChapters) return;
@@ -235,8 +211,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
       // Instant slug-based guess, then the real title once the engine answers.
       const slugTitle = extractTitleFromUrl(url);
       if (slugTitle) mergeAuto({ title: slugTitle });
-      // Trigger analysis with auto-start enabled for seamless flow.
-      void analyse(url, true, true);
+      void analyse(url, true);
     }, 600);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1000,23 +975,26 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
               </div>
             )}
 
-            {!hasFetchedChapters && (
-              <Button
-                type="submit"
-                disabled={isConverting}
-                aria-label={isConverting ? 'Working, please wait' : 'Fetch Chapters'}
-                className="w-full bg-gradient-primary hover:shadow-glow transition-smooth text-lg py-6"
-              >
-                {isConverting ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Working...
-                  </div>
-                ) : (
-                  'Fetch Chapters'
-                )}
-              </Button>
-            )}
+            <Button
+              type="submit"
+              disabled={isConverting}
+              aria-label={isConverting ? 'Working, please wait' : hasFetchedChapters ? 'Refetch Chapters' : 'Fetch Chapters'}
+              className="w-full bg-gradient-primary hover:shadow-glow transition-smooth text-lg py-6"
+            >
+              {isConverting ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Working...
+                </div>
+              ) : hasFetchedChapters ? (
+                <div className="flex items-center gap-2">
+                  <BookOpen className="w-5 h-5" />
+                  Refetch Chapters
+                </div>
+              ) : (
+                'Fetch Chapters'
+              )}
+            </Button>
           </Card>
         )}
       </form>
