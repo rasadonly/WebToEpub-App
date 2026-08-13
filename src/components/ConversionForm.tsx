@@ -757,38 +757,39 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
         {/* Settings card — hidden once chapters are loaded; ChapterManager handles the rest */}
         {hasUrl && (
           <Card className="p-4 sm:p-6 bg-gradient-card shadow-card border-0 space-y-5 sm:space-y-6 animate-in fade-in slide-in-from-top-2 duration-300">
-            {/* Load & Analyse — auto-fetches title, author, language, cover, description */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 rounded-lg border border-dashed border-primary/30 bg-primary/5 p-3">
-              <div className="text-xs sm:text-sm text-muted-foreground">
-                {isAnalysing ? (
-                  <span className="flex items-center gap-2">
-                    <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                    Analysing…
-                  </span>
-                ) : (
-                  "Auto-fetch book details (title, author, language, cover, description) from the URL."
-                )}
+            {!hasFetchedChapters && (
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 rounded-lg border border-dashed border-primary/30 bg-primary/5 p-3">
+                <div className="text-xs sm:text-sm text-muted-foreground">
+                  {isAnalysing ? (
+                    <span className="flex items-center gap-2">
+                      <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                      Analysing…
+                    </span>
+                  ) : (
+                    "Auto-fetch book details (title, author, language, cover, description) from the URL."
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  onClick={handleLoadAnalyse}
+                  disabled={isAnalysing || isConverting}
+                  variant="secondary"
+                  className="gap-2 shrink-0"
+                >
+                  {isAnalysing ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-current/40 border-t-current rounded-full animate-spin" />
+                      Analysing…
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="w-4 h-4" />
+                      Load & Analyse
+                    </>
+                  )}
+                </Button>
               </div>
-              <Button
-                type="button"
-                onClick={handleLoadAnalyse}
-                disabled={isAnalysing || isConverting}
-                variant="secondary"
-                className="gap-2 shrink-0"
-              >
-                {isAnalysing ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-current/40 border-t-current rounded-full animate-spin" />
-                    Analysing…
-                  </>
-                ) : (
-                  <>
-                    <Wand2 className="w-4 h-4" />
-                    Load & Analyse
-                  </>
-                )}
-              </Button>
-            </div>
+            )}
 
             {/* Title (required, kept visible) */}
             <div className="space-y-2">
