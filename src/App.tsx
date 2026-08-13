@@ -108,9 +108,9 @@ const App = () => (
         }>
           <Routes>
             <Route path="/" element={<Index />} />
-            <Route path="/converter" element={<Index />} />
-            <Route path="/web-to-epub" element={<Index />} />
-            <Route path="/alternatives" element={<Index />} />
+            <Route path="/converter" element={<ConverterPage />} />
+            <Route path="/web-to-epub" element={<WebToEpubPage />} />
+            <Route path="/alternatives" element={<AlternativesPage />} />
             <Route path="/sites" element={<SitesPage />} />
             <Route path="/guide" element={<GuidePage />} />
             <Route path="/privacy" element={<PrivacyPage />} />

@@ -1,10 +1,28 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { trackPageView } from '@/utils/analytics';
-import { Button } from '@/components/ui/button';
-import { Globe, BookOpen, Layers, CheckCircle2, ArrowRight, Smartphone } from 'lucide-react';
+import { Globe, Layers, Smartphone, ArrowRight } from 'lucide-react';
+import ConversionForm from '@/components/ConversionForm';
+import ProgressLog from '@/components/ProgressLog';
+import ChapterManager from '@/components/ChapterManager';
+import { useEpubConverter } from '@/hooks/useEpubConverter';
 
 export default function WebToEpubPage() {
+  const {
+    progress,
+    logs,
+    chapterList,
+    setChapterList,
+    fetchChapters,
+    generateFromChapters,
+    stopConversion,
+    isConverting,
+    isGenerating,
+    isFetchingToc,
+    serverJob,
+    downloadServerJob,
+  } = useEpubConverter();
+
   useEffect(() => {
     document.title = 'Web to EPUB — Convert Any Web Novel to EPUB Online | LinkToEpub';
     trackPageView('/web-to-epub');
@@ -15,7 +33,7 @@ export default function WebToEpubPage() {
     script.id = 'web-to-epub-jsonld';
     script.text = JSON.stringify({
       '@context': 'https://schema.org',
-      '@type': 'WebApplication',
+      '@type': 'SoftwareApplication',
       'name': 'LinkToEpub - Web to EPUB Converter',
       'applicationCategory': 'UtilitiesApplication',
       'operatingSystem': 'Web Browser (iOS, Android, Windows, Mac, Linux)',
@@ -33,24 +51,42 @@ export default function WebToEpubPage() {
     <div className="min-h-screen bg-background text-foreground py-8 px-4">
       <main className="container mx-auto max-w-4xl space-y-12">
 
-        {/* Hero Section */}
-        <section className="text-center space-y-4">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
-            <Globe className="w-3.5 h-3.5" /> Web to EPUB Conversion Tool
+        {/* Hero Section with Live Form */}
+        <section className="space-y-6">
+          <div className="text-center space-y-4">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
+              <Globe className="w-3.5 h-3.5" /> Web to EPUB Conversion Tool
+            </div>
+            <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-foreground">
+              Turn Any Web Serial into <span className="text-primary">Web to EPUB</span> Ebooks
+            </h1>
+            <p className="text-muted-foreground text-base sm:text-lg max-w-2xl mx-auto">
+              Extract serialized chapters from your favorite novel websites and compile them into clean EPUB files.
+            </p>
           </div>
-          <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-foreground">
-            Turn Any Web Serial into <span className="text-primary">Web to EPUB</span> Ebooks
-          </h1>
-          <p className="text-muted-foreground text-base sm:text-lg max-w-2xl mx-auto">
-            Extract serialized chapters from your favorite novel websites and compile them into clean, portable <strong>EPUB files</strong> with proper table-of-contents navigation.
-          </p>
-          <div className="pt-2">
-            <Button asChild size="lg" className="font-bold gap-2 shadow-lg">
-              <Link to="/">
-                Convert Web Novel Now <ArrowRight className="w-4 h-4" />
-              </Link>
-            </Button>
-          </div>
+
+          {/* Interactive Conversion Form */}
+          <ConversionForm
+            onSubmit={fetchChapters}
+            isConverting={isConverting}
+            hasFetchedChapters={!!(chapterList && chapterList.length > 0)}
+          />
+          {chapterList && chapterList.length > 0 && (
+            <ChapterManager
+              chapters={chapterList}
+              onChange={setChapterList}
+              onGenerate={generateFromChapters}
+              isGenerating={isGenerating}
+              isStreaming={isFetchingToc}
+            />
+          )}
+          <ProgressLog
+            progress={progress}
+            logs={logs}
+            onStop={stopConversion}
+            serverJob={serverJob}
+            onDownload={downloadServerJob}
+          />
         </section>
 
         {/* Key Workflow */}

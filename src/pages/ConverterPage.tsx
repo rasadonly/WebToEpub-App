@@ -2,9 +2,28 @@ import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { trackPageView } from '@/utils/analytics';
 import { Button } from '@/components/ui/button';
-import { BookOpen, Zap, Shield, Sparkles, CheckCircle2, ArrowRight } from 'lucide-react';
+import { BookOpen, Zap, Shield, Sparkles, ArrowRight } from 'lucide-react';
+import ConversionForm from '@/components/ConversionForm';
+import ProgressLog from '@/components/ProgressLog';
+import ChapterManager from '@/components/ChapterManager';
+import { useEpubConverter } from '@/hooks/useEpubConverter';
 
 export default function ConverterPage() {
+  const {
+    progress,
+    logs,
+    chapterList,
+    setChapterList,
+    fetchChapters,
+    generateFromChapters,
+    stopConversion,
+    isConverting,
+    isGenerating,
+    isFetchingToc,
+    serverJob,
+    downloadServerJob,
+  } = useEpubConverter();
+
   useEffect(() => {
     document.title = 'Best EPUB Converter — Convert Web Novels Free Online | LinkToEpub';
     trackPageView('/converter');
@@ -33,24 +52,42 @@ export default function ConverterPage() {
     <div className="min-h-screen bg-background text-foreground py-8 px-4">
       <main className="container mx-auto max-w-4xl space-y-12">
 
-        {/* Hero Section */}
-        <section className="text-center space-y-4">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
-            <Sparkles className="w-3.5 h-3.5" /> Best Online EPUB Converter
+        {/* Hero Section with Live Form */}
+        <section className="space-y-6">
+          <div className="text-center space-y-4">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
+              <Sparkles className="w-3.5 h-3.5" /> Best Online EPUB Converter
+            </div>
+            <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-foreground">
+              Free Online <span className="text-primary">EPUB Converter</span> for Web Novels
+            </h1>
+            <p className="text-muted-foreground text-base sm:text-lg max-w-2xl mx-auto">
+              Convert web novels, fanfiction, and online serialized fiction into clean, beautifully formatted <strong>.epub</strong> files.
+            </p>
           </div>
-          <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-foreground">
-            Free Online <span className="text-primary">EPUB Converter</span> for Web Novels
-          </h1>
-          <p className="text-muted-foreground text-base sm:text-lg max-w-2xl mx-auto">
-            Convert web novels, fanfiction, and online serialized fiction into clean, beautifully formatted <strong>.epub</strong> files for Kindle, Kobo, Apple Books, and Android readers.
-          </p>
-          <div className="pt-2">
-            <Button asChild size="lg" className="font-bold gap-2 shadow-lg">
-              <Link to="/">
-                Start Converting Free <ArrowRight className="w-4 h-4" />
-              </Link>
-            </Button>
-          </div>
+
+          {/* Interactive Conversion Form */}
+          <ConversionForm
+            onSubmit={fetchChapters}
+            isConverting={isConverting}
+            hasFetchedChapters={!!(chapterList && chapterList.length > 0)}
+          />
+          {chapterList && chapterList.length > 0 && (
+            <ChapterManager
+              chapters={chapterList}
+              onChange={setChapterList}
+              onGenerate={generateFromChapters}
+              isGenerating={isGenerating}
+              isStreaming={isFetchingToc}
+            />
+          )}
+          <ProgressLog
+            progress={progress}
+            logs={logs}
+            onStop={stopConversion}
+            serverJob={serverJob}
+            onDownload={downloadServerJob}
+          />
         </section>
 
         {/* Why Choose LinkToEpub */}

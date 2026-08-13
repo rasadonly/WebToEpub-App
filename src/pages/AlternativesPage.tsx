@@ -1,10 +1,28 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { trackPageView } from '@/utils/analytics';
-import { Button } from '@/components/ui/button';
 import { Check, X, Shield, Smartphone, Cloud, ArrowRight, Sparkles } from 'lucide-react';
+import ConversionForm from '@/components/ConversionForm';
+import ProgressLog from '@/components/ProgressLog';
+import ChapterManager from '@/components/ChapterManager';
+import { useEpubConverter } from '@/hooks/useEpubConverter';
 
 export default function AlternativesPage() {
+  const {
+    progress,
+    logs,
+    chapterList,
+    setChapterList,
+    fetchChapters,
+    generateFromChapters,
+    stopConversion,
+    isConverting,
+    isGenerating,
+    isFetchingToc,
+    serverJob,
+    downloadServerJob,
+  } = useEpubConverter();
+
   useEffect(() => {
     document.title = 'WebToEpub Alternative — Free Online Browser & Mobile Converter | LinkToEpub';
     trackPageView('/alternatives');
@@ -33,24 +51,42 @@ export default function AlternativesPage() {
     <div className="min-h-screen bg-background text-foreground py-8 px-4">
       <main className="container mx-auto max-w-4xl space-y-12">
 
-        {/* Hero Section */}
-        <section className="text-center space-y-4">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
-            <Sparkles className="w-3.5 h-3.5" /> WebToEpub Extension Alternative
+        {/* Hero Section with Live Form */}
+        <section className="space-y-6">
+          <div className="text-center space-y-4">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
+              <Sparkles className="w-3.5 h-3.5" /> WebToEpub Extension Alternative
+            </div>
+            <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-foreground">
+              The #1 <span className="text-primary">WebToEpub Alternative</span> That Works on Mobile
+            </h1>
+            <p className="text-muted-foreground text-base sm:text-lg max-w-2xl mx-auto">
+              Convert web novels directly on iPhone, Android, iPad, and desktop without installing browser extensions.
+            </p>
           </div>
-          <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-foreground">
-            The #1 <span className="text-primary">WebToEpub Alternative</span> That Works on Mobile
-          </h1>
-          <p className="text-muted-foreground text-base sm:text-lg max-w-2xl mx-auto">
-            Love WebToEpub but need a web app that works on iPhone, Android, iPad, and desktop without installing browser extensions? Meet <strong>LinkToEpub</strong>.
-          </p>
-          <div className="pt-2">
-            <Button asChild size="lg" className="font-bold gap-2 shadow-lg">
-              <Link to="/">
-                Try WebToEpub Online Free <ArrowRight className="w-4 h-4" />
-              </Link>
-            </Button>
-          </div>
+
+          {/* Interactive Conversion Form */}
+          <ConversionForm
+            onSubmit={fetchChapters}
+            isConverting={isConverting}
+            hasFetchedChapters={!!(chapterList && chapterList.length > 0)}
+          />
+          {chapterList && chapterList.length > 0 && (
+            <ChapterManager
+              chapters={chapterList}
+              onChange={setChapterList}
+              onGenerate={generateFromChapters}
+              isGenerating={isGenerating}
+              isStreaming={isFetchingToc}
+            />
+          )}
+          <ProgressLog
+            progress={progress}
+            logs={logs}
+            onStop={stopConversion}
+            serverJob={serverJob}
+            onDownload={downloadServerJob}
+          />
         </section>
 
         {/* Why Switch Section */}
