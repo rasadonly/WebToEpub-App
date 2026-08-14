@@ -498,7 +498,6 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
               </Button>
             </div>
             <div className="mt-3 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 text-xs text-muted-foreground">
-              <span>Paste a TOC or chapter URL to convert, or type a novel name to search.</span>
               {hasUrl && (
                 <button
                   type="button"
