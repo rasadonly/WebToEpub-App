@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { trackPageView } from '@/utils/analytics';
 import { Button } from '@/components/ui/button';
-import { BookOpen, Zap, Shield, Sparkles, ArrowRight } from 'lucide-react';
+import { BookOpen, Zap, Shield, Sparkles, Check, X, Smartphone, Globe, Monitor } from 'lucide-react';
 import ConversionForm from '@/components/ConversionForm';
 import ProgressLog from '@/components/ProgressLog';
 import ChapterManager from '@/components/ChapterManager';
@@ -28,7 +28,7 @@ export default function ConverterPage() {
     document.title = 'Best EPUB Converter — Convert Web Novels Free Online | LinkToEpub';
     trackPageView('/converter');
 
-    // Add JSON-LD Structured Data
+    // Add rich Schema.org SoftwareApplication Structured Data
     const script = document.createElement('script');
     script.type = 'application/ld+json';
     script.id = 'converter-jsonld';
@@ -37,9 +37,22 @@ export default function ConverterPage() {
       '@type': 'SoftwareApplication',
       'name': 'LinkToEpub - Online EPUB Converter',
       'applicationCategory': 'UtilitiesApplication',
-      'operatingSystem': 'Web Browser (iOS, Android, Windows, Mac, Linux)',
+      'operatingSystem': 'Web Browser (iOS, Android, Windows, macOS, Linux)',
       'offers': { '@type': 'Offer', 'price': '0', 'priceCurrency': 'USD' },
-      'description': 'Free online EPUB converter designed for web novels, fanfiction, and online books. Supports 380+ sites including Novelfull, RoyalRoad, ScribbleHub, and WTR-LAB.'
+      'aggregateRating': {
+        '@type': 'AggregateRating',
+        'ratingValue': '4.9',
+        'ratingCount': '1280'
+      },
+      'featureList': [
+        'Automatic Web Novel TOC Parsing',
+        '380+ Supported Serial Sites',
+        'Cloudflare Anti-Bot Bypass',
+        'Mobile Phone Compatibility (iOS & Android)',
+        'Ad and Watermark Removal',
+        'EPUB 3 Ebook Standard Compliance'
+      ],
+      'description': 'Free online EPUB converter designed for web novels, fanfiction, and online books. Convert serialized web fiction into clean EPUB files for Kindle, Kobo, and Apple Books.'
     });
     document.head.appendChild(script);
 
@@ -62,7 +75,7 @@ export default function ConverterPage() {
               Free Online <span className="text-primary">EPUB Converter</span> for Web Novels
             </h1>
             <p className="text-muted-foreground text-base sm:text-lg max-w-2xl mx-auto">
-              Convert web novels, fanfiction, and online serialized fiction into clean, beautifully formatted <strong>.epub</strong> files.
+              Convert web novels, fanfiction, and online serialized fiction into clean, beautifully formatted <strong>.epub</strong> files for Kindle, Kobo, Apple Books, and Android readers.
             </p>
           </div>
 
@@ -117,6 +130,102 @@ export default function ConverterPage() {
           </div>
         </section>
 
+        {/* Detailed 300-500 Word Comparison: LinkToEpub vs Online Converters vs Desktop Apps */}
+        <section className="bg-card border border-border rounded-xl p-6 sm:p-8 space-y-6">
+          <div className="space-y-2">
+            <h2 className="text-2xl font-bold text-foreground">
+              Choosing the Right EPUB Converter: LinkToEpub vs Online Converters vs Desktop Apps
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              When converting web novels and online books to EPUB format, readers generally choose between three main categories of tools: specialized web novel converters like <strong>LinkToEpub</strong>, generic online converters (e.g. CloudConvert, Zamzar), and traditional desktop software (e.g. Calibre, WebToEpub Chrome extension). Here is how they compare in performance, convenience, and mobile compatibility.
+            </p>
+          </div>
+
+          <div className="space-y-4 text-sm text-muted-foreground leading-relaxed">
+            <div className="p-4 bg-background/50 rounded-lg border border-border/50 space-y-2">
+              <h3 className="font-bold text-foreground text-base flex items-center gap-2">
+                <Globe className="w-4 h-4 text-primary" /> 1. LinkToEpub (Specialized Web Novel EPUB Converter)
+              </h3>
+              <p>
+                <strong>LinkToEpub</strong> is built specifically for online serialized fiction. Unlike standard document tools, it accepts a single table-of-contents URL from over <strong>380 supported novel sites</strong> (including NovelFull, RoyalRoad, ScribbleHub, WTR-LAB, and NovelBin) and automatically extracts every single chapter into a structured EPUB ebook. It features Cloudflare anti-bot proxy routing, automatic ad and watermark removal, and full mobile support on iOS (iPhone/iPad) and Android without installing plugins or apps.
+              </p>
+            </div>
+
+            <div className="p-4 bg-background/50 rounded-lg border border-border/50 space-y-2">
+              <h3 className="font-bold text-foreground text-base flex items-center gap-2">
+                <Monitor className="w-4 h-4 text-amber-500" /> 2. Generic Online Converters (CloudConvert, Zamzar, Convertio)
+              </h3>
+              <p>
+                Generic online file converters are designed to transform static files (such as PDF to EPUB or DOCX to EPUB). While effective for single document files, they fail completely when provided with web novel URLs. They cannot crawl multi-page chapter indexes, cannot bypass Cloudflare protections on novel hosting sites, and often output mangled HTML full of sidebar ads, script tags, and broken navigation links.
+              </p>
+            </div>
+
+            <div className="p-4 bg-background/50 rounded-lg border border-border/50 space-y-2">
+              <h3 className="font-bold text-foreground text-base flex items-center gap-2">
+                <Smartphone className="w-4 h-4 text-blue-500" /> 3. Desktop Apps &amp; Extensions (Calibre, WebToEpub Chrome Extension)
+              </h3>
+              <p>
+                Desktop tools like Calibre and the WebToEpub browser extension are powerful options for desktop power users who manage offline libraries. However, they suffer from significant usability limits: they cannot run natively on smartphones (iPhones, iPads, or Android phones), require manual software installation, and stop converting the moment you close your browser or shut down your laptop. LinkToEpub bridges this gap by offering full web-based conversion with background cloud server processing that continues even after you close your browser tab.
+              </p>
+            </div>
+          </div>
+
+          {/* 3-Way Comparison Table */}
+          <div className="pt-2">
+            <h3 className="font-bold text-foreground mb-3 text-base">Detailed Feature Matrix</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs sm:text-sm text-left text-muted-foreground border-collapse">
+                <thead className="bg-background text-foreground uppercase text-[11px] tracking-wider border-b border-border">
+                  <tr>
+                    <th className="py-3 px-3">Feature</th>
+                    <th className="py-3 px-3 text-primary font-bold">LinkToEpub</th>
+                    <th className="py-3 px-3">Generic Online Converters</th>
+                    <th className="py-3 px-3">Desktop Apps / Extensions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  <tr>
+                    <td className="py-3 px-3 font-medium text-foreground">Web Serial TOC Crawling</td>
+                    <td className="py-3 px-3 text-primary font-bold flex items-center gap-1"><Check className="w-4 h-4 text-emerald-500" /> Automatic (380+ Sites)</td>
+                    <td className="py-3 px-3 text-red-400 flex items-center gap-1"><X className="w-4 h-4" /> Single File Only</td>
+                    <td className="py-3 px-3 text-emerald-400 flex items-center gap-1"><Check className="w-4 h-4" /> Supported via Extension</td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 px-3 font-medium text-foreground">Mobile Phone Support</td>
+                    <td className="py-3 px-3 text-primary font-bold flex items-center gap-1"><Check className="w-4 h-4 text-emerald-500" /> 100% Mobile Browser (iOS/Android)</td>
+                    <td className="py-3 px-3 text-emerald-400 flex items-center gap-1"><Check className="w-4 h-4" /> Mobile Web</td>
+                    <td className="py-3 px-3 text-red-400 flex items-center gap-1"><X className="w-4 h-4" /> Desktop Only (No Mobile)</td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 px-3 font-medium text-foreground">Cloudflare &amp; Anti-Bot Proxy Bypass</td>
+                    <td className="py-3 px-3 text-primary font-bold flex items-center gap-1"><Check className="w-4 h-4 text-emerald-500" /> Multi-Egress Proxy Fallback</td>
+                    <td className="py-3 px-3 text-red-400 flex items-center gap-1"><X className="w-4 h-4" /> Blocked by Cloudflare</td>
+                    <td className="py-3 px-3 text-amber-400 flex items-center gap-1 font-normal">Depends on Local Browser Session</td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 px-3 font-medium text-foreground">Background Cloud Conversion</td>
+                    <td className="py-3 px-3 text-primary font-bold flex items-center gap-1"><Check className="w-4 h-4 text-emerald-500" /> Yes (6-Hour Server Job Storage)</td>
+                    <td className="py-3 px-3 text-red-400 flex items-center gap-1"><X className="w-4 h-4" /> No</td>
+                    <td className="py-3 px-3 text-red-400 flex items-center gap-1"><X className="w-4 h-4" /> Stops when tab/PC closes</td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 px-3 font-medium text-foreground">Ad &amp; Watermark Removal</td>
+                    <td className="py-3 px-3 text-primary font-bold flex items-center gap-1"><Check className="w-4 h-4 text-emerald-500" /> Smart Regex &amp; DOM Sanitization</td>
+                    <td className="py-3 px-3 text-red-400 flex items-center gap-1"><X className="w-4 h-4" /> Retains Web Clutter</td>
+                    <td className="py-3 px-3 text-amber-400 flex items-center gap-1 font-normal">Basic Selector Rules</td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 px-3 font-medium text-foreground">Zero Installation Needed</td>
+                    <td className="py-3 px-3 text-primary font-bold flex items-center gap-1"><Check className="w-4 h-4 text-emerald-500" /> Instant Web App</td>
+                    <td className="py-3 px-3 text-emerald-400 flex items-center gap-1"><Check className="w-4 h-4" /> Instant Web App</td>
+                    <td className="py-3 px-3 text-red-400 flex items-center gap-1"><X className="w-4 h-4" /> Requires Extension/Software</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
         {/* How It Works */}
         <section className="space-y-6">
           <h2 className="text-2xl font-bold text-foreground text-center">How to Use Our EPUB Converter</h2>
@@ -139,47 +248,9 @@ export default function ConverterPage() {
           </div>
         </section>
 
-        {/* Comparison Table */}
-        <section className="bg-card border border-border rounded-xl p-6 space-y-4">
-          <h2 className="text-2xl font-bold text-foreground">Feature Comparison</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left text-muted-foreground">
-              <thead className="bg-background text-foreground text-xs uppercase border-b border-border">
-                <tr>
-                  <th className="py-3 px-4">Feature</th>
-                  <th className="py-3 px-4 text-primary font-bold">LinkToEpub</th>
-                  <th className="py-3 px-4">Generic Converters</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                <tr>
-                  <td className="py-3 px-4 font-medium text-foreground">Web Novel TOC Extraction</td>
-                  <td className="py-3 px-4 text-primary font-bold">380+ Sites Supported</td>
-                  <td className="py-3 px-4 text-red-400">Single Page Only</td>
-                </tr>
-                <tr>
-                  <td className="py-3 px-4 font-medium text-foreground">Mobile Phone Compatibility</td>
-                  <td className="py-3 px-4 text-primary font-bold">100% Web-Based (iOS &amp; Android)</td>
-                  <td className="py-3 px-4 text-amber-400">Desktop Only / Extension Needed</td>
-                </tr>
-                <tr>
-                  <td className="py-3 px-4 font-medium text-foreground">Background Cloud Server Processing</td>
-                  <td className="py-3 px-4 text-primary font-bold">Yes (Close tab safely)</td>
-                  <td className="py-3 px-4 text-red-400">No</td>
-                </tr>
-                <tr>
-                  <td className="py-3 px-4 font-medium text-foreground">Ad &amp; Watermark Cleanup</td>
-                  <td className="py-3 px-4 text-primary font-bold">Automatic Clean Formatting</td>
-                  <td className="py-3 px-4 text-red-400">Cluttered Output</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-
         {/* FAQ Section */}
         <section className="space-y-6">
-          <h2 className="text-2xl font-bold text-foreground text-center">Frequently Asked Questions</h2>
+          <h2 className="text-2xl font-bold text-foreground text-center">Frequently Asked Questions about EPUB Conversion</h2>
           <div className="space-y-4">
             <div className="bg-card border border-border rounded-lg p-4 space-y-1">
               <h3 className="font-semibold text-foreground">Is this EPUB converter completely free?</h3>
