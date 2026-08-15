@@ -92,13 +92,17 @@ const Index = () => {
   return (
     <div
       ref={pageRef}
-      className="min-h-screen bg-gradient-hero"
+      className="min-h-screen bg-background relative overflow-x-hidden"
       style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
-      <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-8 space-y-6 sm:space-y-8 max-w-full">
+      {/* Background ambient lighting accents */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-96 bg-gradient-to-b from-primary/10 via-primary/5 to-transparent blur-3xl pointer-events-none -z-10" />
+      <div className="absolute top-1/4 right-0 w-96 h-96 bg-primary/5 rounded-full blur-3xl pointer-events-none -z-10" />
+
+      <main className="container mx-auto px-4 sm:px-6 md:px-8 py-6 sm:py-12 space-y-8 sm:space-y-12 max-w-6xl">
 
         {/* Main Content */}
-        <div className="space-y-6">
+        <div className="space-y-8">
           <ConversionForm
             onSubmit={fetchChapters}
             isConverting={isConverting}
@@ -124,11 +128,11 @@ const Index = () => {
 
         {/* Reset Button */}
         {(progress.status === 'complete' || progress.status === 'error') && (
-          <div className="flex justify-center">
+          <div className="flex justify-center pt-4">
             <Button
               onClick={resetConverter}
               variant="outline"
-              className="gap-2 transition-smooth hover:shadow-card"
+              className="gap-2 px-6 py-5 text-base transition-smooth hover:shadow-card font-medium"
             >
               <RefreshCw className="w-4 h-4" />
               Convert Another Novel
@@ -137,22 +141,22 @@ const Index = () => {
         )}
 
         {/* Below-the-fold SEO section — visible after scrolling or when idle */}
-        <div className="border-t border-border/40 pt-8 mt-4 text-center max-w-2xl mx-auto space-y-4">
-          <p className="text-muted-foreground text-sm">
-            Works with <Link to="/sites" className="text-primary hover:underline font-medium">380+ sites</Link> — Royal Road, NovelBin, Scribble Hub, WTR-LAB and more.
+        <div className="border-t border-border/50 pt-10 mt-12 text-center max-w-4xl mx-auto space-y-5">
+          <p className="text-muted-foreground text-sm sm:text-base leading-relaxed">
+            Works with <Link to="/sites" className="text-primary hover:underline font-semibold">380+ sites</Link> — Royal Road, NovelBin, Scribble Hub, WTR-LAB and more.
             Free online web novel conversion with zero account required.
           </p>
-          <div className="flex flex-wrap justify-center gap-3 sm:gap-5 text-xs text-muted-foreground font-medium">
+          <div className="flex flex-wrap justify-center gap-3 sm:gap-6 text-xs sm:text-sm text-muted-foreground font-medium">
             <Link to="/converter" className="hover:text-primary transition-colors font-semibold">Best EPUB converter for web novels</Link>
-            <span>·</span>
+            <span className="text-border">·</span>
             <Link to="/web-to-epub" className="hover:text-primary transition-colors">Web to EPUB Tool</Link>
-            <span>·</span>
+            <span className="text-border">·</span>
             <Link to="/alternatives" className="hover:text-primary transition-colors">WebToEpub Alternative</Link>
-            <span>·</span>
+            <span className="text-border">·</span>
             <Link to="/sites" className="hover:text-primary transition-colors">Supported Sites</Link>
-            <span>·</span>
+            <span className="text-border">·</span>
             <Link to="/guide" className="hover:text-primary transition-colors">How-to Guide</Link>
-            <span>·</span>
+            <span className="text-border">·</span>
             <Link to="/privacy" className="hover:text-primary transition-colors">Privacy</Link>
           </div>
         </div>

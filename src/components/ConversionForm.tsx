@@ -466,9 +466,9 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
           </div>
 
           {/* Pill search */}
-          <div className="w-full max-w-2xl px-1">
-            <div className="group relative flex items-center rounded-full bg-card border border-border shadow-search transition-smooth focus-within:border-primary/40 focus-within:shadow-glow">
-              <Search className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground absolute left-4 sm:left-5 pointer-events-none" />
+          <div className="w-full max-w-4xl lg:max-w-5xl px-2 sm:px-4">
+            <div className="group relative flex items-center rounded-full bg-card border border-border shadow-search transition-all duration-300 focus-within:border-primary/60 focus-within:shadow-glow hover:border-primary/30">
+              <Search className="w-5 h-5 sm:w-6 sm:h-6 text-muted-foreground absolute left-4 sm:left-6 pointer-events-none transition-colors group-focus-within:text-primary" />
               <Input
                 id="toc-url"
                 type="text"
@@ -480,12 +480,12 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                 value={tocUrl}
                 onChange={(e) => setTocUrl(e.target.value)}
                 placeholder="Paste TOC URL or search a novel…"
-                className="h-12 sm:h-14 md:h-16 pl-11 sm:pl-14 pr-24 sm:pr-32 md:pr-36 text-base md:text-lg rounded-full border-0 bg-transparent shadow-none focus-visible:ring-0"
+                className="h-14 sm:h-16 md:h-20 pl-12 sm:pl-16 pr-28 sm:pr-36 md:pr-40 text-base sm:text-lg md:text-xl rounded-full border-0 bg-transparent shadow-none focus-visible:ring-0 text-foreground placeholder:text-muted-foreground/70"
               />
               <Button
                 type="submit"
                 disabled={isConverting || isSearching || trimmed.length === 0}
-                className="absolute right-1.5 sm:right-2 h-9 sm:h-10 md:h-12 rounded-full px-3 sm:px-5 md:px-6 bg-primary hover:bg-primary/90 text-primary-foreground gap-2"
+                className="absolute right-2 sm:right-2.5 h-10 sm:h-12 md:h-14 rounded-full px-4 sm:px-6 md:px-8 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-sm sm:text-base gap-2 shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all"
               >
                 {isConverting || isSearching ? (
                   <>
@@ -495,7 +495,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                 ) : (
                   <>
                     <span className="hidden sm:inline">{hasQuery ? 'Search' : 'Fetch'}</span>
-                    {hasQuery ? <Search className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
+                    {hasQuery ? <Search className="w-4 h-4 sm:w-5 sm:h-5" /> : <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />}
                   </>
                 )}
               </Button>
@@ -525,35 +525,38 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
 
             {/* How to use */}
             {!isSearching && searchResults.length === 0 && !isConverting && (
-              <div className="mt-4 grid gap-2 sm:grid-cols-3 text-left">
+              <div className="mt-6 grid gap-4 sm:grid-cols-3 text-left">
                 {[
                   { n: '1', t: 'Paste or search', d: 'Drop a table-of-contents or chapter link, or type a novel name to search supported sites.' },
                   { n: '2', t: 'Pick chapters', d: 'Review the detected title and author, then select a range, reorder or remove chapters.' },
                   { n: '3', t: 'Get your EPUB', d: 'Convert and download a clean EPUB, or open it in the built-in reader.' },
                 ].map((s) => (
-                  <div key={s.n} className="rounded-xl border border-border bg-card/60 p-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">{s.n}</span>
-                      <span className="text-xs font-semibold text-foreground">{s.t}</span>
+                  <div
+                    key={s.n}
+                    className="rounded-2xl border border-border/80 bg-card/80 p-4 sm:p-5 shadow-xs hover:border-primary/40 hover:shadow-md hover:bg-card transition-all duration-300 group"
+                  >
+                    <div className="flex items-center gap-2.5 mb-2">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                        {s.n}
+                      </span>
+                      <span className="text-sm font-bold text-foreground">{s.t}</span>
                     </div>
-                    <p className="text-[11px] leading-relaxed text-muted-foreground">{s.d}</p>
+                    <p className="text-xs leading-relaxed text-muted-foreground">{s.d}</p>
                   </div>
                 ))}
               </div>
             )}
 
-
-
             {/* Recent searches */}
             {!isSearching && searchResults.length === 0 && recentSearches.length > 0 && (
-              <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
-                <span className="text-[11px] uppercase tracking-wider text-muted-foreground/70 mr-1">Recent</span>
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground/70 mr-1">Recent</span>
                 {recentSearches.map((q) => (
                   <button
                     key={q}
                     type="button"
                     onClick={() => { setTocUrl(q); runSearch(q); }}
-                    className="rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground hover:text-foreground transition-smooth"
+                    className="rounded-full bg-secondary/80 border border-border/60 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-secondary transition-all"
                   >
                     {q}
                   </button>
