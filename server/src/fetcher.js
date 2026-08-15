@@ -1718,8 +1718,34 @@ async function tocGravityTales(url) {
   // Chapter table or list
   const items = linksFrom(html, origin, 'table.tablepress a[href], .chapter-list a[href], .entry-content a[href]')
     .filter(i => /chapter|chap|ch[-_]?\d|\d+-\d+/i.test(i.title + i.url));
+}
+
+// --- ReadNovelMtl (readnovelmtl.com) ---
+async function tocReadNovelMtl(url) {
+  const html = await getText(url);
+  const doc = parseHtml(html);
+  const origin = new URL(url).origin;
+  const menu = doc.querySelector("#chapters") ? doc.querySelector("#chapters").parentElement : doc.querySelector(".accordion");
+  let items = [];
+  if (menu) {
+    menu.querySelectorAll("a[href]").forEach((a) => {
+      const href = a.getAttribute("href");
+      if (href) {
+        items.push({ url: absoluteUrl(origin, href), title: (a.textContent || "").trim() });
+      }
+    });
+  }
+  if (!items.length) {
+    items = linksFrom(html, origin, ".chapter-list a, .list-chapter a, #idData a, .chapters a, .ch-list a");
+  }
   return dedupeByUrl(items);
 }
+
+async function bodyReadNovelMtl(url) {
+  const doc = parseHtml(await getText(url));
+  return extractWithSelector(doc, "#content, .chapter-content, #chr-content");
+}
+
 
 /** Hosts covered by the dedicated parsers above (used by supportedDomains). */
 const MAJOR_DOMAINS = [
