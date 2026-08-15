@@ -1893,6 +1893,8 @@ function siteKey(hostname) {
   if (host.includes("novelhi.com") || host.includes("novelgate.")) return "novelhi";
   if (host.includes("lightnovelpub.") || host.includes("novelpub.")) return "lightnovelpub";
   if (host.includes("creative-novels.com")) return "creativenovels";
+  if (host.includes("readnovelmtl.com")) return "readnovelmtl";
+
   for (const [re, key] of MAJOR_SITES) {
     if (re.test(host)) return key;
   }
