@@ -684,32 +684,61 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
 
       {/* URL view */}
       {view === 'url' && (
-        <div className="flex-1 flex flex-col items-center justify-center gap-6 p-6">
-          <div className="text-center space-y-2">
-            <div className="text-4xl">📖</div>
-            <h1 className="text-2xl font-display font-bold">Live Reader</h1>
-            <p className="text-sm opacity-70 max-w-md">
-              Read any supported web novel directly here. Paste a novel URL to begin.
-            </p>
+        <div className="flex-1 flex flex-col items-center justify-center p-6 bg-gradient-to-b from-transparent to-primary/5">
+          <div className="max-w-2xl w-full space-y-12 text-center">
+            <div className="space-y-6">
+              <div className="inline-flex items-center justify-center w-24 h-24 rounded-3xl bg-primary/10 text-primary animate-pulse-slow">
+                <BookOpen className="w-12 h-12" />
+              </div>
+              <div className="space-y-3">
+                <h1 className="text-4xl md:text-5xl font-display font-bold tracking-tight">
+                  Live Reader
+                </h1>
+                <p className="text-lg text-muted-foreground max-w-lg mx-auto leading-relaxed">
+                  Experience your favorite web novels in a clean, distraction-free environment with built-in text-to-speech.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (inputUrl.trim()) void loadBook(inputUrl.trim());
+                }}
+                className="relative group"
+              >
+                <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-muted-foreground group-focus-within:text-primary transition-colors">
+                  <Globe className="w-5 h-5" />
+                </div>
+                <Input
+                  value={inputUrl}
+                  onChange={(e) => setInputUrl(e.target.value)}
+                  placeholder="Paste novel TOC or chapter URL..."
+                  className="h-14 pl-12 pr-32 rounded-2xl border-2 focus-visible:ring-offset-0 focus-visible:ring-primary/20 transition-all text-base shadow-lg"
+                  autoFocus
+                />
+                <Button 
+                  type="submit" 
+                  disabled={!inputUrl.trim()}
+                  className="absolute right-2 top-2 bottom-2 px-6 rounded-xl font-bold uppercase tracking-wider text-xs shadow-md"
+                >
+                  Start Reading
+                </Button>
+              </form>
+              <div className="flex flex-wrap justify-center gap-4 text-xs font-medium text-muted-foreground/60 uppercase tracking-widest">
+                <span className="flex items-center gap-1.5"><div className="w-1 h-1 rounded-full bg-primary" /> Distraction Free</span>
+                <span className="flex items-center gap-1.5"><div className="w-1 h-1 rounded-full bg-primary" /> TTS Support</span>
+                <span className="flex items-center gap-1.5"><div className="w-1 h-1 rounded-full bg-primary" /> Offline Save</span>
+              </div>
+            </div>
+
+            {error && (
+              <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm font-medium animate-in slide-in-from-top-2 duration-300">
+                {error}
+              </div>
+            )}
           </div>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (inputUrl.trim()) void loadBook(inputUrl.trim());
-            }}
-            className="w-full max-w-xl flex gap-2"
-          >
-            <Input
-              value={inputUrl}
-              onChange={(e) => setInputUrl(e.target.value)}
-              placeholder="https://novelfull.com/some-novel.html"
-              autoFocus
-            />
-            <Button type="submit" disabled={!inputUrl.trim()}>
-              Read
-            </Button>
-          </form>
-          {error && <p className="text-sm text-destructive max-w-xl text-center">{error}</p>}
         </div>
       )}
 
