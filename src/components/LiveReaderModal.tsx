@@ -599,47 +599,45 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
       {/* TTS Panel */}
       {view === 'reader' && ttsOpen && supportsTTS && !immersive && (
         <div
-          className="border-b px-4 py-3 flex flex-wrap items-center gap-3"
-          style={{ borderColor: 'rgba(127,127,127,0.25)' }}
+          className="border-b px-4 py-3 flex flex-wrap items-center gap-3 bg-primary/5 backdrop-blur-md"
+          style={{ borderColor: themeVars.accent + '33' }}
         >
-          <div className="flex items-center gap-1">
-            <Button size="sm" variant="outline" onClick={() => skip(-1)} title="Previous paragraph">
+          <div className="flex items-center gap-1 bg-background rounded-lg border p-1">
+            <Button size="sm" variant="ghost" onClick={() => skip(-1)} title="Previous paragraph" className="h-8 w-8 p-0">
               <SkipBack className="w-4 h-4" />
             </Button>
-            <Button size="sm" onClick={togglePlay} className="gap-1">
+            <Button size="sm" onClick={togglePlay} className="h-8 px-3 gap-1.5 shadow-sm">
               {ttsPlaying && !ttsPaused ? (
-                <><Pause className="w-4 h-4" /> Pause</>
+                <><Pause className="w-3.5 h-3.5 fill-current" /> Pause</>
               ) : (
-                <><Play className="w-4 h-4" /> {ttsPaused ? 'Resume' : 'Play'}</>
+                <><Play className="w-3.5 h-3.5 fill-current" /> {ttsPaused ? 'Resume' : 'Play'}</>
               )}
             </Button>
-            <Button size="sm" variant="outline" onClick={stopTTS} title="Stop">
-              <Square className="w-4 h-4" />
+            <Button size="sm" variant="ghost" onClick={stopTTS} title="Stop" className="h-8 w-8 p-0">
+              <Square className="w-4 h-4 fill-current" />
             </Button>
-            <Button size="sm" variant="outline" onClick={() => skip(1)} title="Next paragraph">
+            <Button size="sm" variant="ghost" onClick={() => skip(1)} title="Next paragraph" className="h-8 w-8 p-0">
               <SkipForward className="w-4 h-4" />
             </Button>
           </div>
 
-          <label className="flex items-center gap-2 text-xs">
-            Voice
-            <select
-              value={voiceURI}
-              onChange={(e) => setVoiceURI(e.target.value)}
-              className="bg-transparent border rounded px-2 py-1 text-xs max-w-[260px]"
-              style={{ borderColor: 'rgba(127,127,127,0.4)' }}
-            >
-              {voices.length === 0 && <option value="">Default</option>}
-              {voices.map((v) => (
-                <option key={v.voiceURI} value={v.voiceURI}>
-                  {v.name} ({v.lang})
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="h-6 w-px bg-border mx-1" />
 
-          <label className="flex items-center gap-2 text-xs">
-            Speed {rate.toFixed(2)}x
+          <select
+            value={voiceURI}
+            onChange={(e) => setVoiceURI(e.target.value)}
+            className="bg-background border rounded-md px-2 py-1 h-9 text-[11px] max-w-[200px]"
+          >
+            {voices.length === 0 && <option value="">Default Voice</option>}
+            {voices.map((v) => (
+              <option key={v.voiceURI} value={v.voiceURI}>
+                {v.name} ({v.lang})
+              </option>
+            ))}
+          </select>
+
+          <div className="flex items-center gap-2 px-3 border rounded-md h-9 bg-background">
+            <span className="text-[10px] uppercase font-bold text-muted-foreground whitespace-nowrap">Speed {rate.toFixed(1)}x</span>
             <input
               type="range"
               min={0.6}
@@ -647,11 +645,12 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
               step={0.05}
               value={rate}
               onChange={(e) => setRate(parseFloat(e.target.value))}
+              className="w-16 sm:w-24"
             />
-          </label>
+          </div>
 
-          <label className="flex items-center gap-2 text-xs">
-            Pitch {pitch.toFixed(2)}
+          <div className="flex items-center gap-2 px-3 border rounded-md h-9 bg-background hidden sm:flex">
+            <span className="text-[10px] uppercase font-bold text-muted-foreground whitespace-nowrap">Pitch</span>
             <input
               type="range"
               min={0.5}
@@ -659,13 +658,17 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
               step={0.05}
               value={pitch}
               onChange={(e) => setPitch(parseFloat(e.target.value))}
+              className="w-16"
             />
-          </label>
+          </div>
 
           {ttsIndex >= 0 && (
-            <span className="text-xs opacity-70 ml-auto">
-              ¶ {ttsIndex + 1} / {paragraphs.length}
-            </span>
+            <div className="ml-auto flex items-center gap-2 px-2 py-1 bg-primary/10 rounded-full border border-primary/20">
+              <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-primary tabular-nums">
+                Para {ttsIndex + 1} / {paragraphs.length}
+              </span>
+            </div>
           )}
         </div>
       )}
