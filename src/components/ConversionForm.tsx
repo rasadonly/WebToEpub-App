@@ -502,13 +502,24 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
             </div>
             <div className="mt-3 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 text-xs text-muted-foreground">
               {hasUrl && (
-                <button
-                  type="button"
-                  onClick={() => openLiveReader(trimmed)}
-                  className="inline-flex items-center gap-1 text-primary hover:underline"
-                >
-                  <BookOpenCheck className="w-3.5 h-3.5" /> Read live instead
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => openLiveReader(trimmed)}
+                    className="inline-flex items-center gap-1 text-primary hover:text-primary/80 transition-colors font-medium hover:underline"
+                  >
+                    <BookOpenCheck className="w-3.5 h-3.5" /> Read live instead
+                  </button>
+                  <span className="text-muted-foreground/30">|</span>
+                  <a
+                    href={trimmed}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-primary hover:text-primary/80 transition-colors font-medium hover:underline"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" /> Visit site
+                  </a>
+                </div>
               )}
             </div>
 
