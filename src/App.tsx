@@ -42,6 +42,8 @@ function NavBar() {
         {/* Page nav */}
         <nav className="hidden sm:flex items-center gap-5">
           <Link to="/sites" className={linkClass("/sites")}>Supported Sites</Link>
+          <button onClick={() => openModal("library")} className={linkClass("/library")}>Library</button>
+          <button onClick={() => openModal("forum")} className={linkClass("/forum")}>Forum</button>
           <Link to="/guide" className={linkClass("/guide")}>How-to Guide</Link>
         </nav>
 
