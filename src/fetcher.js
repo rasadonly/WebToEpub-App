@@ -2043,6 +2043,9 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
         return bodyWattpad(chapterUrl);
       case "wtrlab":
         return bodyWtrLab(chapterUrl);
+      case "readnovelmtl":
+        return bodyReadNovelMtl(chapterUrl);
+
 
       default:
         if (MAJOR_BODY_SELECTORS[key]) {
