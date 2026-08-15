@@ -35,8 +35,8 @@ function NavBar() {
     <header className="sticky top-0 z-40 w-full border-b border-border/50 bg-background/80 backdrop-blur-sm">
       <div className="container mx-auto px-4 flex items-center justify-between h-12 max-w-5xl gap-3">
         {/* Brand */}
-        <Link to="/" className="font-bold text-base tracking-tight hover:text-primary transition-colors shrink-0">
-          LinkToEpub
+        <Link to="/" className="font-bold text-base tracking-tight hover:text-primary transition-colors shrink-0 flex items-center gap-1.5">
+          <span className="text-primary">L</span>inkToEpub
         </Link>
 
         {/* Page nav - Hidden on mobile, visible on sm and up */}
