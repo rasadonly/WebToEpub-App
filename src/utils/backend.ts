@@ -128,7 +128,6 @@ export function getBackendUrl(): string {
   const stored = localStorage.getItem(URL_KEY);
   if (stored) return stored.replace(/\/$/, '');
   
-  // Use the global activePool if it has been populated by a health check
   if (activePool.length > 0) {
     const url = activePool[poolCursor % activePool.length];
     poolCursor++;
