@@ -460,6 +460,9 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
               <span className="text-foreground">Epub</span>
               <span className="text-primary">.</span>
             </h1>
+            <p className="text-muted-foreground text-sm max-w-lg mx-auto leading-relaxed">
+              Paste a TOC or chapter URL to convert, or type a novel name to search.
+            </p>
           </div>
 
           {/* Pill search */}

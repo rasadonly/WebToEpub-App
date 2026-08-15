@@ -38,8 +38,8 @@ export function LiveStats() {
           // In development/preview, we show combined global stats (matching production).
           // On the production domain, we show exactly what the server says.
           setStats({
-            activeJobs: data.activeJobs ?? 0,
-            activeUsers: data.activeUsers ?? 0
+            activeJobs: Math.max(data.activeJobs ?? 0, 0),
+            activeUsers: Math.max(data.activeUsers ?? 0, 1)
           });
         }
       } catch {
