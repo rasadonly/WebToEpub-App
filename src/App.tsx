@@ -41,16 +41,17 @@ function NavBar() {
 
         {/* Page nav - Hidden on mobile, visible on sm and up */}
         <nav className="hidden sm:flex items-center gap-4">
+          <Link to="/" className={linkClass("/")}>Home</Link>
           <Link to="/sites" className={linkClass("/sites")}>Sites</Link>
-          <button onClick={() => openModal("library")} className={linkClass("/library")}>Library</button>
-          <button onClick={() => openModal("forum")} className={linkClass("/forum")}>Forum</button>
+          <button type="button" onClick={() => openModal("library")} className="text-sm text-muted-foreground hover:text-primary transition-colors">Library</button>
+          <button type="button" onClick={() => openModal("forum")} className="text-sm text-muted-foreground hover:text-primary transition-colors">Forum</button>
           <Link to="/guide" className={linkClass("/guide")}>Guide</Link>
         </nav>
 
         {/* Mobile quick nav */}
         <nav className="flex sm:hidden items-center gap-2">
-          <button onClick={() => openModal("library")} className="text-xs px-2 py-1 bg-secondary rounded-md text-secondary-foreground hover:bg-secondary/80 transition-colors">Library</button>
-          <button onClick={() => openModal("forum")} className="text-xs px-2 py-1 bg-secondary rounded-md text-secondary-foreground hover:bg-secondary/80 transition-colors">Forum</button>
+          <button type="button" onClick={() => openModal("library")} className="text-xs px-2.5 py-1 bg-secondary rounded-md text-secondary-foreground hover:bg-secondary/80 transition-colors font-medium">Library</button>
+          <button type="button" onClick={() => openModal("forum")} className="text-xs px-2.5 py-1 bg-secondary rounded-md text-secondary-foreground hover:bg-secondary/80 transition-colors font-medium">Forum</button>
         </nav>
 
         {/* Right side: live stats + action menu */}
