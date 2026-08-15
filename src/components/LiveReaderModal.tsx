@@ -540,57 +540,59 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
       {/* Reader toolbar (themes / fonts / size / progress) */}
       {view === 'reader' && !immersive && (
         <div
-          className="flex flex-wrap items-center gap-3 px-4 py-2 border-b text-xs"
-          style={{ borderColor: 'rgba(127,127,127,0.25)' }}
+          className="flex flex-wrap items-center gap-2 px-4 py-3 bg-secondary/30 border-b backdrop-blur-sm"
+          style={{ borderColor: 'rgba(127,127,127,0.15)' }}
         >
-          <div className="flex items-center gap-1">
-            <Button size="sm" variant={theme === 'light' ? 'default' : 'outline'} onClick={() => setTheme('light')} title="Light">
-              <Sun className="w-3.5 h-3.5" />
+          <div className="flex items-center gap-1 bg-background rounded-lg p-1 border">
+            <Button size="sm" variant={theme === 'light' ? 'secondary' : 'ghost'} onClick={() => setTheme('light')} title="Light" className="h-8 w-8 p-0">
+              <Sun className="w-4 h-4" />
             </Button>
-            <Button size="sm" variant={theme === 'sepia' ? 'default' : 'outline'} onClick={() => setTheme('sepia')} title="Sepia">
-              <Coffee className="w-3.5 h-3.5" />
+            <Button size="sm" variant={theme === 'sepia' ? 'secondary' : 'ghost'} onClick={() => setTheme('sepia')} title="Sepia" className="h-8 w-8 p-0">
+              <Coffee className="w-4 h-4" />
             </Button>
-            <Button size="sm" variant={theme === 'dark' ? 'default' : 'outline'} onClick={() => setTheme('dark')} title="Dark">
-              <Moon className="w-3.5 h-3.5" />
+            <Button size="sm" variant={theme === 'dark' ? 'secondary' : 'ghost'} onClick={() => setTheme('dark')} title="Dark" className="h-8 w-8 p-0">
+              <Moon className="w-4 h-4" />
             </Button>
           </div>
 
-          <label className="flex items-center gap-1">
-            <TypeIcon className="w-3.5 h-3.5" />
-            <select
-              value={fontFamily}
-              onChange={(e) => setFontFamily(e.target.value)}
-              className="bg-transparent border rounded px-2 py-1"
-              style={{ borderColor: 'rgba(127,127,127,0.4)' }}
-            >
-              {FONTS.map((f) => (
-                <option key={f.id} value={f.id}>{f.label}</option>
-              ))}
-            </select>
-          </label>
+          <div className="h-6 w-px bg-border mx-1" />
 
-          <label className="flex items-center gap-2">
-            Size {fontSize}
+          <select
+            value={fontFamily}
+            onChange={(e) => setFontFamily(e.target.value)}
+            className="bg-background border rounded-md px-2 py-1 h-9 text-xs"
+          >
+            {FONTS.map((f) => (
+              <option key={f.id} value={f.id}>{f.label}</option>
+            ))}
+          </select>
+
+          <div className="flex items-center gap-2 px-3 border rounded-md h-9 bg-background">
+            <span className="text-[10px] uppercase font-bold text-muted-foreground">Size</span>
             <input
               type="range"
-              min={12}
-              max={32}
+              min={14}
+              max={28}
               step={1}
               value={fontSize}
               onChange={(e) => setFontSize(parseInt(e.target.value, 10))}
+              className="w-20"
             />
-          </label>
+          </div>
 
-          <label className="flex items-center gap-1 select-none">
+          <label className="flex items-center gap-1.5 px-3 border rounded-md h-9 bg-background text-xs cursor-pointer hover:bg-secondary/50">
             <input
               type="checkbox"
               checked={autoAdvance}
               onChange={(e) => setAutoAdvance(e.target.checked)}
+              className="w-3.5 h-3.5 rounded border-primary"
             />
             Auto-advance
           </label>
 
-          <span className="ml-auto opacity-70 tabular-nums">{progress}%</span>
+          <span className="ml-auto text-xs font-mono font-bold text-muted-foreground tabular-nums px-2 py-1 bg-background rounded border">
+            {progress}%
+          </span>
         </div>
       )}
 
