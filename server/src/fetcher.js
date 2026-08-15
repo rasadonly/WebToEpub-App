@@ -1990,6 +1990,9 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         return tocVolareNovels(tocUrl);
       case "gravitytales":
         return tocGravityTales(tocUrl);
+      case "readnovelmtl":
+        return tocReadNovelMtl(tocUrl);
+
       default:
         return [];
     }
