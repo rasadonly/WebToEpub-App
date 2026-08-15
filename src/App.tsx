@@ -41,7 +41,6 @@ function NavBar() {
 
         {/* Page nav */}
         <nav className="hidden sm:flex items-center gap-5">
-          <Link to="/" className={linkClass("/")}>Home</Link>
           <Link to="/sites" className={linkClass("/sites")}>Supported Sites</Link>
           <Link to="/guide" className={linkClass("/guide")}>How-to Guide</Link>
         </nav>
