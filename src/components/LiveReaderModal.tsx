@@ -480,57 +480,66 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
       {/* Header */}
       {!immersive && (
       <div
-        className="flex items-center justify-between px-4 py-2 border-b"
-        style={{ borderColor: 'rgba(127,127,127,0.25)', background: themeVars.bg }}
+        className="flex items-center justify-between px-4 py-2 border-b bg-card/80 backdrop-blur-md sticky top-0 z-50"
+        style={{ borderColor: 'rgba(127,127,127,0.15)', background: themeVars.bg }}
       >
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-3 min-w-0">
           {view === 'reader' && (
-            <Button variant="ghost" size="sm" onClick={() => { stopTTS(); setView('details'); }} className="gap-1">
-              <ArrowLeft className="w-4 h-4" /> Back
+            <Button variant="ghost" size="icon" onClick={() => { stopTTS(); setView('details'); }} className="h-8 w-8">
+              <ArrowLeft className="w-4 h-4" />
             </Button>
           )}
           {view === 'details' && (
-            <Button variant="ghost" size="sm" onClick={() => setView('url')} className="gap-1">
-              <ArrowLeft className="w-4 h-4" /> New URL
+            <Button variant="ghost" size="sm" onClick={() => setView('url')} className="gap-1.5 h-8">
+              <ArrowLeft className="w-3.5 h-3.5" /> New URL
             </Button>
           )}
-          <BookOpen className="w-4 h-4" style={{ color: themeVars.accent }} />
-          <span className="text-sm font-semibold truncate">
-            {view === 'reader' ? chapterTitle : book?.title || 'Live Reader'}
-          </span>
-          {view === 'reader' && (
-            <span className="text-xs opacity-60 hidden sm:inline">
-              · {chapterIndex + 1}/{chapters.length}
-            </span>
-          )}
+          <div className="flex items-center gap-2 overflow-hidden">
+            <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-primary/10 shrink-0">
+              <BookOpen className="w-4 h-4 text-primary" />
+            </div>
+            <div className="flex flex-col min-w-0">
+              <span className="text-sm font-bold truncate">
+                {view === 'reader' ? chapterTitle : book?.title || 'Live Reader'}
+              </span>
+              {view === 'reader' && (
+                <span className="text-[10px] uppercase tracking-wider font-medium opacity-50">
+                  Chapter {chapterIndex + 1} of {chapters.length}
+                </span>
+              )}
+            </div>
+          </div>
         </div>
         <div className="flex items-center gap-1">
           {view === 'reader' && (
             <>
-              <Button variant="ghost" size="sm" onClick={() => setShowToc((v) => !v)} title="Contents">
+              <Button variant="ghost" size="icon" onClick={() => setShowToc((v) => !v)} title="Contents" className={`h-8 w-8 ${showToc ? 'text-primary bg-primary/10' : ''}`}>
                 <List className="w-4 h-4" />
               </Button>
               {supportsTTS && (
                 <Button
-                  variant={ttsOpen ? 'default' : 'ghost'}
-                  size="sm"
+                  variant="ghost"
+                  size="icon"
                   onClick={() => setTtsOpen((v) => !v)}
                   title="Text to speech"
+                  className={`h-8 w-8 ${ttsOpen ? 'text-primary bg-primary/10' : ''}`}
                 >
                   <Volume2 className="w-4 h-4" />
                 </Button>
               )}
               <Button
                 variant="ghost"
-                size="sm"
+                size="icon"
                 onClick={() => setImmersive(true)}
                 title="Immersive mode"
+                className="h-8 w-8"
               >
                 <Maximize2 className="w-4 h-4" />
               </Button>
             </>
           )}
-          <Button variant="ghost" size="sm" onClick={onClose} title="Close">
+          <div className="w-px h-6 bg-border mx-1" />
+          <Button variant="ghost" size="icon" onClick={onClose} title="Close" className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive">
             <X className="w-4 h-4" />
           </Button>
         </div>
@@ -540,104 +549,104 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
       {/* Reader toolbar (themes / fonts / size / progress) */}
       {view === 'reader' && !immersive && (
         <div
-          className="flex flex-wrap items-center gap-3 px-4 py-2 border-b text-xs"
-          style={{ borderColor: 'rgba(127,127,127,0.25)' }}
+          className="flex flex-wrap items-center gap-2 px-4 py-3 bg-secondary/30 border-b backdrop-blur-sm"
+          style={{ borderColor: 'rgba(127,127,127,0.15)' }}
         >
-          <div className="flex items-center gap-1">
-            <Button size="sm" variant={theme === 'light' ? 'default' : 'outline'} onClick={() => setTheme('light')} title="Light">
-              <Sun className="w-3.5 h-3.5" />
+          <div className="flex items-center gap-1 bg-background rounded-lg p-1 border">
+            <Button size="sm" variant={theme === 'light' ? 'secondary' : 'ghost'} onClick={() => setTheme('light')} title="Light" className="h-8 w-8 p-0">
+              <Sun className="w-4 h-4" />
             </Button>
-            <Button size="sm" variant={theme === 'sepia' ? 'default' : 'outline'} onClick={() => setTheme('sepia')} title="Sepia">
-              <Coffee className="w-3.5 h-3.5" />
+            <Button size="sm" variant={theme === 'sepia' ? 'secondary' : 'ghost'} onClick={() => setTheme('sepia')} title="Sepia" className="h-8 w-8 p-0">
+              <Coffee className="w-4 h-4" />
             </Button>
-            <Button size="sm" variant={theme === 'dark' ? 'default' : 'outline'} onClick={() => setTheme('dark')} title="Dark">
-              <Moon className="w-3.5 h-3.5" />
+            <Button size="sm" variant={theme === 'dark' ? 'secondary' : 'ghost'} onClick={() => setTheme('dark')} title="Dark" className="h-8 w-8 p-0">
+              <Moon className="w-4 h-4" />
             </Button>
           </div>
 
-          <label className="flex items-center gap-1">
-            <TypeIcon className="w-3.5 h-3.5" />
-            <select
-              value={fontFamily}
-              onChange={(e) => setFontFamily(e.target.value)}
-              className="bg-transparent border rounded px-2 py-1"
-              style={{ borderColor: 'rgba(127,127,127,0.4)' }}
-            >
-              {FONTS.map((f) => (
-                <option key={f.id} value={f.id}>{f.label}</option>
-              ))}
-            </select>
-          </label>
+          <div className="h-6 w-px bg-border mx-1" />
 
-          <label className="flex items-center gap-2">
-            Size {fontSize}
+          <select
+            value={fontFamily}
+            onChange={(e) => setFontFamily(e.target.value)}
+            className="bg-background border rounded-md px-2 py-1 h-9 text-xs"
+          >
+            {FONTS.map((f) => (
+              <option key={f.id} value={f.id}>{f.label}</option>
+            ))}
+          </select>
+
+          <div className="flex items-center gap-2 px-3 border rounded-md h-9 bg-background">
+            <span className="text-[10px] uppercase font-bold text-muted-foreground">Size</span>
             <input
               type="range"
-              min={12}
-              max={32}
+              min={14}
+              max={28}
               step={1}
               value={fontSize}
               onChange={(e) => setFontSize(parseInt(e.target.value, 10))}
+              className="w-20"
             />
-          </label>
+          </div>
 
-          <label className="flex items-center gap-1 select-none">
+          <label className="flex items-center gap-1.5 px-3 border rounded-md h-9 bg-background text-xs cursor-pointer hover:bg-secondary/50">
             <input
               type="checkbox"
               checked={autoAdvance}
               onChange={(e) => setAutoAdvance(e.target.checked)}
+              className="w-3.5 h-3.5 rounded border-primary"
             />
             Auto-advance
           </label>
 
-          <span className="ml-auto opacity-70 tabular-nums">{progress}%</span>
+          <span className="ml-auto text-xs font-mono font-bold text-muted-foreground tabular-nums px-2 py-1 bg-background rounded border">
+            {progress}%
+          </span>
         </div>
       )}
 
       {/* TTS Panel */}
       {view === 'reader' && ttsOpen && supportsTTS && !immersive && (
         <div
-          className="border-b px-4 py-3 flex flex-wrap items-center gap-3"
-          style={{ borderColor: 'rgba(127,127,127,0.25)' }}
+          className="border-b px-4 py-3 flex flex-wrap items-center gap-3 bg-primary/5 backdrop-blur-md"
+          style={{ borderColor: themeVars.accent + '33' }}
         >
-          <div className="flex items-center gap-1">
-            <Button size="sm" variant="outline" onClick={() => skip(-1)} title="Previous paragraph">
+          <div className="flex items-center gap-1 bg-background rounded-lg border p-1">
+            <Button size="sm" variant="ghost" onClick={() => skip(-1)} title="Previous paragraph" className="h-8 w-8 p-0">
               <SkipBack className="w-4 h-4" />
             </Button>
-            <Button size="sm" onClick={togglePlay} className="gap-1">
+            <Button size="sm" onClick={togglePlay} className="h-8 px-3 gap-1.5 shadow-sm">
               {ttsPlaying && !ttsPaused ? (
-                <><Pause className="w-4 h-4" /> Pause</>
+                <><Pause className="w-3.5 h-3.5 fill-current" /> Pause</>
               ) : (
-                <><Play className="w-4 h-4" /> {ttsPaused ? 'Resume' : 'Play'}</>
+                <><Play className="w-3.5 h-3.5 fill-current" /> {ttsPaused ? 'Resume' : 'Play'}</>
               )}
             </Button>
-            <Button size="sm" variant="outline" onClick={stopTTS} title="Stop">
-              <Square className="w-4 h-4" />
+            <Button size="sm" variant="ghost" onClick={stopTTS} title="Stop" className="h-8 w-8 p-0">
+              <Square className="w-4 h-4 fill-current" />
             </Button>
-            <Button size="sm" variant="outline" onClick={() => skip(1)} title="Next paragraph">
+            <Button size="sm" variant="ghost" onClick={() => skip(1)} title="Next paragraph" className="h-8 w-8 p-0">
               <SkipForward className="w-4 h-4" />
             </Button>
           </div>
 
-          <label className="flex items-center gap-2 text-xs">
-            Voice
-            <select
-              value={voiceURI}
-              onChange={(e) => setVoiceURI(e.target.value)}
-              className="bg-transparent border rounded px-2 py-1 text-xs max-w-[260px]"
-              style={{ borderColor: 'rgba(127,127,127,0.4)' }}
-            >
-              {voices.length === 0 && <option value="">Default</option>}
-              {voices.map((v) => (
-                <option key={v.voiceURI} value={v.voiceURI}>
-                  {v.name} ({v.lang})
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="h-6 w-px bg-border mx-1" />
 
-          <label className="flex items-center gap-2 text-xs">
-            Speed {rate.toFixed(2)}x
+          <select
+            value={voiceURI}
+            onChange={(e) => setVoiceURI(e.target.value)}
+            className="bg-background border rounded-md px-2 py-1 h-9 text-[11px] max-w-[200px]"
+          >
+            {voices.length === 0 && <option value="">Default Voice</option>}
+            {voices.map((v) => (
+              <option key={v.voiceURI} value={v.voiceURI}>
+                {v.name} ({v.lang})
+              </option>
+            ))}
+          </select>
+
+          <div className="flex items-center gap-2 px-3 border rounded-md h-9 bg-background">
+            <span className="text-[10px] uppercase font-bold text-muted-foreground whitespace-nowrap">Speed {rate.toFixed(1)}x</span>
             <input
               type="range"
               min={0.6}
@@ -645,11 +654,12 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
               step={0.05}
               value={rate}
               onChange={(e) => setRate(parseFloat(e.target.value))}
+              className="w-16 sm:w-24"
             />
-          </label>
+          </div>
 
-          <label className="flex items-center gap-2 text-xs">
-            Pitch {pitch.toFixed(2)}
+          <div className="flex items-center gap-2 px-3 border rounded-md h-9 bg-background hidden sm:flex">
+            <span className="text-[10px] uppercase font-bold text-muted-foreground whitespace-nowrap">Pitch</span>
             <input
               type="range"
               min={0.5}
@@ -657,13 +667,17 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
               step={0.05}
               value={pitch}
               onChange={(e) => setPitch(parseFloat(e.target.value))}
+              className="w-16"
             />
-          </label>
+          </div>
 
           {ttsIndex >= 0 && (
-            <span className="text-xs opacity-70 ml-auto">
-              ¶ {ttsIndex + 1} / {paragraphs.length}
-            </span>
+            <div className="ml-auto flex items-center gap-2 px-2 py-1 bg-primary/10 rounded-full border border-primary/20">
+              <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-primary tabular-nums">
+                Para {ttsIndex + 1} / {paragraphs.length}
+              </span>
+            </div>
           )}
         </div>
       )}
@@ -801,10 +815,10 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
               </button>
             )}
             <article
-              className="max-w-2xl mx-auto px-6 py-10"
+              className="max-w-3xl mx-auto px-6 py-12 md:py-20"
               style={readerStyle}
             >
-              <h1 className="font-display text-2xl mb-6" style={{ color: themeVars.accent }}>
+              <h1 className="font-display text-3xl md:text-4xl font-bold mb-10 text-center md:text-left leading-tight" style={{ color: themeVars.accent }}>
                 {chapterTitle}
               </h1>
               {loadingChapter ? (
@@ -831,12 +845,10 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
                       style={
                         i === ttsIndex
                           ? {
-                              background:
-                                theme === 'light'
-                                  ? 'rgba(239, 68, 68, 0.12)'
-                                  : 'rgba(239, 68, 68, 0.18)',
+                              background: themeVars.accent + '15',
                               boxShadow: `-4px 0 0 ${themeVars.accent}`,
-                              paddingLeft: 12,
+                              paddingLeft: 16,
+                              borderRadius: '0 4px 4px 0',
                             }
                           : undefined
                       }
@@ -865,12 +877,13 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
                 <Button
                   onClick={() => openChapter(chapterIndex + 1)}
                   disabled={chapterIndex >= chapters.length - 1 || loadingChapter}
-                  className="gap-1"
+                  className="gap-2 px-6 h-10 shadow-md font-bold uppercase tracking-wider text-xs"
                 >
-                  Next <ChevronRight className="w-4 h-4" />
+                  Next Chapter <ChevronRight className="w-4 h-4" />
                 </Button>
               </div>
             </article>
+            <div className="h-20" /> {/* Extra spacing for better scrolling experience */}
           </div>
         </div>
       )}
