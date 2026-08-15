@@ -685,17 +685,17 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
 
       {/* URL view */}
       {view === 'url' && (
-        <div className="flex-1 flex flex-col items-center justify-center p-6 bg-gradient-to-b from-transparent to-primary/5">
-          <div className="max-w-2xl w-full space-y-12 text-center">
-            <div className="space-y-6">
-              <div className="inline-flex items-center justify-center w-24 h-24 rounded-3xl bg-primary/10 text-primary animate-pulse-slow">
-                <BookOpen className="w-12 h-12" />
+        <div className="flex-1 flex flex-col items-center justify-center p-6 sm:p-10 bg-background/95">
+          <div className="max-w-xl w-full space-y-8 text-center">
+            <div className="space-y-4">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 text-primary">
+                <BookOpen className="w-8 h-8" />
               </div>
-              <div className="space-y-3">
-                <h1 className="text-4xl md:text-5xl font-display font-bold tracking-tight">
+              <div className="space-y-2">
+                <h1 className="text-3xl sm:text-4xl font-display font-bold tracking-tight text-foreground">
                   Live Reader
                 </h1>
-                <p className="text-lg text-muted-foreground max-w-lg mx-auto leading-relaxed">
+                <p className="text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
                   Experience your favorite web novels in a clean, distraction-free environment with built-in text-to-speech.
                 </p>
               </div>
@@ -707,30 +707,30 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
                   e.preventDefault();
                   if (inputUrl.trim()) void loadBook(inputUrl.trim());
                 }}
-                className="relative group"
+                className="relative flex items-center"
               >
-                <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-muted-foreground group-focus-within:text-primary transition-colors">
+                <div className="absolute left-4 z-10 flex items-center pointer-events-none text-muted-foreground">
                   <Globe className="w-5 h-5" />
                 </div>
                 <Input
                   value={inputUrl}
                   onChange={(e) => setInputUrl(e.target.value)}
                   placeholder="Paste novel TOC or chapter URL..."
-                  className="h-14 pl-12 pr-32 rounded-2xl border-2 focus-visible:ring-offset-0 focus-visible:ring-primary/20 transition-all text-base shadow-lg"
+                  className="h-14 pl-12 pr-36 rounded-xl border border-border bg-card text-foreground placeholder:text-muted-foreground text-sm sm:text-base shadow-sm focus-visible:ring-1 focus-visible:ring-primary"
                   autoFocus
                 />
                 <Button 
                   type="submit" 
                   disabled={!inputUrl.trim()}
-                  className="absolute right-2 top-2 bottom-2 px-6 rounded-xl font-bold uppercase tracking-wider text-xs shadow-md"
+                  className="absolute right-2 h-10 px-5 rounded-lg font-bold text-xs shadow-sm"
                 >
                   Start Reading
                 </Button>
               </form>
-              <div className="flex flex-wrap justify-center gap-4 text-xs font-medium text-muted-foreground/60 uppercase tracking-widest">
-                <span className="flex items-center gap-1.5"><div className="w-1 h-1 rounded-full bg-primary" /> Distraction Free</span>
-                <span className="flex items-center gap-1.5"><div className="w-1 h-1 rounded-full bg-primary" /> TTS Support</span>
-                <span className="flex items-center gap-1.5"><div className="w-1 h-1 rounded-full bg-primary" /> Offline Save</span>
+              <div className="flex flex-wrap justify-center gap-4 text-xs font-medium text-muted-foreground/70">
+                <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-primary" /> Distraction Free</span>
+                <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-primary" /> TTS Support</span>
+                <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-primary" /> Offline Save</span>
               </div>
             </div>
 
