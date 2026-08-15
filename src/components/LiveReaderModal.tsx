@@ -815,10 +815,10 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
               </button>
             )}
             <article
-              className="max-w-2xl mx-auto px-6 py-10"
+              className="max-w-3xl mx-auto px-6 py-12 md:py-20"
               style={readerStyle}
             >
-              <h1 className="font-display text-2xl mb-6" style={{ color: themeVars.accent }}>
+              <h1 className="font-display text-3xl md:text-4xl font-bold mb-10 text-center md:text-left leading-tight" style={{ color: themeVars.accent }}>
                 {chapterTitle}
               </h1>
               {loadingChapter ? (
