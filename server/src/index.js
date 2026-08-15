@@ -66,14 +66,30 @@ const VISITOR_TTL_MS = 90 * 1000;
 app.get("/api/stats", (req, res) => {
   const now = Date.now();
   const uid = String(req.query.uid || "").slice(0, 64);
-  if (uid) visitors.set(uid, now);
-  for (const [id, seen] of visitors) if (now - seen > VISITOR_TTL_MS) visitors.delete(id);
+  const origin = String(req.query.origin || "").toLowerCase();
 
+  // Track the visitor
+  if (uid) visitors.set(uid, now);
+
+  // Clean up stale visitors
+  for (const [id, seen] of visitors) {
+    if (now - seen > VISITOR_TTL_MS) visitors.delete(id);
+  }
+
+  // Active jobs: global across all origins (server-wide)
   let activeJobs = 0;
   for (const job of jobs.values()) {
     if (job.status === "queued" || job.status === "running") activeJobs++;
   }
-  res.json({ activeJobs, activeUsers: Math.max(visitors.size, uid ? 1 : 0), totalJobs: jobs.size });
+
+  // Active users: total global users across all domains
+  const globalUsers = Math.max(visitors.size, uid ? 1 : 0);
+
+  res.json({
+    activeJobs,
+    activeUsers: globalUsers,
+    totalJobs: jobs.size
+  });
 });
 
 

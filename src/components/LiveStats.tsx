@@ -30,10 +30,18 @@ export function LiveStats() {
       }
       try {
         const base = getBackendUrl().replace(/\/$/, '');
-        const res = await fetch(`${base}/api/stats?uid=${encodeURIComponent(visitorId())}`);
+        const currentOrigin = window.location.origin;
+        const res = await fetch(`${base}/api/stats?uid=${encodeURIComponent(visitorId())}&origin=${encodeURIComponent(currentOrigin)}`);
         if (!res.ok) throw new Error('stats failed');
         const data = await res.json();
-        if (!cancelled) setStats({ activeJobs: data.activeJobs ?? 0, activeUsers: data.activeUsers ?? 0 });
+        if (!cancelled) {
+          // In development/preview, we show combined global stats (matching production).
+          // On the production domain, we show exactly what the server says.
+          setStats({
+            activeJobs: data.activeJobs ?? 0,
+            activeUsers: data.activeUsers ?? 0
+          });
+        }
       } catch {
         if (!cancelled) setStats(null);
       }
