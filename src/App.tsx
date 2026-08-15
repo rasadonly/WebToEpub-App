@@ -35,16 +35,22 @@ function NavBar() {
     <header className="sticky top-0 z-40 w-full border-b border-border/50 bg-background/80 backdrop-blur-sm">
       <div className="container mx-auto px-4 flex items-center justify-between h-12 max-w-5xl gap-3">
         {/* Brand */}
-        <Link to="/" className="font-bold text-base tracking-tight hover:text-primary transition-colors shrink-0">
-          LinkToEpub
+        <Link to="/" className="font-bold text-base tracking-tight hover:text-primary transition-colors shrink-0 flex items-center gap-1.5">
+          <span className="text-primary">L</span>inkToEpub
         </Link>
 
-        {/* Page nav */}
-        <nav className="hidden sm:flex items-center gap-5">
-          <Link to="/sites" className={linkClass("/sites")}>Supported Sites</Link>
+        {/* Page nav - Hidden on mobile, visible on sm and up */}
+        <nav className="hidden sm:flex items-center gap-4">
+          <Link to="/sites" className={linkClass("/sites")}>Sites</Link>
           <button onClick={() => openModal("library")} className={linkClass("/library")}>Library</button>
           <button onClick={() => openModal("forum")} className={linkClass("/forum")}>Forum</button>
-          <Link to="/guide" className={linkClass("/guide")}>How-to Guide</Link>
+          <Link to="/guide" className={linkClass("/guide")}>Guide</Link>
+        </nav>
+
+        {/* Mobile quick nav */}
+        <nav className="flex sm:hidden items-center gap-2">
+          <button onClick={() => openModal("library")} className="text-xs px-2 py-1 bg-secondary rounded-md text-secondary-foreground hover:bg-secondary/80 transition-colors">Library</button>
+          <button onClick={() => openModal("forum")} className="text-xs px-2 py-1 bg-secondary rounded-md text-secondary-foreground hover:bg-secondary/80 transition-colors">Forum</button>
         </nav>
 
         {/* Right side: live stats + action menu */}
