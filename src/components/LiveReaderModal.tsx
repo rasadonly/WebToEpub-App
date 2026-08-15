@@ -550,35 +550,73 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
       {/* Reader toolbar (themes / fonts / size / progress) */}
       {view === 'reader' && !immersive && (
         <div
-          className="flex flex-wrap items-center gap-2 px-4 py-3 bg-secondary/30 border-b backdrop-blur-sm"
-          style={{ borderColor: 'rgba(127,127,127,0.15)' }}
+          className="flex flex-wrap items-center gap-2 px-4 py-2 border-b backdrop-blur-md"
+          style={{
+            background: theme === 'dark' ? '#18181b' : theme === 'sepia' ? '#e9dfc4' : '#f4f4f5',
+            borderColor: theme === 'dark' ? '#27272a' : theme === 'sepia' ? '#d8cca8' : '#e4e4e7',
+            color: themeVars.fg,
+          }}
         >
-          <div className="flex items-center gap-1 bg-background rounded-lg p-1 border">
-            <Button size="sm" variant={theme === 'light' ? 'secondary' : 'ghost'} onClick={() => setTheme('light')} title="Light" className="h-8 w-8 p-0">
-              <Sun className="w-4 h-4" />
+          <div
+            className="flex items-center gap-1 rounded-lg p-1 border"
+            style={{
+              background: theme === 'dark' ? '#09090b' : theme === 'sepia' ? '#f4ecd8' : '#ffffff',
+              borderColor: theme === 'dark' ? '#27272a' : theme === 'sepia' ? '#d8cca8' : '#e4e4e7',
+            }}
+          >
+            <Button size="sm" variant={theme === 'light' ? 'secondary' : 'ghost'} onClick={() => setTheme('light')} title="Light" className="h-7 w-7 p-0">
+              <Sun className="w-3.5 h-3.5" />
             </Button>
-            <Button size="sm" variant={theme === 'sepia' ? 'secondary' : 'ghost'} onClick={() => setTheme('sepia')} title="Sepia" className="h-8 w-8 p-0">
-              <Coffee className="w-4 h-4" />
+            <Button size="sm" variant={theme === 'sepia' ? 'secondary' : 'ghost'} onClick={() => setTheme('sepia')} title="Sepia" className="h-7 w-7 p-0">
+              <Coffee className="w-3.5 h-3.5" />
             </Button>
-            <Button size="sm" variant={theme === 'dark' ? 'secondary' : 'ghost'} onClick={() => setTheme('dark')} title="Dark" className="h-8 w-8 p-0">
-              <Moon className="w-4 h-4" />
+            <Button size="sm" variant={theme === 'dark' ? 'secondary' : 'ghost'} onClick={() => setTheme('dark')} title="Dark" className="h-7 w-7 p-0">
+              <Moon className="w-3.5 h-3.5" />
             </Button>
           </div>
 
-          <div className="h-6 w-px bg-border mx-1" />
+          <div
+            className="h-5 w-px mx-1"
+            style={{ background: theme === 'dark' ? '#3f3f46' : theme === 'sepia' ? '#c8bca8' : '#d4d4d8' }}
+          />
 
           <select
             value={fontFamily}
             onChange={(e) => setFontFamily(e.target.value)}
-            className="bg-background border rounded-md px-2 py-1 h-9 text-xs"
+            className="border rounded-lg px-2.5 py-1 h-8 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary shadow-xs"
+            style={{
+              background: theme === 'dark' ? '#09090b' : theme === 'sepia' ? '#f4ecd8' : '#ffffff',
+              borderColor: theme === 'dark' ? '#3f3f46' : theme === 'sepia' ? '#d8cca8' : '#d4d4d8',
+              color: themeVars.fg,
+            }}
           >
             {FONTS.map((f) => (
-              <option key={f.id} value={f.id}>{f.label}</option>
+              <option
+                key={f.id}
+                value={f.id}
+                style={{
+                  background: theme === 'dark' ? '#09090b' : theme === 'sepia' ? '#f4ecd8' : '#ffffff',
+                  color: themeVars.fg,
+                }}
+              >
+                {f.label}
+              </option>
             ))}
           </select>
 
-          <div className="flex items-center gap-2 px-3 border rounded-md h-9 bg-background">
-            <span className="text-[10px] uppercase font-bold text-muted-foreground">Size</span>
+          <div
+            className="flex items-center gap-2 px-3 border rounded-lg h-8 shadow-xs"
+            style={{
+              background: theme === 'dark' ? '#09090b' : theme === 'sepia' ? '#f4ecd8' : '#ffffff',
+              borderColor: theme === 'dark' ? '#3f3f46' : theme === 'sepia' ? '#d8cca8' : '#d4d4d8',
+            }}
+          >
+            <span
+              className="text-[10px] uppercase font-bold tracking-wider"
+              style={{ color: theme === 'dark' ? '#a1a1aa' : theme === 'sepia' ? '#7a6a4d' : '#71717a' }}
+            >
+              Size
+            </span>
             <input
               type="range"
               min={14}
@@ -586,21 +624,35 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
               step={1}
               value={fontSize}
               onChange={(e) => setFontSize(parseInt(e.target.value, 10))}
-              className="w-20"
+              className="w-20 cursor-pointer accent-primary"
             />
           </div>
 
-          <label className="flex items-center gap-1.5 px-3 border rounded-md h-9 bg-background text-xs cursor-pointer hover:bg-secondary/50">
+          <label
+            className="flex items-center gap-2 px-3 border rounded-lg h-8 text-xs font-semibold cursor-pointer transition-colors shadow-xs"
+            style={{
+              background: theme === 'dark' ? '#09090b' : theme === 'sepia' ? '#f4ecd8' : '#ffffff',
+              borderColor: theme === 'dark' ? '#3f3f46' : theme === 'sepia' ? '#d8cca8' : '#d4d4d8',
+              color: themeVars.fg,
+            }}
+          >
             <input
               type="checkbox"
               checked={autoAdvance}
               onChange={(e) => setAutoAdvance(e.target.checked)}
-              className="w-3.5 h-3.5 rounded border-primary"
+              className="w-3.5 h-3.5 rounded accent-primary cursor-pointer"
             />
             Auto-advance
           </label>
 
-          <span className="ml-auto text-xs font-mono font-bold text-muted-foreground tabular-nums px-2 py-1 bg-background rounded border">
+          <span
+            className="ml-auto text-xs font-mono font-bold tabular-nums px-2.5 py-1 rounded-lg border shadow-xs"
+            style={{
+              background: theme === 'dark' ? '#09090b' : theme === 'sepia' ? '#f4ecd8' : '#ffffff',
+              borderColor: theme === 'dark' ? '#3f3f46' : theme === 'sepia' ? '#d8cca8' : '#d4d4d8',
+              color: themeVars.fg,
+            }}
+          >
             {progress}%
           </span>
         </div>
