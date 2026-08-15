@@ -6,6 +6,7 @@
       (function () {
         try {
           var h = window.location.hostname;
+          // Only redirect if NOT in a Lovable preview environment (which uses long dynamic subdomains)
           if (h === 'epub-novel-forge.lovable.app') {
             window.location.replace(
               'https://linktoepub.com/' + window.location.search + window.location.hash
