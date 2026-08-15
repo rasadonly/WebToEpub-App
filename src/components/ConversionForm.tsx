@@ -660,8 +660,8 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                           <span className="truncate text-muted-foreground/70 text-[11px]">{r.url}</span>
                         </div>
 
-                        {/* Title (Big blue/accent link) */}
-                        <div className="font-bold text-base sm:text-lg text-foreground group-hover:text-primary transition-colors leading-snug line-clamp-2">
+                        {/* Title */}
+                        <div className="font-semibold text-sm sm:text-base text-foreground group-hover:text-primary transition-colors leading-snug line-clamp-2">
                           {r.title || 'Untitled Novel'}
                         </div>
 
