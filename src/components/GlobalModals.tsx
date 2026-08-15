@@ -1,11 +1,11 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 
-const SupportedSites = lazy(() => import('@/components/SupportedSites'));
-const AdminPanel = lazy(() => import('@/components/AdminPanel'));
-const LibraryModal = lazy(() => import('@/components/LibraryModal'));
-const EpubReaderModal = lazy(() => import('@/components/EpubReaderModal'));
-const LiveReaderModal = lazy(() => import('@/components/LiveReaderModal'));
-const ForumModal = lazy(() => import('@/components/ForumModal'));
+const SupportedSites = lazy(() => import('@/components/SupportedSites').then(m => ({ default: m.SupportedSites })));
+const AdminPanel = lazy(() => import('@/components/AdminPanel').then(m => ({ default: m.AdminPanel })));
+const LibraryModal = lazy(() => import('@/components/LibraryModal').then(m => ({ default: m.LibraryModal })));
+const EpubReaderModal = lazy(() => import('@/components/EpubReaderModal').then(m => ({ default: m.EpubReaderModal })));
+const LiveReaderModal = lazy(() => import('@/components/LiveReaderModal').then(m => ({ default: m.LiveReaderModal })));
+const ForumModal = lazy(() => import('@/components/ForumModal').then(m => ({ default: m.ForumModal })));
 
 export function GlobalModals() {
   const [supportedOpen, setSupportedOpen] = useState(false);
