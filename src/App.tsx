@@ -36,15 +36,15 @@ function NavBar() {
       <div className="container mx-auto px-4 flex items-center justify-between h-12 max-w-5xl gap-3">
         {/* Brand */}
         <Link to="/" className="font-bold text-base tracking-tight hover:text-primary transition-colors shrink-0">
-          <span className="text-primary">L</span>inkToEpub
+          <span className="text-primary">Link</span>ToEpub
         </Link>
 
         {/* Page nav - Hidden on mobile, visible on sm and up */}
-        <nav className="hidden sm:flex items-center gap-4">
+        <nav className="hidden sm:flex items-center gap-5">
           <Link to="/" className={linkClass("/")}>Home</Link>
           <Link to="/sites" className={linkClass("/sites")}>Sites</Link>
-          <button type="button" onClick={() => openModal("library")} className="text-sm text-muted-foreground hover:text-primary transition-colors">Library</button>
-          <button type="button" onClick={() => openModal("forum")} className="text-sm text-muted-foreground hover:text-primary transition-colors">Forum</button>
+          <button type="button" onClick={() => openModal("library")} className={linkClass("/library")}>Library</button>
+          <button type="button" onClick={() => openModal("forum")} className={linkClass("/forum")}>Forum</button>
           <Link to="/guide" className={linkClass("/guide")}>Guide</Link>
         </nav>
 
