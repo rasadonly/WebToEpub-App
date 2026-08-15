@@ -836,12 +836,10 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
                       style={
                         i === ttsIndex
                           ? {
-                              background:
-                                theme === 'light'
-                                  ? 'rgba(239, 68, 68, 0.12)'
-                                  : 'rgba(239, 68, 68, 0.18)',
+                              background: themeVars.accent + '15',
                               boxShadow: `-4px 0 0 ${themeVars.accent}`,
-                              paddingLeft: 12,
+                              paddingLeft: 16,
+                              borderRadius: '0 4px 4px 0',
                             }
                           : undefined
                       }
