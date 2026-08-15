@@ -877,12 +877,13 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
                 <Button
                   onClick={() => openChapter(chapterIndex + 1)}
                   disabled={chapterIndex >= chapters.length - 1 || loadingChapter}
-                  className="gap-1"
+                  className="gap-2 px-6 h-10 shadow-md font-bold uppercase tracking-wider text-xs"
                 >
-                  Next <ChevronRight className="w-4 h-4" />
+                  Next Chapter <ChevronRight className="w-4 h-4" />
                 </Button>
               </div>
             </article>
+            <div className="h-20" /> {/* Extra spacing for better scrolling experience */}
           </div>
         </div>
       )}
