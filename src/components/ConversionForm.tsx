@@ -466,9 +466,9 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
           </div>
 
           {/* Pill search */}
-          <div className="w-full max-w-4xl lg:max-w-5xl px-2 sm:px-4">
-            <div className="group relative flex items-center rounded-full bg-card border border-border shadow-search transition-all duration-300 focus-within:border-primary/60 focus-within:shadow-glow hover:border-primary/30">
-              <Search className="w-5 h-5 sm:w-6 sm:h-6 text-muted-foreground absolute left-4 sm:left-6 pointer-events-none transition-colors group-focus-within:text-primary" />
+          <div className="w-full max-w-3xl lg:max-w-4xl px-2 sm:px-4">
+            <div className="group relative flex items-center rounded-2xl sm:rounded-full bg-card border-2 border-border shadow-lg transition-all duration-300 focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 hover:border-primary/40">
+              <Search className="w-5 h-5 text-muted-foreground absolute left-4 sm:left-5 pointer-events-none transition-colors group-focus-within:text-primary" />
               <Input
                 id="toc-url"
                 type="text"
@@ -480,12 +480,12 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                 value={tocUrl}
                 onChange={(e) => setTocUrl(e.target.value)}
                 placeholder="Paste TOC URL or search a novel…"
-                className="h-14 sm:h-16 md:h-20 pl-12 sm:pl-16 pr-28 sm:pr-36 md:pr-40 text-base sm:text-lg md:text-xl rounded-full border-0 bg-transparent shadow-none focus-visible:ring-0 text-foreground placeholder:text-muted-foreground/70"
+                className="h-12 sm:h-14 md:h-16 pl-11 sm:pl-14 pr-24 sm:pr-32 text-sm sm:text-base md:text-lg rounded-2xl sm:rounded-full border-0 bg-transparent shadow-none focus-visible:ring-0 text-foreground placeholder:text-muted-foreground/70"
               />
               <Button
                 type="submit"
                 disabled={isConverting || isSearching || trimmed.length === 0}
-                className="absolute right-2 sm:right-2.5 h-10 sm:h-12 md:h-14 rounded-full px-4 sm:px-6 md:px-8 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-sm sm:text-base gap-2 shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all"
+                className="absolute right-1.5 sm:right-2 h-9 sm:h-10 md:h-12 rounded-xl sm:rounded-full px-4 sm:px-6 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs sm:text-sm gap-2 shadow-sm transition-all"
               >
                 {isConverting || isSearching ? (
                   <>
@@ -495,7 +495,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                 ) : (
                   <>
                     <span className="hidden sm:inline">{hasQuery ? 'Search' : 'Fetch'}</span>
-                    {hasQuery ? <Search className="w-4 h-4 sm:w-5 sm:h-5" /> : <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />}
+                    {hasQuery ? <Search className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
                   </>
                 )}
               </Button>
@@ -533,15 +533,15 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                 ].map((s) => (
                   <div
                     key={s.n}
-                    className="rounded-2xl border border-border/80 bg-card/80 p-4 sm:p-5 shadow-xs hover:border-primary/40 hover:shadow-md hover:bg-card transition-all duration-300 group"
+                    className="rounded-xl border border-border bg-card p-4 shadow-2xs hover:border-primary/40 hover:shadow-sm transition-all duration-200 group"
                   >
-                    <div className="flex items-center gap-2.5 mb-2">
-                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[11px] font-bold text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
                         {s.n}
                       </span>
-                      <span className="text-sm font-bold text-foreground">{s.t}</span>
+                      <span className="text-xs font-bold text-foreground">{s.t}</span>
                     </div>
-                    <p className="text-xs leading-relaxed text-muted-foreground">{s.d}</p>
+                    <p className="text-[11px] leading-relaxed text-muted-foreground">{s.d}</p>
                   </div>
                 ))}
               </div>
@@ -549,14 +549,14 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
 
             {/* Recent searches */}
             {!isSearching && searchResults.length === 0 && recentSearches.length > 0 && (
-              <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground/70 mr-1">Recent</span>
+              <div className="mt-5 flex flex-wrap items-center justify-center gap-1.5">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70 mr-1">Recent</span>
                 {recentSearches.map((q) => (
                   <button
                     key={q}
                     type="button"
                     onClick={() => { setTocUrl(q); runSearch(q); }}
-                    className="rounded-full bg-secondary/80 border border-border/60 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-secondary transition-all"
+                    className="rounded-full bg-secondary border border-border/50 px-3 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-secondary/80 transition-all"
                   >
                     {q}
                   </button>
@@ -571,70 +571,75 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
               </Card>
             )}
 
-            {/* Search results */}
+            {/* Modern Search Engine Results UI */}
             {(searchResults.length > 0 || isSearching) && (
-
-              <Card className="mt-4 p-3 bg-card border border-border animate-in fade-in slide-in-from-top-2 duration-300">
-                <div className="px-2 py-1 mb-1 space-y-2">
+              <Card className="mt-6 p-4 sm:p-5 bg-card border border-border/80 shadow-md rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="pb-3 mb-3 border-b border-border/60 space-y-3">
                   <div className="flex items-center justify-between gap-3">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground min-w-0 truncate">
-                      {isSearching
-                        ? <span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-primary animate-pulse inline-block shrink-0" /><span className="truncate">{searchStatus || 'Searching…'}</span></span>
-                        : `${filteredResults.length} result${filteredResults.length === 1 ? '' : 's'}${lastQuery ? ` for “${lastQuery}”` : ''}`
-                      }
-                    </span>
+                    <div className="flex items-center gap-2 min-w-0">
+                      {isSearching ? (
+                        <span className="flex items-center gap-2 text-xs font-semibold text-primary">
+                          <span className="w-2 h-2 rounded-full bg-primary animate-pulse shrink-0" />
+                          <span className="truncate">{searchStatus || 'Searching across sites…'}</span>
+                        </span>
+                      ) : (
+                        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                          {filteredResults.length} result{filteredResults.length === 1 ? '' : 's'}{lastQuery ? ` for “${lastQuery}”` : ''}
+                        </span>
+                      )}
+                    </div>
                     <button
                       type="button"
                       onClick={isSearching ? stopSearch : clearSearch}
-                      className="shrink-0 text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                      className="shrink-0 text-xs text-muted-foreground hover:text-foreground font-medium px-2 py-1 rounded bg-muted/50 hover:bg-muted transition-colors inline-flex items-center gap-1"
                     >
                       <X className="w-3.5 h-3.5" /> {isSearching ? 'Stop' : 'Clear'}
                     </button>
-
                   </div>
 
                   {isSearching && searchProgress.total > 0 && (
                     <div className="space-y-1">
-                      <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
+                      <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
                         <div
                           className="h-full bg-primary transition-all duration-300"
                           style={{ width: `${Math.min(100, (searchProgress.done / searchProgress.total) * 100)}%` }}
                         />
                       </div>
-                      <div className="text-[10px] text-muted-foreground/80">
-                        {searchProgress.done} / {searchProgress.total} sites searched · {searchResults.length} found
+                      <div className="text-[11px] text-muted-foreground font-medium">
+                        {searchProgress.done} of {searchProgress.total} sources searched · {searchResults.length} novels found
                       </div>
                     </div>
                   )}
 
                   {sourceCounts.length > 1 && (
-                    <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                    <div className="flex gap-2 overflow-x-auto no-scrollbar pt-1">
                       <button
                         type="button"
                         onClick={() => setSourceFilter('all')}
-                        className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-smooth ${sourceFilter === 'all' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'}`}
+                        className={`shrink-0 rounded-lg px-3 py-1 text-xs font-semibold transition-all ${sourceFilter === 'all' ? 'bg-primary text-primary-foreground shadow-xs' : 'bg-muted/70 text-muted-foreground hover:text-foreground hover:bg-muted'}`}
                       >
-                        All {searchResults.length}
+                        All ({searchResults.length})
                       </button>
                       {sourceCounts.map(([src, count]) => (
                         <button
                           key={src}
                           type="button"
                           onClick={() => setSourceFilter(src)}
-                          className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-smooth ${sourceFilter === src ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'}`}
+                          className={`shrink-0 rounded-lg px-3 py-1 text-xs font-semibold transition-all ${sourceFilter === src ? 'bg-primary text-primary-foreground shadow-xs' : 'bg-muted/70 text-muted-foreground hover:text-foreground hover:bg-muted'}`}
                         >
-                          {src} {count}
+                          {src} ({count})
                         </button>
                       ))}
                     </div>
                   )}
                 </div>
-                <div className="max-h-96 overflow-y-auto divide-y divide-border">
-                  {filteredResults.map((r) => (
 
+                {/* Search result list */}
+                <div className="max-h-[480px] overflow-y-auto space-y-3 pr-1 divide-y divide-border/40">
+                  {filteredResults.map((r) => (
                     <div
                       key={r.url}
-                      className="group flex items-center gap-2 px-2 sm:px-3 py-2 hover:bg-muted/60 rounded-md transition-smooth animate-in fade-in slide-in-from-bottom-1 duration-200"
+                      className="group pt-3 first:pt-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl hover:bg-muted/40 transition-all border border-transparent hover:border-border/60"
                     >
                       <button
                         type="button"
@@ -645,28 +650,35 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                           }
                           clearSearch();
                         }}
-                        className="min-w-0 flex-1 text-left"
+                        className="min-w-0 flex-1 text-left space-y-1"
                       >
-                        <div className="font-medium text-sm leading-snug line-clamp-2 sm:truncate">
-                          {r.title || 'Untitled'}
-                        </div>
-                        {r.snippet && (
-                          <div className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{r.snippet}</div>
-                        )}
-                        <div className="mt-1 flex items-center gap-1.5 min-w-0">
-                          <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider max-w-[45%] truncate">
-                            <ExternalLink className="w-3 h-3 shrink-0" />
-                            <span className="truncate">{r.source}</span>
+                        {/* Domain / Source badge line */}
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span className="font-semibold text-primary/90 bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20 text-[11px]">
+                            {r.source}
                           </span>
-                          <span className="text-[11px] text-muted-foreground/80 truncate">{r.url}</span>
+                          <span className="truncate text-muted-foreground/80 font-mono text-[11px]">{r.url}</span>
                         </div>
+
+                        {/* Title */}
+                        <div className="font-bold text-base text-foreground group-hover:text-primary transition-colors leading-snug line-clamp-2">
+                          {r.title || 'Untitled Novel'}
+                        </div>
+
+                        {/* Snippet / Description */}
+                        {r.snippet && (
+                          <div className="text-xs text-muted-foreground/90 line-clamp-2 leading-relaxed">
+                            {r.snippet}
+                          </div>
+                        )}
                       </button>
 
-                      <div className="shrink-0 flex items-center gap-1">
-                        <button
+                      {/* Action buttons */}
+                      <div className="shrink-0 flex items-center gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-border/30">
+                        <Button
                           type="button"
-                          title="Convert to EPUB"
-                          aria-label="Convert to EPUB"
+                          variant="secondary"
+                          size="sm"
                           onClick={(e) => {
                             e.stopPropagation();
                             setTocUrl(r.url);
@@ -690,34 +702,34 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                               editableUrls,
                             });
                           }}
-                          className="h-9 w-9 sm:w-auto sm:px-3 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-smooth inline-flex items-center justify-center gap-1 text-xs"
+                          className="h-9 px-3 text-xs font-bold gap-1.5 shadow-2xs hover:bg-primary hover:text-primary-foreground transition-all"
                         >
-                          <Download className="w-4 h-4 shrink-0" />
-                          <span className="hidden sm:inline">EPUB</span>
-                        </button>
-                        <button
+                          <Download className="w-3.5 h-3.5 shrink-0" />
+                          <span>EPUB</span>
+                        </Button>
+                        <Button
                           type="button"
-                          title="Read live"
-                          aria-label="Read live"
+                          variant="outline"
+                          size="sm"
                           onClick={(e) => { e.stopPropagation(); clearSearch(); openLiveReader(r.url); }}
-                          className="h-9 w-9 sm:w-auto sm:px-3 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-smooth inline-flex items-center justify-center gap-1 text-xs"
+                          className="h-9 px-3 text-xs font-bold gap-1.5 border-border/80 hover:border-primary hover:text-primary transition-all"
                         >
-                          <BookOpenCheck className="w-4 h-4 shrink-0" />
-                          <span className="hidden sm:inline">Read</span>
-                        </button>
+                          <BookOpenCheck className="w-3.5 h-3.5 shrink-0" />
+                          <span>Read</span>
+                        </Button>
                       </div>
                     </div>
-
                   ))}
+
                   {isSearching && (
-                    /* Skeleton rows — one per site still loading */
-                    Array.from({ length: searchResults.length === 0 ? 4 : 2 }).map((_, i) => (
-                      <div key={`skel-${i}`} className="px-3 py-3 flex items-center gap-3 animate-pulse">
-                        <div className="flex-1 space-y-1.5">
-                          <div className="h-3 bg-muted rounded w-3/5" />
-                          <div className="h-2.5 bg-muted/70 rounded w-4/5" />
+                    Array.from({ length: searchResults.length === 0 ? 3 : 1 }).map((_, i) => (
+                      <div key={`skel-${i}`} className="pt-3 flex items-center gap-3 animate-pulse">
+                        <div className="flex-1 space-y-2">
+                          <div className="h-3 bg-muted rounded w-1/4" />
+                          <div className="h-4 bg-muted/80 rounded w-3/4" />
+                          <div className="h-3 bg-muted/50 rounded w-full" />
                         </div>
-                        <div className="h-5 w-16 bg-muted rounded-full" />
+                        <div className="h-8 w-24 bg-muted rounded-lg" />
                       </div>
                     ))
                   )}
