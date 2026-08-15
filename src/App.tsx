@@ -8,6 +8,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Globe, BookOpenCheck, Settings, Library as LibraryIcon, BookMarked, MessagesSquare, MoreVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LiveStats } from "@/components/LiveStats";
+import { GlobalModals } from "@/components/GlobalModals";
+import { Footer } from "@/components/Footer";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
@@ -109,6 +111,7 @@ const App = () => (
       <Sonner />
       <HashRouter>
         <NavBar />
+        <GlobalModals />
         <Suspense fallback={
           <div className="flex items-center justify-center min-h-[60vh]">
             <div className="w-6 h-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
@@ -126,6 +129,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
+        <Footer />
       </HashRouter>
     </TooltipProvider>
   </QueryClientProvider>

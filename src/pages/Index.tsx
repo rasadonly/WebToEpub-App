@@ -140,27 +140,6 @@ const Index = () => {
           </div>
         )}
 
-        {/* Below-the-fold SEO section — visible after scrolling or when idle */}
-        <div className="border-t border-border/50 pt-10 mt-12 text-center max-w-4xl mx-auto space-y-5">
-          <p className="text-muted-foreground text-sm sm:text-base leading-relaxed">
-            Works with <Link to="/sites" className="text-primary hover:underline font-semibold">380+ sites</Link> — Royal Road, NovelBin, Scribble Hub, WTR-LAB and more.
-            Free online web novel conversion with zero account required.
-          </p>
-          <div className="flex flex-wrap justify-center gap-3 sm:gap-6 text-xs sm:text-sm text-muted-foreground font-medium">
-            <Link to="/converter" className="hover:text-primary transition-colors font-semibold">Best EPUB converter for web novels</Link>
-            <span className="text-border">·</span>
-            <Link to="/web-to-epub" className="hover:text-primary transition-colors">Web to EPUB Tool</Link>
-            <span className="text-border">·</span>
-            <Link to="/alternatives" className="hover:text-primary transition-colors">WebToEpub Alternative</Link>
-            <span className="text-border">·</span>
-            <Link to="/sites" className="hover:text-primary transition-colors">Supported Sites</Link>
-            <span className="text-border">·</span>
-            <Link to="/guide" className="hover:text-primary transition-colors">How-to Guide</Link>
-            <span className="text-border">·</span>
-            <Link to="/privacy" className="hover:text-primary transition-colors">Privacy</Link>
-          </div>
-        </div>
-
       </main>
     </div>
   );
