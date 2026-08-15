@@ -110,14 +110,17 @@ function parseHtml(html: string): Document {
 
 function unwrapProxyUrl(url: string): string {
   if (!url) return url;
-  if (url.includes("/api/proxy?url=") || url.includes("?url=")) {
+  // Some links on sites like ReadNovelMTL use #anchors that need cleaning
+  const clean = url.split('#')[0];
+  if (clean.includes("/api/proxy?url=") || clean.includes("?url=")) {
     try {
-      const match = url.match(/[?&]url=([^&]+)/);
+      const match = clean.match(/[?&]url=([^&]+)/);
       if (match) return decodeURIComponent(match[1]);
     } catch {}
   }
-  return url;
+  return clean;
 }
+
 
 function absoluteUrl(base: string, rel: string): string {
   try {
@@ -526,7 +529,9 @@ function siteKey(hostname: string): string {
   if (hostname.includes("novelbin") || hostname.includes("novlove")) return "novelbin";
   if (hostname.includes("wtr-lab.com")) return "wtrlab";
   if (hostname.includes("wattpad.com")) return "wattpad";
+  if (hostname.includes("readnovelmtl.com")) return "readnovelmtl";
   return "generic";
+
 }
 
 async function tocNovelhall(url: string): Promise<string[]> {
@@ -687,6 +692,26 @@ export async function fetchChapterLinks(tocUrl: string, linkSelector: string): P
       case "novelbin":     return await tocNovelBin(tocUrl);
       case "wtrlab":       return await tocWtrLab(tocUrl);
       case "wattpad":      return await tocWattpad(tocUrl);
+      case "readnovelmtl": {
+        const doc = parseHtml(await getText(tocUrl));
+        const origin = new URL(tocUrl).origin;
+        const menu = doc.querySelector("#chapters") ? doc.querySelector("#chapters").parentElement : doc.querySelector(".accordion");
+        const out: string[] = [];
+        if (menu) {
+          menu.querySelectorAll("a[href]").forEach((a) => {
+            const href = a.getAttribute("href");
+            if (href) out.push(absoluteUrl(origin, href));
+          });
+        }
+        if (out.length === 0) {
+          doc.querySelectorAll(".chapter-list a, .list-chapter a, #idData a, .chapters a, .ch-list a").forEach((a) => {
+            const href = a.getAttribute("href");
+            if (href) out.push(absoluteUrl(origin, href));
+          });
+        }
+        return out;
+      }
+
       default: {
         const doc = parseHtml(await getText(tocUrl));
         const out: string[] = [];
@@ -764,6 +789,11 @@ export async function fetchChapterContent(
       case "novelbuddy":   return bodyNovelBuddy(chapterUrl);
       case "novelarrow":   return bodyNovelArrow(chapterUrl);
       case "wattpad":      return bodyWattpad(chapterUrl);
+      case "readnovelmtl": {
+        const doc = parseHtml(await getText(chapterUrl));
+        return extractWithSelector(doc, "#content, .chapter-content, #chr-content");
+      }
+
       default:             return bodyGeneric(chapterUrl, contentSelector);
     }
   };
