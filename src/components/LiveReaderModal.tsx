@@ -480,57 +480,66 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
       {/* Header */}
       {!immersive && (
       <div
-        className="flex items-center justify-between px-4 py-2 border-b"
-        style={{ borderColor: 'rgba(127,127,127,0.25)', background: themeVars.bg }}
+        className="flex items-center justify-between px-4 py-2 border-b bg-card/80 backdrop-blur-md sticky top-0 z-50"
+        style={{ borderColor: 'rgba(127,127,127,0.15)', background: themeVars.bg }}
       >
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-3 min-w-0">
           {view === 'reader' && (
-            <Button variant="ghost" size="sm" onClick={() => { stopTTS(); setView('details'); }} className="gap-1">
-              <ArrowLeft className="w-4 h-4" /> Back
+            <Button variant="ghost" size="icon" onClick={() => { stopTTS(); setView('details'); }} className="h-8 w-8">
+              <ArrowLeft className="w-4 h-4" />
             </Button>
           )}
           {view === 'details' && (
-            <Button variant="ghost" size="sm" onClick={() => setView('url')} className="gap-1">
-              <ArrowLeft className="w-4 h-4" /> New URL
+            <Button variant="ghost" size="sm" onClick={() => setView('url')} className="gap-1.5 h-8">
+              <ArrowLeft className="w-3.5 h-3.5" /> New URL
             </Button>
           )}
-          <BookOpen className="w-4 h-4" style={{ color: themeVars.accent }} />
-          <span className="text-sm font-semibold truncate">
-            {view === 'reader' ? chapterTitle : book?.title || 'Live Reader'}
-          </span>
-          {view === 'reader' && (
-            <span className="text-xs opacity-60 hidden sm:inline">
-              · {chapterIndex + 1}/{chapters.length}
-            </span>
-          )}
+          <div className="flex items-center gap-2 overflow-hidden">
+            <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-primary/10 shrink-0">
+              <BookOpen className="w-4 h-4 text-primary" />
+            </div>
+            <div className="flex flex-col min-w-0">
+              <span className="text-sm font-bold truncate">
+                {view === 'reader' ? chapterTitle : book?.title || 'Live Reader'}
+              </span>
+              {view === 'reader' && (
+                <span className="text-[10px] uppercase tracking-wider font-medium opacity-50">
+                  Chapter {chapterIndex + 1} of {chapters.length}
+                </span>
+              )}
+            </div>
+          </div>
         </div>
         <div className="flex items-center gap-1">
           {view === 'reader' && (
             <>
-              <Button variant="ghost" size="sm" onClick={() => setShowToc((v) => !v)} title="Contents">
+              <Button variant="ghost" size="icon" onClick={() => setShowToc((v) => !v)} title="Contents" className={`h-8 w-8 ${showToc ? 'text-primary bg-primary/10' : ''}`}>
                 <List className="w-4 h-4" />
               </Button>
               {supportsTTS && (
                 <Button
-                  variant={ttsOpen ? 'default' : 'ghost'}
-                  size="sm"
+                  variant="ghost"
+                  size="icon"
                   onClick={() => setTtsOpen((v) => !v)}
                   title="Text to speech"
+                  className={`h-8 w-8 ${ttsOpen ? 'text-primary bg-primary/10' : ''}`}
                 >
                   <Volume2 className="w-4 h-4" />
                 </Button>
               )}
               <Button
                 variant="ghost"
-                size="sm"
+                size="icon"
                 onClick={() => setImmersive(true)}
                 title="Immersive mode"
+                className="h-8 w-8"
               >
                 <Maximize2 className="w-4 h-4" />
               </Button>
             </>
           )}
-          <Button variant="ghost" size="sm" onClick={onClose} title="Close">
+          <div className="w-px h-6 bg-border mx-1" />
+          <Button variant="ghost" size="icon" onClick={onClose} title="Close" className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive">
             <X className="w-4 h-4" />
           </Button>
         </div>
