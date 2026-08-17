@@ -2211,50 +2211,6 @@ async function tocNovelight(url) {
     };
   });
 
-  const bookId = html.match(/const\s+BOOK_ID\s*=\s*["'](\d+)["']/i)?.[1] ||
-    html.match(/data-book-id=["'](\d+)["']/i)?.[1] ||
-    url.match(/\/book\/(\d+)/)?.[1];
-
-  if (!bookId) return dedupeByUrl(pageItems);
-
-  const allChapters = [];
-  let prevFirstUrl = "";
-
-  for (let page = 1; page <= 60; page++) {
-    try {
-      const pageUrl = `${origin}/book/ajax/chapter-pagination?book_id=${bookId}&page=${page}`;
-      const res = await httpGet(pageUrl, { "X-Requested-With": "XMLHttpRequest" });
-      const text = await res.text();
-      let json;
-      try { json = JSON.parse(text); } catch {}
-      const pageHtml = json?.html || text;
-      
-      const pMatches = [...pageHtml.matchAll(/href=["']([^"']+)["']/gi)].map(m => unwrapProxyUrl(m[1]));
-      const pUrls = Array.from(new Set(pMatches.filter(u => u && u.includes("/book/chapter/"))));
-      if (pUrls.length === 0) break;
-
-      const pItems = pUrls.map(u => {
-        const chapterId = u.match(/chapter\/(\d+)/)?.[1] || "";
-        return {
-          url: absoluteUrl(origin, u),
-          title: chapterId ? `Chapter ${chapterId}` : "Chapter"
-        };
-      });
-
-      if (pItems[0].url === prevFirstUrl) break;
-      prevFirstUrl = pItems[0].url;
-
-      allChapters.push(...pItems);
-    } catch {
-      break;
-    }
-  }
-
-  if (allChapters.length > 0) {
-    allChapters.reverse();
-    return dedupeByUrl(allChapters);
-  }
-
   return dedupeByUrl(pageItems);
 }
 

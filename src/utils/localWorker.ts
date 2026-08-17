@@ -554,42 +554,6 @@ async function tocNovelight(url: string): Promise<string[]> {
   const matches = [...html.matchAll(/href=["']([^"']+)["']/gi)].map(m => unwrapProxyUrl(m[1]));
   const chapterUrls = Array.from(new Set(matches.filter(u => u && u.includes("/book/chapter/")))).map(u => absoluteUrl(origin, u));
 
-  const bookId = html.match(/const\s+BOOK_ID\s*=\s*["'](\d+)["']/i)?.[1] ||
-    html.match(/data-book-id=["'](\d+)["']/i)?.[1] ||
-    url.match(/\/book\/(\d+)/)?.[1];
-
-  if (!bookId) return Array.from(new Set(chapterUrls));
-
-  const allChapters: string[] = [];
-  let prevFirstUrl = "";
-
-  for (let page = 1; page <= 60; page++) {
-    try {
-      const pageUrl = `${origin}/book/ajax/chapter-pagination?book_id=${bookId}&page=${page}`;
-      const r = await httpGet(pageUrl, { "X-Requested-With": "XMLHttpRequest" });
-      const text = await r.text();
-      let json: any;
-      try { json = JSON.parse(text); } catch {}
-      const pageHtml = json?.html || text;
-      
-      const pMatches = [...pageHtml.matchAll(/href=["']([^"']+)["']/gi)].map(m => unwrapProxyUrl(m[1]));
-      const pUrls = Array.from(new Set(pMatches.filter(u => u && u.includes("/book/chapter/")))).map(u => absoluteUrl(origin, u));
-      if (pUrls.length === 0) break;
-
-      if (pUrls[0] === prevFirstUrl) break;
-      prevFirstUrl = pUrls[0];
-
-      allChapters.push(...pUrls);
-    } catch {
-      break;
-    }
-  }
-
-  if (allChapters.length > 0) {
-    allChapters.reverse();
-    return Array.from(new Set(allChapters));
-  }
-
   return Array.from(new Set(chapterUrls));
 }
 
