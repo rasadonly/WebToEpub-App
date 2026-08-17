@@ -554,6 +554,7 @@ async function tocNovelight(url: string): Promise<string[]> {
   const matches = [...html.matchAll(/href=["']([^"']+)["']/gi)].map(m => unwrapProxyUrl(m[1]));
   const chapterUrls = Array.from(new Set(matches.filter(u => u && u.includes("/book/chapter/")))).map(u => absoluteUrl(origin, u));
 
+  chapterUrls.reverse();
   return Array.from(new Set(chapterUrls));
 }
 
