@@ -2198,12 +2198,15 @@ async function bodyReadNovelMtl(url) {
 // --- Novelight (novelight.net) ---
 async function tocNovelight(url) {
   const html = await getText(url);
+  const origin = new URL(url).origin;
+  const pageLinks = linksFrom(html, origin, 'a[href*="/book/chapter/"]');
+
   const bookId = html.match(/const\s+BOOK_ID\s*=\s*["'](\d+)["']/i)?.[1] ||
     html.match(/data-book-id=["'](\d+)["']/i)?.[1] ||
     url.match(/\/book\/(\d+)/)?.[1];
-  if (!bookId) return [];
 
-  const origin = new URL(url).origin;
+  if (!bookId) return dedupeByUrl(pageLinks);
+
   const allChapters = [];
   let prevFirstUrl = "";
 
@@ -2239,12 +2242,21 @@ async function tocNovelight(url) {
     }
   }
 
-  // Reverse so chapters are ordered Chapter 1 -> Chapter N (ascending)
-  allChapters.reverse();
-  return dedupeByUrl(allChapters);
+  if (allChapters.length > 0) {
+    allChapters.reverse();
+    return dedupeByUrl(allChapters);
+  }
+
+  return dedupeByUrl(pageLinks);
 }
 
 async function bodyNovelight(url) {
+  const html = await getText(url);
+  const doc = parseHtml(html);
+  const content = extractWithSelector(doc, '.chapter-text, .chapter-text__limit, .chapter-text__place, #chapter-content, article');
+  if (content && content.replace(/<[^>]+>/g, '').trim().length > 30) {
+    return content;
+  }
   const chapterId = url.match(/chapter\/(\d+)/)?.[1];
   if (chapterId) {
     try {
@@ -2252,14 +2264,11 @@ async function bodyNovelight(url) {
       const apiUrl = `${origin}/book/ajax/read-chapter/${chapterId}`;
       const res = await httpGet(apiUrl, { "X-Requested-With": "XMLHttpRequest" });
       const json = await res.json();
-      const content = json?.content || "";
-      if (content && content.replace(/<[^>]+>/g, "").trim().length > 30) {
-        return content;
-      }
+      const c = json?.content || "";
+      if (c && c.replace(/<[^>]+>/g, "").trim().length > 30) return c;
     } catch {}
   }
-  const html = await getText(url);
-  return extractWithSelector(parseHtml(html), '.chapter-text, .chapter-text__place, #chapter-content, article');
+  return content;
 }
 
 
