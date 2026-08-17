@@ -550,18 +550,15 @@ function siteKey(hostname: string): string {
 async function tocNovelight(url: string): Promise<string[]> {
   const html = await getText(url);
   const origin = new URL(url).origin;
-  const doc = parseHtml(html);
-  const pageUrls: string[] = [];
-  doc.querySelectorAll('a[href*="/book/chapter/"]').forEach((a) => {
-    const href = a.getAttribute("href");
-    if (href) pageUrls.push(absoluteUrl(origin, href));
-  });
+
+  const matches = [...html.matchAll(/href=["']([^"']+)["']/gi)].map(m => unwrapProxyUrl(m[1]));
+  const chapterUrls = Array.from(new Set(matches.filter(u => u && u.includes("/book/chapter/")))).map(u => absoluteUrl(origin, u));
 
   const bookId = html.match(/const\s+BOOK_ID\s*=\s*["'](\d+)["']/i)?.[1] ||
     html.match(/data-book-id=["'](\d+)["']/i)?.[1] ||
     url.match(/\/book\/(\d+)/)?.[1];
 
-  if (!bookId) return Array.from(new Set(pageUrls));
+  if (!bookId) return Array.from(new Set(chapterUrls));
 
   const allChapters: string[] = [];
   let prevFirstUrl = "";
@@ -575,18 +572,14 @@ async function tocNovelight(url: string): Promise<string[]> {
       try { json = JSON.parse(text); } catch {}
       const pageHtml = json?.html || text;
       
-      const matches = [...pageHtml.matchAll(/<a[^>]*href="([^"]*\/book\/chapter\/[^"]*)"/gi)];
-      if (matches.length === 0) break;
+      const pMatches = [...pageHtml.matchAll(/href=["']([^"']+)["']/gi)].map(m => unwrapProxyUrl(m[1]));
+      const pUrls = Array.from(new Set(pMatches.filter(u => u && u.includes("/book/chapter/")))).map(u => absoluteUrl(origin, u));
+      if (pUrls.length === 0) break;
 
-      const pageItems = matches.map(m => {
-        const path = m[1].replace(/https?:\/\/novelight\.net/, "");
-        return absoluteUrl(origin, path);
-      });
+      if (pUrls[0] === prevFirstUrl) break;
+      prevFirstUrl = pUrls[0];
 
-      if (pageItems[0] === prevFirstUrl) break;
-      prevFirstUrl = pageItems[0];
-
-      allChapters.push(...pageItems);
+      allChapters.push(...pUrls);
     } catch {
       break;
     }
@@ -597,7 +590,7 @@ async function tocNovelight(url: string): Promise<string[]> {
     return Array.from(new Set(allChapters));
   }
 
-  return Array.from(new Set(pageUrls));
+  return Array.from(new Set(chapterUrls));
 }
 
 async function bodyNovelight(url: string): Promise<string> {
