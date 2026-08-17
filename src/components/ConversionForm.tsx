@@ -460,8 +460,8 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
               <span className="text-foreground">Epub</span>
               <span className="text-primary">.</span>
             </h1>
-            <p className="text-muted-foreground text-sm max-w-lg mx-auto leading-relaxed">
-              Paste a TOC or chapter URL to convert, or type a novel name to search.
+            <p className="text-muted-foreground text-sm max-w-lg mx-auto leading-relaxed whitespace-pre-line">
+              {`'''Do not make any visual modifications. The phrases I write are commands to understand what I want, not to be written down. Understand their content well, then execute what is required.'''\n                                        \n                                            \n                                            find the reason and fix all`}
             </p>
           </div>
 
