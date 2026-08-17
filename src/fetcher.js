@@ -1827,6 +1827,253 @@ async function tocGravityTales(url) {
   // Chapter table or list
   const items = linksFrom(html, origin, 'table.tablepress a[href], .chapter-list a[href], .entry-content a[href]')
     .filter(i => /chapter|chap|ch[-_]?\d|\d+-\d+/i.test(i.title + i.url));
+  return dedupeByUrl(items);
+}
+
+// --- WuxiaWorld.com: official REST API ---
+async function tocWuxiaWorld(url) {
+  // Normalize: /novel/<slug>/<chapter-slug> → /novel/<slug>
+  const u = new URL(url);
+  const parts = u.pathname.split('/').filter(Boolean);
+  const novelIdx = parts.indexOf('novel');
+  const slug = novelIdx >= 0 ? parts[novelIdx + 1] : parts[0];
+  if (!slug) throw new Error('WuxiaWorld: novel slug not found');
+  // REST API returns all chapters
+  const json = await getJson(`https://www.wuxiaworld.com/api/novels/${slug}/chapters`);
+  const chapters = json?.chapters || json?.items || [];
+  if (chapters.length) {
+    return chapters.map((c, i) => ({
+      url: `https://www.wuxiaworld.com/novel/${slug}/${c.slug || c.transliteratedTitle?.toLowerCase().replace(/\s+/g, '-') || `chapter-${i + 1}`}`,
+      title: c.name || c.title || `Chapter ${i + 1}`,
+    }));
+  }
+  // Fallback: scrape the novel page
+  const html = await getText(`https://www.wuxiaworld.com/novel/${slug}`);
+  return linksFrom(html, `https://www.wuxiaworld.com/novel/${slug}`, 'a[href*="/novel/"][href*="/chapter"]');
+}
+
+async function bodyWuxiaWorld(url) {
+  return extractWithSelector(parseHtml(await getText(url)),
+    '.chapter-content, #chapter-content, .cha-words, .chapter-text, article .content');
+}
+
+// --- Inkitt: story reader API ---
+async function tocInkitt(url) {
+  const storyId = url.match(/stories\/(\d+)/)?.[1] ||
+    url.match(/story\/(\d+)/)?.[1];
+  if (!storyId) {
+    // Try slug-based URL
+    const slug = url.match(/inkitt\.com\/stories\/([^/?#]+)/)?.[1];
+    if (slug) {
+      try {
+        const json = await getJson(`https://www.inkitt.com/api/stories/${slug}`);
+        const sid = json?.id || json?.story?.id;
+        if (sid) return tocInkitt(`https://www.inkitt.com/stories/${sid}`);
+      } catch {}
+    }
+    return [];
+  }
+  const json = await getJson(`https://www.inkitt.com/api/stories/${storyId}/chapters`);
+  const chapters = json?.chapters || json?.data || [];
+  return chapters.map((c, i) => ({
+    url: `https://www.inkitt.com/stories/${storyId}/chapters/${c.id || c.number || i + 1}`,
+    title: c.title || `Chapter ${i + 1}`,
+  }));
+}
+
+async function bodyInkitt(url) {
+  const storyId = url.match(/stories\/(\d+)/)?.[1];
+  const chapterId = url.match(/chapters\/(\d+)/)?.[1];
+  if (storyId && chapterId) {
+    try {
+      const json = await getJson(`https://www.inkitt.com/api/stories/${storyId}/chapters/${chapterId}`);
+      const content = json?.content || json?.chapter?.content || json?.text || '';
+      if (content) {
+        return content.split('\n').map(p => `<p>${p}</p>`).join('');
+      }
+    } catch {}
+  }
+  return extractWithSelector(parseHtml(await getText(url)),
+    '.chapter-text, .story-body, .content-wrapper, article');
+}
+
+// --- ReadLightNovel (.me / .org / .mobi): AJAX chapter list ---
+async function tocReadLightNovel(url) {
+  const html = await getText(url);
+  const doc = parseHtml(html);
+  const origin = new URL(url).origin;
+  // Try AJAX endpoint
+  const novelId = html.match(/data-novel-id=["'](\d+)["']/)?.[1] ||
+    html.match(/"novel_id"\s*:\s*(\d+)/)?.[1];
+  if (novelId) {
+    const ajaxHtml = await tryText(`${origin}/ajax/chapters/?novel_id=${novelId}`);
+    const items = linksFrom(ajaxHtml, origin, 'a[href]')
+      .filter(i => /chapter|chap|ch-?\d/i.test(i.url));
+    if (items.length) return items;
+  }
+  // Fallback: HTML chapter list
+  const items = linksFrom(html, url, '.list-chapter a, ul.chapter-list a, #chapter-list a');
+  return dedupeByUrl(items);
+}
+
+async function bodyReadLightNovel(url) {
+  return extractWithSelector(parseHtml(await getText(url)),
+    '.chapter-content, #chapter-content, .desc, .novel-body');
+}
+
+// --- KnoxT / KnoxT Space: WP-based EN translation ---
+async function tocKnoxT(url) {
+  const html = await getText(url);
+  const origin = new URL(url).origin;
+  const items = linksFrom(html, url, '.entry-content a[href], .chapter-list a[href], table a[href]')
+    .filter(i => /chapter|chap|ch[-_]?\d|part[-_]?\d|episode/i.test(i.title + i.url));
+  if (items.length) return dedupeByUrl(items);
+  // WP REST API fallback
+  const slug = url.split('/').filter(Boolean).pop();
+  try {
+    const json = await getJson(`${origin}/wp-json/wp/v2/posts?categories_name=${slug}&per_page=100&orderby=date&order=asc`);
+    if (Array.isArray(json) && json.length)
+      return json.map(p => ({ url: p.link, title: p.title?.rendered || p.slug }));
+  } catch {}
+  return dedupeByUrl(items);
+}
+
+// --- Chrysanthemum Garden: WP-based BL/danmei translations ---
+async function tocChrysanthemumGarden(url) {
+  const html = await getText(url);
+  const origin = new URL(url).origin;
+  // CG uses a table of contents in the post body
+  const items = linksFrom(html, url, '.entry-content a[href], article a[href]')
+    .filter(i => /chapter|chap|ch[-_]?\d|\bpart\b|\bepisode\b|\bprologue\b|\bepilogue\b/i.test(i.title + i.url)
+      && !/(author|donate|patreon|twitter|discord|tag|category)\//.test(i.url));
+  return dedupeByUrl(items);
+}
+
+// --- Genesis Translations: WP-based translation group ---
+async function tocGenesisTranslations(url) {
+  const html = await getText(url);
+  const origin = new URL(url).origin;
+  const slug = new URL(url).pathname.split('/').filter(Boolean).pop();
+  // Try WP REST API
+  try {
+    const search = await getJson(`${origin}/wp-json/wp/v2/posts?search=${slug}&per_page=1`);
+    const catId = search?.[0]?.categories?.[0];
+    if (catId) {
+      const posts = await getJson(`${origin}/wp-json/wp/v2/posts?categories=${catId}&per_page=100&orderby=date&order=asc`);
+      if (Array.isArray(posts) && posts.length)
+        return posts.map(p => ({ url: p.link, title: p.title?.rendered || p.slug }));
+    }
+  } catch {}
+  const items = linksFrom(html, url, '.entry-content a[href], .chapter-list a[href]')
+    .filter(i => /chapter|chap|ch[-_]?\d/i.test(i.title + i.url));
+  return dedupeByUrl(items);
+}
+
+// --- Novel Nest: aggregator with chapter list ---
+async function tocNovelNest(url) {
+  const html = await getText(url);
+  const origin = new URL(url).origin;
+  const novelId = html.match(/data-id=["'](\d+)["']/)?.[1] ||
+    html.match(/novel_id["'\s:=]+(\d+)/)?.[1];
+  if (novelId) {
+    const ajaxHtml = await tryText(`${origin}/ajax/chapter-archive?id=${novelId}`);
+    const items = linksFrom(ajaxHtml, origin, 'a[href]');
+    if (items.length) return items;
+  }
+  const items = linksFrom(html, url, '#chapter-list a, .chapter-list a, ul.list-chapter a');
+  return dedupeByUrl(items);
+}
+
+// --- NovelMtl: simple HTML chapter list ---
+async function tocNovelMtl(url) {
+  const base = url.split('?')[0].replace(/\/$/, '');
+  const html = await getText(base);
+  const doc = parseHtml(html);
+  const origin = new URL(url).origin;
+  const out = [];
+  doc.querySelectorAll('.chapter-list a[href], #chapters a[href], ul.list li a[href]').forEach(a => {
+    const href = a.getAttribute('href');
+    if (href) out.push({ url: absoluteUrl(base, href), title: textOf(a) });
+  });
+  if (out.length) return dedupeByUrl(out);
+  // Paginated fallback
+  return linksFrom(html, base, 'a[href]')
+    .filter(i => /chapter|chap|ch[-_]?\d/i.test(i.url));
+}
+
+// --- Literotica: adult fiction, paginated chapters ---
+async function tocLiterotica(url) {
+  const html = await getText(url);
+  const doc = parseHtml(html);
+  const origin = 'https://www.literotica.com';
+  // Series page
+  const seriesItems = linksFrom(html, origin, 'a[href*="/series/"], a[href*="/s/"]');
+  if (seriesItems.length > 2) return dedupeByUrl(seriesItems);
+  // Author page
+  const authorItems = linksFrom(html, origin, 'table.st a[href], .a-story-link a[href]');
+  if (authorItems.length) return dedupeByUrl(authorItems);
+  // Single story — check for pages
+  const pageCount = parseInt(doc.querySelector('select.b-pager-pages option:last-child')?.getAttribute('value') || '1');
+  if (pageCount <= 1) return [{ url, title: textOf(doc.querySelector('h1')) || 'Chapter 1' }];
+  const pages = [];
+  for (let p = 1; p <= pageCount; p++) pages.push({ url: `${url}?page=${p}`, title: `Page ${p}` });
+  return pages;
+}
+
+async function bodyLiterotica(url) {
+  const doc = parseHtml(await getText(url));
+  return extractWithSelector(doc, '.aa_ht, .b-story-body-x, #story_text, .story-body');
+}
+
+// --- NovelStar: CN novel site, AJAX chapter archive ---
+async function tocNovelStar(url) {
+  const html = await getText(url);
+  const origin = new URL(url).origin;
+  const novelId = html.match(/novelId["'\s:=]+(\d+)/)?.[1] ||
+    html.match(/data-novel-id=["'](\d+)["']/)?.[1];
+  if (novelId) {
+    const ajaxHtml = await tryText(`${origin}/ajax/chapter-archive?novelId=${novelId}`);
+    const items = linksFrom(ajaxHtml, origin, 'a[href]');
+    if (items.length) return items;
+  }
+  return linksFrom(html, url, 'ul.chapter-list a, .list-chapter a, #chapter-list a');
+}
+
+// --- 69shuba.com: CN raw fiction, paginated TOC ---
+async function toc69shuba(url) {
+  const base = url.split('?')[0].replace(/\/$/, '');
+  const html = await getText(base);
+  const doc = parseHtml(html);
+  const origin = new URL(url).origin;
+  const out = [];
+  // Main chapter list
+  doc.querySelectorAll('#catalog a[href], .catalog a[href], dl dd a[href]').forEach(a => {
+    const href = a.getAttribute('href');
+    if (href) out.push({ url: absoluteUrl(origin, href), title: textOf(a) });
+  });
+  return dedupeByUrl(out);
+}
+
+async function body69shuba(url) {
+  return extractWithSelector(parseHtml(await getText(url)),
+    '#content, #booktxt, .booktxt, .readcontent');
+}
+
+// --- UUKanshu: CN raw fiction ---
+async function tocUukanshu(url) {
+  const html = await getText(url);
+  const origin = new URL(url).origin;
+  const out = [];
+  parseHtml(html).querySelectorAll('.book-chapter-item a[href], dl dd a[href], #catalog a[href]').forEach(a => {
+    const href = a.getAttribute('href');
+    if (href) out.push({ url: absoluteUrl(origin, href), title: textOf(a) });
+  });
+  return dedupeByUrl(out);
+}
+
+async function bodyUukanshu(url) {
+  return extractWithSelector(parseHtml(await getText(url)),
+    '#content, #booktxt, .booktxt, .content');
 }
 
 // --- ReadNovelMtl (readnovelmtl.com) ---
@@ -1881,6 +2128,7 @@ const MAJOR_DOMAINS = [
   "novelsonline.net",
   "boxnovel.com",
   "wuxiaworld.site",
+  "wuxiaworld.com",
   "foxaholic.com",
   "1stkissnovel.love",
   "sonicmtl.com",
@@ -1903,6 +2151,20 @@ const MAJOR_DOMAINS = [
   "ptwxz.com",
   "bixiange.me",
   "fictionlog.co",
+  // New sites
+  "inkitt.com",
+  "readlightnovel.me",
+  "readlightnovel.org",
+  "readlightnovel.mobi",
+  "knoxt.space",
+  "knoxt.com",
+  "chrysanthemumgarden.com",
+  "genesistranslations.com",
+  "novelnest.org",
+  "novelmtl.com",
+  "literotica.com",
+  "novelstar.top",
+  "akknovel.com",
 ];
 
 /** Chapter-body selectors for the dedicated sites, tried in order. */
@@ -1919,7 +2181,6 @@ const MAJOR_BODY_SELECTORS = {
   mtlnovel: "div.par, .chapter-content, #chapter-content",
   readnovelfull: "#chr-content, #chapter-content, div.chapter-content",
   madara: "div.reading-content .text-left, div.reading-content, div.entry-content, .text-left",
-  // New sites
   novelcool: ".chapter-content, .text-content, #chapterContent, .reading-content",
   allnovelfull: ".chr-c, #chapter-content, .reading-content, div.chapter-content",
   syosetu: "#novel_honbun, .p-novel__body, div#novel_color",
@@ -1932,13 +2193,24 @@ const MAJOR_BODY_SELECTORS = {
   novelhi: "#chr-content, #chapter-content, div.chapter-content",
   lightnovelpub: "#chapter-content, .chapter-content, .chapter-body",
   asianfanfics: ".story-body, .chapter-text, .container .text",
-  // Batch 3
   jjwxc: "div.noveltext, #noveltext, .readtxt",
   pixivnovel: "section.novel-text, .works-display, p",
   storiesonline: "#chapter_body, .chapter-text, div#story",
   ficwad: ".storytext, #story, .storyBody",
   volarenovels: ".entry-content, .chapter-content, article .post-content",
   gravitytales: ".entry-content, .chapter-content, article",
+  // New sites
+  wuxiaworld: ".chapter-content, #chapter-content, .cha-words, article .content",
+  readlightnovel: ".chapter-content, #chapter-content, .desc, .novel-body",
+  knoxt: ".entry-content, .chapter-content, article .post-content",
+  chrysanthemumgarden: ".entry-content, .chapter-content, article",
+  genesistranslations: ".entry-content, .chapter-content, article",
+  novelnest: "#chr-content, #chapter-content, div.chapter-content",
+  novelmtl: ".chapter-content, #chapter-content, .text-content",
+  novelstar: "#chr-content, #chapter-content, div.chapter-content",
+  akknovel: "#chr-content, .chapter-content, #chapter-content",
+  "69shuba": "#content, #booktxt, .booktxt, .readcontent",
+  uukanshu: "#content, #booktxt, .booktxt, .content",
 };
 
 
@@ -1983,6 +2255,19 @@ const MAJOR_SITES = [
   [/(^|\.)ficwad\.com$/, "ficwad"],
   [/(^|\.)volarenovels\.com$/, "volarenovels"],
   [/(^|\.)gravitytales\.com$/, "gravitytales"],
+  [/(^|\.)wuxiaworld\.com$/, "wuxiaworld"],
+  [/(^|\.)inkitt\.com$/, "inkitt"],
+  [/(^|\.)readlightnovel\.(me|org|mobi)$/, "readlightnovel"],
+  [/(^|\.)akknovel\.com$/, "readlightnovel"],
+  [/(^|\.)knoxt\.(space|com)$/, "knoxt"],
+  [/(^|\.)chrysanthemumgarden\.com$/, "chrysanthemumgarden"],
+  [/(^|\.)genesistranslations\.com$/, "genesistranslations"],
+  [/(^|\.)novelnest\.org$/, "novelnest"],
+  [/(^|\.)novelmtl\.com$/, "novelmtl"],
+  [/(^|\.)literotica\.com$/, "literotica"],
+  [/(^|\.)novelstar\.top$/, "novelstar"],
+  [/(^|\.)69shuba\.com$/, "69shuba"],
+  [/(^|\.)uukanshu\.com$/, "uukanshu"],
 ];
 
 function siteKey(hostname) {
@@ -2003,6 +2288,19 @@ function siteKey(hostname) {
   if (host.includes("lightnovelpub.") || host.includes("novelpub.")) return "lightnovelpub";
   if (host.includes("creative-novels.com")) return "creativenovels";
   if (host.includes("readnovelmtl.com")) return "readnovelmtl";
+  // New sites
+  if (host === "wuxiaworld.com" || host.endsWith(".wuxiaworld.com")) return "wuxiaworld";
+  if (host.includes("inkitt.com")) return "inkitt";
+  if (host.includes("readlightnovel.") || host === "akknovel.com") return "readlightnovel";
+  if (host.includes("knoxt.")) return "knoxt";
+  if (host.includes("chrysanthemumgarden.com")) return "chrysanthemumgarden";
+  if (host.includes("genesistranslations.com")) return "genesistranslations";
+  if (host.includes("novelnest.org")) return "novelnest";
+  if (host.includes("novelmtl.com")) return "novelmtl";
+  if (host.includes("literotica.com")) return "literotica";
+  if (host.includes("novelstar.top")) return "novelstar";
+  if (host.includes("69shuba.com")) return "69shuba";
+  if (host.includes("uukanshu.com")) return "uukanshu";
 
   for (const [re, key] of MAJOR_SITES) {
     if (re.test(host)) return key;
@@ -2101,6 +2399,31 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         return tocGravityTales(tocUrl);
       case "readnovelmtl":
         return tocReadNovelMtl(tocUrl);
+      // New sites
+      case "wuxiaworld":
+        return tocWuxiaWorld(tocUrl);
+      case "inkitt":
+        return tocInkitt(tocUrl);
+      case "readlightnovel":
+        return tocReadLightNovel(tocUrl);
+      case "knoxt":
+        return tocKnoxT(tocUrl);
+      case "chrysanthemumgarden":
+        return tocChrysanthemumGarden(tocUrl);
+      case "genesistranslations":
+        return tocGenesisTranslations(tocUrl);
+      case "novelnest":
+        return tocNovelNest(tocUrl);
+      case "novelmtl":
+        return tocNovelMtl(tocUrl);
+      case "literotica":
+        return tocLiterotica(tocUrl);
+      case "novelstar":
+        return tocNovelStar(tocUrl);
+      case "69shuba":
+        return toc69shuba(tocUrl);
+      case "uukanshu":
+        return tocUukanshu(tocUrl);
 
       default:
         return [];
@@ -2154,7 +2477,19 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
         return bodyWtrLab(chapterUrl);
       case "readnovelmtl":
         return bodyReadNovelMtl(chapterUrl);
-
+      // New sites
+      case "wuxiaworld":
+        return bodyWuxiaWorld(chapterUrl);
+      case "inkitt":
+        return bodyInkitt(chapterUrl);
+      case "readlightnovel":
+        return bodyReadLightNovel(chapterUrl);
+      case "literotica":
+        return bodyLiterotica(chapterUrl);
+      case "69shuba":
+        return body69shuba(chapterUrl);
+      case "uukanshu":
+        return bodyUukanshu(chapterUrl);
 
       default:
         if (MAJOR_BODY_SELECTORS[key]) {
