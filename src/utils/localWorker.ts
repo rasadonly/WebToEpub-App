@@ -542,8 +542,68 @@ function siteKey(hostname: string): string {
   if (hostname.includes("wattpad.com")) return "wattpad";
   if (hostname.includes("readnovelmtl.com")) return "readnovelmtl";
   if (hostname.includes("inkitt.com")) return "inkitt";
+  if (hostname.includes("novelight.net")) return "novelight";
   return "generic";
 
+}
+
+async function tocNovelight(url: string): Promise<string[]> {
+  const html = await getText(url);
+  const bookId = html.match(/const\s+BOOK_ID\s*=\s*["'](\d+)["']/i)?.[1] ||
+    html.match(/data-book-id=["'](\d+)["']/i)?.[1] ||
+    url.match(/\/book\/(\d+)/)?.[1];
+  if (!bookId) return [];
+
+  const origin = new URL(url).origin;
+  const allChapters: string[] = [];
+  let prevFirstUrl = "";
+
+  for (let page = 1; page <= 60; page++) {
+    try {
+      const pageUrl = `${origin}/book/ajax/chapter-pagination?book_id=${bookId}&page=${page}`;
+      const r = await httpGet(pageUrl, { "X-Requested-With": "XMLHttpRequest" });
+      const text = await r.text();
+      let json: any;
+      try { json = JSON.parse(text); } catch {}
+      const pageHtml = json?.html || text;
+      
+      const matches = [...pageHtml.matchAll(/<a[^>]*href="([^"]*\/book\/chapter\/[^"]*)"/gi)];
+      if (matches.length === 0) break;
+
+      const pageUrls = matches.map(m => {
+        const path = m[1].replace(/https?:\/\/novelight\.net/, "");
+        return absoluteUrl(origin, path);
+      });
+
+      if (pageUrls[0] === prevFirstUrl) break;
+      prevFirstUrl = pageUrls[0];
+
+      allChapters.push(...pageUrls);
+    } catch {
+      break;
+    }
+  }
+
+  allChapters.reverse();
+  return Array.from(new Set(allChapters));
+}
+
+async function bodyNovelight(url: string): Promise<string> {
+  const chapterId = url.match(/chapter\/(\d+)/)?.[1];
+  if (chapterId) {
+    try {
+      const origin = new URL(url).origin;
+      const apiUrl = `${origin}/book/ajax/read-chapter/${chapterId}`;
+      const r = await httpGet(apiUrl, { "X-Requested-With": "XMLHttpRequest" });
+      const json = await r.json();
+      const content = json?.content || "";
+      if (content && content.replace(/<[^>]+>/g, "").trim().length > 30) {
+        return content;
+      }
+    } catch {}
+  }
+  const doc = parseHtml(await getText(url));
+  return extractWithSelector(doc, '.chapter-text, .chapter-text__place, #chapter-content, article');
 }
 
 async function tocInkitt(url: string): Promise<string[]> {
@@ -753,6 +813,7 @@ export async function fetchChapterLinks(tocUrl: string, linkSelector: string): P
         return out;
       }
       case "inkitt": return await tocInkitt(tocUrl);
+      case "novelight": return await tocNovelight(tocUrl);
 
       default: {
         const doc = parseHtml(await getText(tocUrl));
@@ -836,6 +897,7 @@ export async function fetchChapterContent(
         return extractWithSelector(doc, "#content, .chapter-content, #chr-content");
       }
       case "inkitt": return bodyInkitt(chapterUrl);
+      case "novelight": return bodyNovelight(chapterUrl);
 
       default:             return bodyGeneric(chapterUrl, contentSelector);
     }
