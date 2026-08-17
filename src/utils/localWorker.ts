@@ -74,14 +74,22 @@ const CORS_PROXIES: Array<(url: string) => string> = CORS_PROXY_LIST.map(
 );
 
 
+const INKITT_COOKIE =
+  "user_credentials=4be4b2f459c9113e1a86bad353c1c89e9886c0285d11bf7cb9441e3f3f61278655ae43c8e47c607dfc31ccd985f88faa3e216542766d50d0b1b2d2fc181e4889%3A%3A12744546%3A%3A2026-09-16T06%3A16%3A52Z; _rocky_session_1=92ea8ac4dcdd4c3c8b169a722c1e9f36; __stripe_mid=94754462-ddb8-4b14-ba53-f09d65f073847cf17b";
+
 async function httpGet(url: string, extra: Record<string, string> = {}): Promise<Response> {
   let lastErr: unknown = null;
+  const extraHeaders = { ...extra };
+  if (url.includes("inkitt.com")) {
+    extraHeaders["Cookie"] = INKITT_COOKIE;
+    extraHeaders["x-proxy-cookie"] = INKITT_COOKIE;
+  }
   for (const build of getActiveCorsProxies()) {
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 7_000);
     try {
       const r = await fetch(build(url), {
-        headers: { ...DEFAULT_HEADERS, ...extra },
+        headers: { ...DEFAULT_HEADERS, ...extraHeaders },
         signal: controller.signal,
       });
       if (r.ok) return r;
@@ -533,8 +541,38 @@ function siteKey(hostname: string): string {
   if (hostname.includes("wtr-lab.com")) return "wtrlab";
   if (hostname.includes("wattpad.com")) return "wattpad";
   if (hostname.includes("readnovelmtl.com")) return "readnovelmtl";
+  if (hostname.includes("inkitt.com")) return "inkitt";
   return "generic";
 
+}
+
+async function tocInkitt(url: string): Promise<string[]> {
+  const storyId = url.match(/stories\/(?:[^\/]+\/)?(\d+)/)?.[1] ||
+    url.match(/stories\/(\d+)/)?.[1] ||
+    url.match(/story\/(\d+)/)?.[1];
+  if (!storyId) return [];
+
+  try {
+    const json = await getJson(`https://www.inkitt.com/api/stories/${storyId}`);
+    const chapters: any[] = json?.chapters || [];
+    if (chapters.length) {
+      return chapters.map((c, i) => `https://www.inkitt.com/stories/${storyId}/chapters/${c.chapter_number || i + 1}`);
+    }
+  } catch {}
+
+  const html = await getText(`https://www.inkitt.com/stories/${storyId}`);
+  const doc = parseHtml(html);
+  const out: string[] = [];
+  doc.querySelectorAll('a[href*="/chapters/"]').forEach((a) => {
+    const href = a.getAttribute("href");
+    if (href) out.push(absoluteUrl(`https://www.inkitt.com/stories/${storyId}`, href));
+  });
+  return Array.from(new Set(out));
+}
+
+async function bodyInkitt(url: string): Promise<string> {
+  const doc = parseHtml(await getText(url));
+  return extractWithSelector(doc, '#story-text-container, .story-body, .chapter-text, article, .content');
 }
 
 async function tocNovelhall(url: string): Promise<string[]> {
@@ -714,6 +752,7 @@ export async function fetchChapterLinks(tocUrl: string, linkSelector: string): P
         }
         return out;
       }
+      case "inkitt": return await tocInkitt(tocUrl);
 
       default: {
         const doc = parseHtml(await getText(tocUrl));
@@ -796,6 +835,7 @@ export async function fetchChapterContent(
         const doc = parseHtml(await getText(chapterUrl));
         return extractWithSelector(doc, "#content, .chapter-content, #chr-content");
       }
+      case "inkitt": return bodyInkitt(chapterUrl);
 
       default:             return bodyGeneric(chapterUrl, contentSelector);
     }
