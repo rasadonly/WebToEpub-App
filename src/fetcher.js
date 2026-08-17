@@ -2211,6 +2211,7 @@ async function tocNovelight(url) {
     };
   });
 
+  pageItems.reverse();
   return dedupeByUrl(pageItems);
 }
 
