@@ -108,6 +108,9 @@ const blockedHosts = {
 
 const RETRY_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
 
+const INKITT_COOKIE =
+  "user_credentials=4be4b2f459c9113e1a86bad353c1c89e9886c0285d11bf7cb9441e3f3f61278655ae43c8e47c607dfc31ccd985f88faa3e216542766d50d0b1b2d2fc181e4889%3A%3A12744546%3A%3A2026-09-16T06%3A16%3A52Z; _rocky_session_1=92ea8ac4dcdd4c3c8b169a722c1e9f36; __stripe_mid=94754462-ddb8-4b14-ba53-f09d65f073847cf17b";
+
 async function httpGet(url, extra = {}, timeoutMs = 7000) {
   const parsed = new URL(url);
   const host = parsed.hostname;
@@ -133,6 +136,10 @@ async function httpGet(url, extra = {}, timeoutMs = 7000) {
             "Sec-Fetch-Site": "same-origin",
             ...extra,
           };
+          if (host.includes("inkitt.com")) {
+            headers["Cookie"] = extra.Cookie || INKITT_COOKIE;
+            headers["x-proxy-cookie"] = extra.Cookie || INKITT_COOKIE;
+          }
           const r = await fetch(buildUrl(proxy, url), {
             headers,
             signal: ctrl.signal,
@@ -1930,26 +1937,26 @@ async function bodyWuxiaWorld(url) {
 
 // --- Inkitt: story reader API ---
 async function tocInkitt(url) {
-  const storyId = url.match(/stories\/(\d+)/)?.[1] ||
+  const storyId = url.match(/stories\/(?:[^\/]+\/)?(\d+)/)?.[1] ||
+    url.match(/stories\/(\d+)/)?.[1] ||
     url.match(/story\/(\d+)/)?.[1];
-  if (!storyId) {
-    // Try slug-based URL
-    const slug = url.match(/inkitt\.com\/stories\/([^/?#]+)/)?.[1];
-    if (slug) {
-      try {
-        const json = await getJson(`https://www.inkitt.com/api/stories/${slug}`);
-        const sid = json?.id || json?.story?.id;
-        if (sid) return tocInkitt(`https://www.inkitt.com/stories/${sid}`);
-      } catch {}
+  if (!storyId) return [];
+
+  try {
+    const json = await getJson(`https://www.inkitt.com/api/stories/${storyId}`);
+    const chapters = json?.chapters || [];
+    if (chapters.length) {
+      return chapters.map((c, i) => ({
+        url: `https://www.inkitt.com/stories/${storyId}/chapters/${c.chapter_number || i + 1}`,
+        title: c.name || c.title || `Chapter ${c.chapter_number || i + 1}`,
+      }));
     }
-    return [];
-  }
-  const json = await getJson(`https://www.inkitt.com/api/stories/${storyId}/chapters`);
-  const chapters = json?.chapters || json?.data || [];
-  return chapters.map((c, i) => ({
-    url: `https://www.inkitt.com/stories/${storyId}/chapters/${c.id || c.number || i + 1}`,
-    title: c.title || `Chapter ${i + 1}`,
-  }));
+  } catch {}
+
+  // Fallback: scrape the story landing page
+  const html = await getText(`https://www.inkitt.com/stories/${storyId}`);
+  const items = linksFrom(html, `https://www.inkitt.com/stories/${storyId}`, 'a[href*="/chapters/"]');
+  return dedupeByUrl(items);
 }
 
 async function bodyInkitt(url) {
