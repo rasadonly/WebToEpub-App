@@ -572,7 +572,7 @@ async function tocInkitt(url: string): Promise<string[]> {
 
 async function bodyInkitt(url: string): Promise<string> {
   const doc = parseHtml(await getText(url));
-  return extractWithSelector(doc, '#story-text-container, .story-body, .chapter-text, article, .content');
+  return extractWithSelector(doc, '#chapterText, .story-page-text, .story-body, article');
 }
 
 async function tocNovelhall(url: string): Promise<string[]> {
