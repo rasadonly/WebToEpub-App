@@ -1960,19 +1960,13 @@ async function tocInkitt(url) {
 }
 
 async function bodyInkitt(url) {
-  const storyId = url.match(/stories\/(\d+)/)?.[1];
-  const chapterId = url.match(/chapters\/(\d+)/)?.[1];
-  if (storyId && chapterId) {
-    try {
-      const json = await getJson(`https://www.inkitt.com/api/stories/${storyId}/chapters/${chapterId}`);
-      const content = json?.content || json?.chapter?.content || json?.text || '';
-      if (content) {
-        return content.split('\n').map(p => `<p>${p}</p>`).join('');
-      }
-    } catch {}
+  const html = await getText(url);
+  const doc = parseHtml(html);
+  const content = extractWithSelector(doc, '#chapterText, .story-page-text, .story-body, article');
+  if (content && content.replace(/<[^>]+>/g, '').trim().length > 30) {
+    return content;
   }
-  return extractWithSelector(parseHtml(await getText(url)),
-    '.chapter-text, .story-body, .content-wrapper, article');
+  return content;
 }
 
 // --- ReadLightNovel (.me / .org / .mobi): AJAX chapter list ---
