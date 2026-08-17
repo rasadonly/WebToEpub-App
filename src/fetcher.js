@@ -2199,13 +2199,23 @@ async function bodyReadNovelMtl(url) {
 async function tocNovelight(url) {
   const html = await getText(url);
   const origin = new URL(url).origin;
-  const pageLinks = linksFrom(html, origin, 'a[href*="/book/chapter/"]');
+
+  const matches = [...html.matchAll(/href=["']([^"']+)["']/gi)].map(m => unwrapProxyUrl(m[1]));
+  const chapterUrls = Array.from(new Set(matches.filter(u => u && u.includes("/book/chapter/"))));
+
+  const pageItems = chapterUrls.map(u => {
+    const chapterId = u.match(/chapter\/(\d+)/)?.[1] || "";
+    return {
+      url: absoluteUrl(origin, u),
+      title: chapterId ? `Chapter ${chapterId}` : "Chapter"
+    };
+  });
 
   const bookId = html.match(/const\s+BOOK_ID\s*=\s*["'](\d+)["']/i)?.[1] ||
     html.match(/data-book-id=["'](\d+)["']/i)?.[1] ||
     url.match(/\/book\/(\d+)/)?.[1];
 
-  if (!bookId) return dedupeByUrl(pageLinks);
+  if (!bookId) return dedupeByUrl(pageItems);
 
   const allChapters = [];
   let prevFirstUrl = "";
@@ -2219,24 +2229,22 @@ async function tocNovelight(url) {
       try { json = JSON.parse(text); } catch {}
       const pageHtml = json?.html || text;
       
-      const matches = [...pageHtml.matchAll(/<a[^>]*href="([^"]*\/book\/chapter\/[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi)];
-      if (matches.length === 0) break;
+      const pMatches = [...pageHtml.matchAll(/href=["']([^"']+)["']/gi)].map(m => unwrapProxyUrl(m[1]));
+      const pUrls = Array.from(new Set(pMatches.filter(u => u && u.includes("/book/chapter/"))));
+      if (pUrls.length === 0) break;
 
-      const pageItems = matches.map(m => {
-        const path = m[1].replace(/https?:\/\/novelight\.net/, "");
-        const rawTitle = m[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-        const titleMatch = rawTitle.match(/(\d+\s*chapter[^\n]*)/i) || rawTitle.match(/(chapter\s*\d+[^\n]*)/i);
-        const cleanTitle = titleMatch ? titleMatch[1].trim() : rawTitle.split(/\s{2,}/)[0];
+      const pItems = pUrls.map(u => {
+        const chapterId = u.match(/chapter\/(\d+)/)?.[1] || "";
         return {
-          url: absoluteUrl(origin, path),
-          title: cleanTitle
+          url: absoluteUrl(origin, u),
+          title: chapterId ? `Chapter ${chapterId}` : "Chapter"
         };
       });
 
-      if (pageItems[0].url === prevFirstUrl) break;
-      prevFirstUrl = pageItems[0].url;
+      if (pItems[0].url === prevFirstUrl) break;
+      prevFirstUrl = pItems[0].url;
 
-      allChapters.push(...pageItems);
+      allChapters.push(...pItems);
     } catch {
       break;
     }
@@ -2247,7 +2255,7 @@ async function tocNovelight(url) {
     return dedupeByUrl(allChapters);
   }
 
-  return dedupeByUrl(pageLinks);
+  return dedupeByUrl(pageItems);
 }
 
 async function bodyNovelight(url) {
