@@ -549,12 +549,20 @@ function siteKey(hostname: string): string {
 
 async function tocNovelight(url: string): Promise<string[]> {
   const html = await getText(url);
+  const origin = new URL(url).origin;
+  const doc = parseHtml(html);
+  const pageUrls: string[] = [];
+  doc.querySelectorAll('a[href*="/book/chapter/"]').forEach((a) => {
+    const href = a.getAttribute("href");
+    if (href) pageUrls.push(absoluteUrl(origin, href));
+  });
+
   const bookId = html.match(/const\s+BOOK_ID\s*=\s*["'](\d+)["']/i)?.[1] ||
     html.match(/data-book-id=["'](\d+)["']/i)?.[1] ||
     url.match(/\/book\/(\d+)/)?.[1];
-  if (!bookId) return [];
 
-  const origin = new URL(url).origin;
+  if (!bookId) return Array.from(new Set(pageUrls));
+
   const allChapters: string[] = [];
   let prevFirstUrl = "";
 
@@ -570,25 +578,35 @@ async function tocNovelight(url: string): Promise<string[]> {
       const matches = [...pageHtml.matchAll(/<a[^>]*href="([^"]*\/book\/chapter\/[^"]*)"/gi)];
       if (matches.length === 0) break;
 
-      const pageUrls = matches.map(m => {
+      const pageItems = matches.map(m => {
         const path = m[1].replace(/https?:\/\/novelight\.net/, "");
         return absoluteUrl(origin, path);
       });
 
-      if (pageUrls[0] === prevFirstUrl) break;
-      prevFirstUrl = pageUrls[0];
+      if (pageItems[0] === prevFirstUrl) break;
+      prevFirstUrl = pageItems[0];
 
-      allChapters.push(...pageUrls);
+      allChapters.push(...pageItems);
     } catch {
       break;
     }
   }
 
-  allChapters.reverse();
-  return Array.from(new Set(allChapters));
+  if (allChapters.length > 0) {
+    allChapters.reverse();
+    return Array.from(new Set(allChapters));
+  }
+
+  return Array.from(new Set(pageUrls));
 }
 
 async function bodyNovelight(url: string): Promise<string> {
+  const html = await getText(url);
+  const doc = parseHtml(html);
+  const content = extractWithSelector(doc, '.chapter-text, .chapter-text__limit, .chapter-text__place, #chapter-content, article');
+  if (content && content.replace(/<[^>]+>/g, '').trim().length > 30) {
+    return content;
+  }
   const chapterId = url.match(/chapter\/(\d+)/)?.[1];
   if (chapterId) {
     try {
@@ -596,14 +614,11 @@ async function bodyNovelight(url: string): Promise<string> {
       const apiUrl = `${origin}/book/ajax/read-chapter/${chapterId}`;
       const r = await httpGet(apiUrl, { "X-Requested-With": "XMLHttpRequest" });
       const json = await r.json();
-      const content = json?.content || "";
-      if (content && content.replace(/<[^>]+>/g, "").trim().length > 30) {
-        return content;
-      }
+      const c = json?.content || "";
+      if (c && c.replace(/<[^>]+>/g, "").trim().length > 30) return c;
     } catch {}
   }
-  const doc = parseHtml(await getText(url));
-  return extractWithSelector(doc, '.chapter-text, .chapter-text__place, #chapter-content, article');
+  return content;
 }
 
 async function tocInkitt(url: string): Promise<string[]> {
