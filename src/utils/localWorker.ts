@@ -801,8 +801,12 @@ export async function fetchChapterContent(
     }
   };
 
+  // Hosts that rate-limit hard need longer, exponential waits between tries.
+  const RATE_LIMITED = /(freewebnovel\.com|novelfull(l)?\.(net|com)|allnovelfull|allnovelnext|allnovel\.org|novelfire\.net|novelhall\.com|scribblehub\.com|novelgo\.id|novgo\.net|novelcodex\.com|novel-?next\.(com|net)|novel-?bin\.(com|net)|novelbin\.(com|me|net)|novelmax\.net|novelgate\.net|novelhulk\.net|fanfiction\.net|archiveofourown\.org|akknovel\.com|readlightnovel\.me)$/i;
+  const base = RATE_LIMITED.test(hostname) ? 1500 : 400;
+
   let last = "";
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 4; i++) {
     try {
       const html = await attempt();
       if (html && html.replace(/<[^>]+>/g, "").trim().length >= 20) return html;
@@ -810,7 +814,7 @@ export async function fetchChapterContent(
     } catch (e) {
       last = "";
     }
-    await new Promise((r) => setTimeout(r, 400 * (i + 1)));
+    await new Promise((r) => setTimeout(r, base * Math.pow(2, i) + Math.random() * 300));
   }
   if (last) return last;
   throw new Error("Chapter content appears to be empty");

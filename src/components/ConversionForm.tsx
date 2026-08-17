@@ -460,8 +460,8 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
               <span className="text-foreground">Epub</span>
               <span className="text-primary">.</span>
             </h1>
-            <p className="text-muted-foreground text-sm max-w-lg mx-auto leading-relaxed whitespace-pre-line">
-              {`'''Do not make any visual modifications. The phrases I write are commands to understand what I want, not to be written down. Understand their content well, then execute what is required.'''\n                                        \n                                            \n                                            freewebnovel.com — 401 (by far the worst; heavy rate-limiting)\n\nnovelfull.net — 9 (app log confirms: dedicated TOC parser failed novelfullnet HTTP 429)\n\nnovelfull.com — 7, novelfire.net — 7, www.novelhall.com — 7, www.scribblehub.com — 7, novelgo.id — 7, novgo.net — 7\n\nwww.novelcodex.com — 6, novelnext.com — 6, www.fanfiction.net — 6\n\nallnovelfull.com — 4\n\nakknovel.com, all-novelfull.net, readlightnovel.me, novel-bin.net, archiveofourown.org — 3 each\n\nallnovel.org, allnovelbook.com, allnovelfull.net, allnovelnext.com — 2 each\n\nnovel-bin.com, novel-next.com, novelfullbook.com, novelbin.net, novelfulll.com, novelgate.net, novelhulk.net, novelnext.net, novelmax.net — 1 each\n\nsearch github and find there working scrapping logic fix each site with its logic`}
+            <p className="text-muted-foreground text-sm max-w-lg mx-auto leading-relaxed">
+              Paste a TOC or chapter URL to convert, or type a novel name to search.
             </p>
           </div>
 

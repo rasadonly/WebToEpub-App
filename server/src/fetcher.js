@@ -36,33 +36,142 @@ function buildUrl(base, target) {
     : base + target;
 }
 
-const blockedHosts = new Set();
+/* ------------------------------------------------------------------ *
+ * Politeness layer — the top failure cause in the logs is HTTP 429/403
+ * (rate limiting / bot blocking), not broken selectors. We therefore:
+ *   1. serialise requests per host with a minimum gap between them,
+ *   2. retry 429/403/503 with exponential backoff (honouring Retry-After),
+ *   3. rotate User-Agents and send a same-origin Referer,
+ *   4. only *temporarily* mark a host as direct-blocked (was permanent).
+ * ------------------------------------------------------------------ */
+
+const UA_POOL = [
+  UA,
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:126.0) Gecko/20100101 Firefox/126.0",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+];
+
+/** Hosts that rate-limit aggressively → bigger gap between hits. */
+const HOST_THROTTLE = [
+  [/freewebnovel\.com$/i, 2500],
+  [/novelfull(l)?\.(net|com)$/i, 1800],
+  [/(^|\.)(all-?novelfull|allnovelfull|allnovelnext|allnovelbook|allnovel)\.(com|net|org)$/i, 1800],
+  [/novelfullbook\.com$/i, 1800],
+  [/novelfire\.net$/i, 1500],
+  [/novelhall\.com$/i, 1500],
+  [/scribblehub\.com$/i, 1500],
+  [/(novelgo\.id|novgo\.net)$/i, 1500],
+  [/novelcodex\.com$/i, 1200],
+  [/novel-?next\.(com|net)$/i, 1200],
+  [/novel-?bin\.(com|net)$/i, 1200],
+  [/novelbin\.(com|me|net)$/i, 1200],
+  [/(novelmax\.net|novelgate\.net|novelhulk\.net)$/i, 1200],
+  [/fanfiction\.net$/i, 2000],
+  [/archiveofourown\.org$/i, 2000],
+  [/(akknovel\.com|readlightnovel\.me)$/i, 1500],
+];
+
+const DEFAULT_GAP_MS = 250;
+
+function gapFor(host) {
+  for (const [re, ms] of HOST_THROTTLE) if (re.test(host)) return ms;
+  return DEFAULT_GAP_MS;
+}
+
+// host -> promise chain tail, so requests to the same host queue up
+const hostQueues = new Map();
+
+function throttle(host) {
+  const gap = gapFor(host);
+  const prev = hostQueues.get(host) || Promise.resolve();
+  let release;
+  const next = new Promise((r) => (release = r));
+  hostQueues.set(host, prev.then(() => next));
+  return prev.then(() => ({
+    done: () => setTimeout(release, gap),
+  }));
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// host -> timestamp until which direct fetching is skipped
+const blockedUntil = new Map();
+const BLOCK_TTL_MS = 5 * 60 * 1000;
+
+const blockedHosts = {
+  has: (h) => (blockedUntil.get(h) || 0) > Date.now(),
+  add: (h) => blockedUntil.set(h, Date.now() + BLOCK_TTL_MS),
+  delete: (h) => blockedUntil.delete(h),
+};
+
+const RETRY_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
 
 async function httpGet(url, extra = {}, timeoutMs = 7000) {
-  const host = new URL(url).hostname;
+  const parsed = new URL(url);
+  const host = parsed.hostname;
+  const origin = parsed.origin;
   let lastErr = null;
-  for (const proxy of PROXIES) {
-    if (!proxy && blockedHosts.has(host)) continue;
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-    try {
-      const r = await fetch(buildUrl(proxy, url), {
-        headers: { ...DEFAULT_HEADERS, ...extra },
-        signal: ctrl.signal,
-        redirect: "follow",
-      });
-      if (r.ok) return r;
-      if (!proxy) blockedHosts.add(host);
-      lastErr = new Error(`HTTP ${r.status}`);
-    } catch (e) {
-      if (!proxy) blockedHosts.add(host);
-      lastErr = e;
-    } finally {
-      clearTimeout(timer);
+  let uaIndex = 0;
+
+  const lease = await throttle(host);
+  try {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      for (const proxy of PROXIES) {
+        if (!proxy && blockedHosts.has(host)) continue;
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+        try {
+          const headers = {
+            ...DEFAULT_HEADERS,
+            "User-Agent": UA_POOL[uaIndex++ % UA_POOL.length],
+            Referer: origin + "/",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "same-origin",
+            ...extra,
+          };
+          const r = await fetch(buildUrl(proxy, url), {
+            headers,
+            signal: ctrl.signal,
+            redirect: "follow",
+          });
+          if (r.ok) {
+            if (!proxy) blockedHosts.delete(host);
+            return r;
+          }
+          if (!proxy && (r.status === 403 || r.status === 401 || r.status === 429)) {
+            blockedHosts.add(host);
+          }
+          lastErr = new Error(`HTTP ${r.status}`);
+          lastErr.status = r.status;
+          if (r.status === 429) {
+            const ra = parseInt(r.headers.get("retry-after") || "", 10);
+            if (Number.isFinite(ra) && ra > 0 && ra <= 30) await sleep(ra * 1000);
+          }
+          if (!RETRY_STATUS.has(r.status) && r.status !== 403 && r.status !== 401) {
+            // 404 and friends won't change on retry with another proxy
+            if (r.status === 404) throw lastErr;
+          }
+        } catch (e) {
+          if (e?.status === 404) throw e;
+          if (!proxy) blockedHosts.add(host);
+          lastErr = e;
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+      // All proxies failed this round — back off before the next sweep.
+      if (attempt < 2) await sleep(800 * Math.pow(2, attempt) + Math.random() * 400);
     }
+    throw lastErr || new Error("All fetch attempts failed");
+  } finally {
+    lease.done();
   }
-  throw lastErr || new Error("All fetch attempts failed");
 }
+
 
 async function getText(url) {
   return (await httpGet(url)).text();
