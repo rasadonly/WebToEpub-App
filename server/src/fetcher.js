@@ -1830,56 +1830,96 @@ async function tocGravityTales(url) {
   return dedupeByUrl(items);
 }
 
-// --- WuxiaWorld.com: extract from __NEXT_DATA__ embedded JSON ---
+// --- WuxiaWorld.com: gRPC-web binary chapter list decoder ---
 async function tocWuxiaWorld(url) {
-  // Normalize: /novel/<slug>/chapter-slug -> /novel/<slug>
   const u = new URL(url);
   const parts = u.pathname.split('/').filter(Boolean);
   const novelIdx = parts.indexOf('novel');
   const slug = novelIdx >= 0 ? parts[novelIdx + 1] : parts[0];
   if (!slug) throw new Error('WuxiaWorld: novel slug not found');
+
   const novelUrl = `https://www.wuxiaworld.com/novel/${slug}`;
   const html = await getText(novelUrl);
-  const doc = parseHtml(html);
 
-  // Try __NEXT_DATA__ first (most reliable)
-  try {
-    const nd = doc.querySelector('script#__NEXT_DATA__')?.textContent;
-    if (nd) {
-      const data = JSON.parse(nd);
-      // Walk all Apollo state objects to find chapters array
-      const state = data?.props?.pageProps?.__APOLLO_STATE__ || {};
-      const chapArrays = Object.values(state)
-        .filter(v => Array.isArray(v?.chapters))
-        .map(v => v.chapters);
-      const chapterRefs = chapArrays[0] || [];
-      if (chapterRefs.length) {
-        return chapterRefs.map((ref, i) => {
-          const key = typeof ref === 'string' ? ref : null;
-          const obj = key ? state[key] : ref;
-          return {
-            url: obj?.url || obj?.canonicalUrl ||
-              `https://www.wuxiaworld.com/novel/${slug}/chapter-${obj?.id || i + 1}`,
-            title: obj?.name || obj?.title || `Chapter ${i + 1}`,
-          };
-        });
+  let novelId = null;
+  const match = html.match(/window\.__REACT_QUERY_STATE__\s*=\s*(\{[\s\S]*?\});\s*(?:window|\n|<\/script>)/);
+  if (match) {
+    try {
+      const data = JSON.parse(match[1]);
+      novelId = data.queries?.[0]?.state?.data?.item?.id;
+    } catch {}
+  }
+  if (!novelId) {
+    const idMatch = html.match(/"item"\s*:\s*\{\s*"id"\s*:\s*(\d+)/) || html.match(/"id"\s*:\s*(\d+)/);
+    if (idMatch) novelId = Number(idMatch[1]);
+  }
+
+  if (novelId) {
+    try {
+      const protoPayload = Buffer.from([0x08, novelId]);
+      const header = Buffer.alloc(5);
+      header.writeUInt8(0, 0);
+      header.writeUInt32BE(protoPayload.length, 1);
+      const body = Buffer.concat([header, protoPayload]);
+
+      const gRes = await fetch("https://api2.wuxiaworld.com/wuxiaworld.api.v2.Chapters/GetChapterList", {
+        method: "POST",
+        headers: {
+          "User-Agent": UA,
+          "Content-Type": "application/grpc-web+proto",
+          "Accept": "application/grpc-web+proto",
+          "x-grpc-web": "1"
+        },
+        body
+      });
+
+      if (gRes.ok) {
+        const buf = Buffer.from(await gRes.arrayBuffer());
+        const chapters = [];
+        let pos = 5;
+        while (pos < buf.length - 10) {
+          if (buf[pos] === 0x12) {
+            let nameLen = buf[pos + 1];
+            let nameOffset = pos + 2;
+            if (nameLen & 0x80) {
+              nameLen = (nameLen & 0x7f) | (buf[pos + 2] << 7);
+              nameOffset = pos + 3;
+            }
+            if (nameLen > 0 && nameLen < 250 && nameOffset + nameLen < buf.length) {
+              const name = buf.subarray(nameOffset, nameOffset + nameLen).toString("utf-8");
+              const nextTagPos = nameOffset + nameLen;
+              if (buf[nextTagPos] === 0x1a) {
+                let slugLen = buf[nextTagPos + 1];
+                let slugOffset = nextTagPos + 2;
+                if (slugLen & 0x80) {
+                  slugLen = (slugLen & 0x7f) | (buf[nextTagPos + 2] << 7);
+                  slugOffset = nextTagPos + 3;
+                }
+                if (slugLen > 0 && slugLen < 250 && slugOffset + slugLen <= buf.length) {
+                  const chapSlug = buf.subarray(slugOffset, slugOffset + slugLen).toString("utf-8");
+                  if (chapSlug.includes("-") && !chapSlug.includes("http") && !chapSlug.includes("/")) {
+                    chapters.push({
+                      url: `https://www.wuxiaworld.com/novel/${slug}/${chapSlug}`,
+                      title: name.trim() || chapSlug
+                    });
+                  }
+                  pos = slugOffset + slugLen;
+                  continue;
+                }
+              }
+            }
+          }
+          pos++;
+        }
+        if (chapters.length > 0) return chapters;
       }
-      // Also try pageProps.chapters directly
-      const direct = data?.props?.pageProps?.chapters ||
-        data?.props?.pageProps?.novel?.chapters || [];
-      if (direct.length) {
-        return direct.map((c, i) => ({
-          url: c.url || `https://www.wuxiaworld.com/novel/${slug}/${c.slug || `chapter-${i+1}`}`,
-          title: c.name || c.title || `Chapter ${i + 1}`,
-        }));
-      }
+    } catch (e) {
+      console.warn("[fetcher] WuxiaWorld gRPC fetch failed", e?.message || e);
     }
-  } catch {}
+  }
 
-  // Fallback: scrape all chapter links from the /chapters sub-page
-  const chapPageHtml = await tryText(`${novelUrl}/chapters`);
-  const items = linksFrom(chapPageHtml || html, novelUrl,
-    'li.chapter-item a[href], .chapter-list a[href], a[href*="/novel/"][href*="-chapter-"]');
+  // Fallback: scrape links from the novel page
+  const items = linksFrom(html, novelUrl, 'a[href*="/novel/"][href*="-chapter-"]');
   return dedupeByUrl(items);
 }
 
