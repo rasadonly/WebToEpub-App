@@ -1830,26 +1830,57 @@ async function tocGravityTales(url) {
   return dedupeByUrl(items);
 }
 
-// --- WuxiaWorld.com: official REST API ---
+// --- WuxiaWorld.com: extract from __NEXT_DATA__ embedded JSON ---
 async function tocWuxiaWorld(url) {
-  // Normalize: /novel/<slug>/<chapter-slug> → /novel/<slug>
+  // Normalize: /novel/<slug>/chapter-slug -> /novel/<slug>
   const u = new URL(url);
   const parts = u.pathname.split('/').filter(Boolean);
   const novelIdx = parts.indexOf('novel');
   const slug = novelIdx >= 0 ? parts[novelIdx + 1] : parts[0];
   if (!slug) throw new Error('WuxiaWorld: novel slug not found');
-  // REST API returns all chapters
-  const json = await getJson(`https://www.wuxiaworld.com/api/novels/${slug}/chapters`);
-  const chapters = json?.chapters || json?.items || [];
-  if (chapters.length) {
-    return chapters.map((c, i) => ({
-      url: `https://www.wuxiaworld.com/novel/${slug}/${c.slug || c.transliteratedTitle?.toLowerCase().replace(/\s+/g, '-') || `chapter-${i + 1}`}`,
-      title: c.name || c.title || `Chapter ${i + 1}`,
-    }));
-  }
-  // Fallback: scrape the novel page
-  const html = await getText(`https://www.wuxiaworld.com/novel/${slug}`);
-  return linksFrom(html, `https://www.wuxiaworld.com/novel/${slug}`, 'a[href*="/novel/"][href*="/chapter"]');
+  const novelUrl = `https://www.wuxiaworld.com/novel/${slug}`;
+  const html = await getText(novelUrl);
+  const doc = parseHtml(html);
+
+  // Try __NEXT_DATA__ first (most reliable)
+  try {
+    const nd = doc.querySelector('script#__NEXT_DATA__')?.textContent;
+    if (nd) {
+      const data = JSON.parse(nd);
+      // Walk all Apollo state objects to find chapters array
+      const state = data?.props?.pageProps?.__APOLLO_STATE__ || {};
+      const chapArrays = Object.values(state)
+        .filter(v => Array.isArray(v?.chapters))
+        .map(v => v.chapters);
+      const chapterRefs = chapArrays[0] || [];
+      if (chapterRefs.length) {
+        return chapterRefs.map((ref, i) => {
+          const key = typeof ref === 'string' ? ref : null;
+          const obj = key ? state[key] : ref;
+          return {
+            url: obj?.url || obj?.canonicalUrl ||
+              `https://www.wuxiaworld.com/novel/${slug}/chapter-${obj?.id || i + 1}`,
+            title: obj?.name || obj?.title || `Chapter ${i + 1}`,
+          };
+        });
+      }
+      // Also try pageProps.chapters directly
+      const direct = data?.props?.pageProps?.chapters ||
+        data?.props?.pageProps?.novel?.chapters || [];
+      if (direct.length) {
+        return direct.map((c, i) => ({
+          url: c.url || `https://www.wuxiaworld.com/novel/${slug}/${c.slug || `chapter-${i+1}`}`,
+          title: c.name || c.title || `Chapter ${i + 1}`,
+        }));
+      }
+    }
+  } catch {}
+
+  // Fallback: scrape all chapter links from the /chapters sub-page
+  const chapPageHtml = await tryText(`${novelUrl}/chapters`);
+  const items = linksFrom(chapPageHtml || html, novelUrl,
+    'li.chapter-item a[href], .chapter-list a[href], a[href*="/novel/"][href*="-chapter-"]');
+  return dedupeByUrl(items);
 }
 
 async function bodyWuxiaWorld(url) {
@@ -2041,17 +2072,32 @@ async function tocNovelStar(url) {
 
 // --- 69shuba.com: CN raw fiction, paginated TOC ---
 async function toc69shuba(url) {
-  const base = url.split('?')[0].replace(/\/$/, '');
-  const html = await getText(base);
-  const doc = parseHtml(html);
-  const origin = new URL(url).origin;
-  const out = [];
-  // Main chapter list
-  doc.querySelectorAll('#catalog a[href], .catalog a[href], dl dd a[href]').forEach(a => {
-    const href = a.getAttribute('href');
-    if (href) out.push({ url: absoluteUrl(origin, href), title: textOf(a) });
-  });
-  return dedupeByUrl(out);
+  // Normalize: /book/<id>/ or /txt/<id>/ or /<id>/
+  const u = new URL(url);
+  const parts = u.pathname.split('/').filter(Boolean);
+  const idPart = parts.find(p => /^\d+$/.test(p)) || parts[parts.length - 1].replace(/\D/g, '');
+  const origin = u.origin;
+  // Try both URL patterns
+  const candidates = [
+    url,
+    idPart ? `${origin}/book/${idPart}/` : null,
+    idPart ? `${origin}/txt/${idPart}/` : null,
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    try {
+      const html = await getText(candidate);
+      const doc = parseHtml(html);
+      const out = [];
+      doc.querySelectorAll('#catalog a[href], .catalog a[href], dl dd a[href], #list a[href], .book-list a[href]').forEach(a => {
+        const href = a.getAttribute('href');
+        if (href && !/login|register|search/.test(href))
+          out.push({ url: absoluteUrl(origin, href), title: textOf(a) });
+      });
+      if (out.length) return dedupeByUrl(out);
+    } catch {}
+  }
+  return [];
 }
 
 async function body69shuba(url) {
@@ -2061,10 +2107,16 @@ async function body69shuba(url) {
 
 // --- UUKanshu: CN raw fiction ---
 async function tocUukanshu(url) {
-  const html = await getText(url);
-  const origin = new URL(url).origin;
+  // Normalize URL - uukanshu uses /b/<id>/ or /<title>/<id>/ patterns
+  const u = new URL(url);
+  const parts = u.pathname.split('/').filter(Boolean);
+  // Find numeric id
+  const idPart = parts.find(p => /^\d+$/.test(p)) || parts[parts.length - 1];
+  const base = idPart ? `https://www.uukanshu.com/b/${idPart}/` : url;
+  const html = await getText(base);
+  const origin = new URL(base).origin;
   const out = [];
-  parseHtml(html).querySelectorAll('.book-chapter-item a[href], dl dd a[href], #catalog a[href]').forEach(a => {
+  parseHtml(html).querySelectorAll('#chapterList a[href], #chapterList li a[href], .book-chapter-item a[href], dl dd a[href], #catalog a[href]').forEach(a => {
     const href = a.getAttribute('href');
     if (href) out.push({ url: absoluteUrl(origin, href), title: textOf(a) });
   });
