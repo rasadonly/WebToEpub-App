@@ -2195,9 +2195,77 @@ async function bodyReadNovelMtl(url) {
   return extractWithSelector(doc, "#content, .chapter-content, #chr-content");
 }
 
+// --- Novelight (novelight.net) ---
+async function tocNovelight(url) {
+  const html = await getText(url);
+  const bookId = html.match(/const\s+BOOK_ID\s*=\s*["'](\d+)["']/i)?.[1] ||
+    html.match(/data-book-id=["'](\d+)["']/i)?.[1] ||
+    url.match(/\/book\/(\d+)/)?.[1];
+  if (!bookId) return [];
+
+  const origin = new URL(url).origin;
+  const allChapters = [];
+  let prevFirstUrl = "";
+
+  for (let page = 1; page <= 60; page++) {
+    try {
+      const pageUrl = `${origin}/book/ajax/chapter-pagination?book_id=${bookId}&page=${page}`;
+      const res = await httpGet(pageUrl, { "X-Requested-With": "XMLHttpRequest" });
+      const text = await res.text();
+      let json;
+      try { json = JSON.parse(text); } catch {}
+      const pageHtml = json?.html || text;
+      
+      const matches = [...pageHtml.matchAll(/<a[^>]*href="([^"]*\/book\/chapter\/[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi)];
+      if (matches.length === 0) break;
+
+      const pageItems = matches.map(m => {
+        const path = m[1].replace(/https?:\/\/novelight\.net/, "");
+        const rawTitle = m[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        const titleMatch = rawTitle.match(/(\d+\s*chapter[^\n]*)/i) || rawTitle.match(/(chapter\s*\d+[^\n]*)/i);
+        const cleanTitle = titleMatch ? titleMatch[1].trim() : rawTitle.split(/\s{2,}/)[0];
+        return {
+          url: absoluteUrl(origin, path),
+          title: cleanTitle
+        };
+      });
+
+      if (pageItems[0].url === prevFirstUrl) break;
+      prevFirstUrl = pageItems[0].url;
+
+      allChapters.push(...pageItems);
+    } catch {
+      break;
+    }
+  }
+
+  // Reverse so chapters are ordered Chapter 1 -> Chapter N (ascending)
+  allChapters.reverse();
+  return dedupeByUrl(allChapters);
+}
+
+async function bodyNovelight(url) {
+  const chapterId = url.match(/chapter\/(\d+)/)?.[1];
+  if (chapterId) {
+    try {
+      const origin = new URL(url).origin;
+      const apiUrl = `${origin}/book/ajax/read-chapter/${chapterId}`;
+      const res = await httpGet(apiUrl, { "X-Requested-With": "XMLHttpRequest" });
+      const json = await res.json();
+      const content = json?.content || "";
+      if (content && content.replace(/<[^>]+>/g, "").trim().length > 30) {
+        return content;
+      }
+    } catch {}
+  }
+  const html = await getText(url);
+  return extractWithSelector(parseHtml(html), '.chapter-text, .chapter-text__place, #chapter-content, article');
+}
+
 
 /** Hosts covered by the dedicated parsers above (used by supportedDomains). */
 const MAJOR_DOMAINS = [
+  "novelight.net",
   "royalroad.com",
   "scribblehub.com",
   "tapas.io",
@@ -2394,6 +2462,7 @@ function siteKey(hostname) {
   if (host.includes("novelstar.top")) return "novelstar";
   if (host.includes("69shuba.com")) return "69shuba";
   if (host.includes("uukanshu.com")) return "uukanshu";
+  if (host.includes("novelight.net")) return "novelight";
 
   for (const [re, key] of MAJOR_SITES) {
     if (re.test(host)) return key;
@@ -2517,6 +2586,8 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         return toc69shuba(tocUrl);
       case "uukanshu":
         return tocUukanshu(tocUrl);
+      case "novelight":
+        return tocNovelight(tocUrl);
 
       default:
         return [];
@@ -2583,6 +2654,8 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
         return body69shuba(chapterUrl);
       case "uukanshu":
         return bodyUukanshu(chapterUrl);
+      case "novelight":
+        return bodyNovelight(chapterUrl);
 
       default:
         if (MAJOR_BODY_SELECTORS[key]) {
