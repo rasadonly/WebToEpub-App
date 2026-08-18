@@ -1964,7 +1964,8 @@ async function bodyInkitt(url) {
   // with an empty `#chapterText` inside a `story-page-text_folded` wrapper.
   // The logged-in cookie unlocks them, but public CORS proxies strip Cookie
   // headers — so retry (direct fetch carries the cookie) before giving up.
-  const attempts = 3;
+  // If scraping fails, we hit the internal API if we can extract a chapter ID.
+  const attempts = 4;
   let last = "";
   for (let i = 0; i < attempts; i++) {
     let html = "";
@@ -1975,21 +1976,38 @@ async function bodyInkitt(url) {
       continue;
     }
     const doc = parseHtml(html);
-    const content = extractWithSelector(doc, '#chapterText, .story-page-text, .story-body, article');
-    const text = (content || "").replace(/<[^>]+>/g, "").trim();
-    if (text.length > 30) return content;
-    last = content || "";
-    if (/story-page-text_folded/.test(html)) {
-      // Gated response — the cookie didn't reach the origin. Back off, then
-      // force a direct (cookie-carrying) hit by clearing any temporary block.
+    let content = extractWithSelector(doc, '#chapterText, .story-page-text, .story-body, article');
+    let text = (content || "").replace(/<[^>]+>/g, "").trim();
+
+    // If blank/gated, try the chapter API fallback
+    if (text.length < 50) {
+      const chapterId = url.match(/chapters\/(\d+)/)?.[1];
+      if (chapterId) {
+        try {
+          const apiJson = await getJson(`https://www.inkitt.com/api/chapters/${chapterId}`);
+          const apiContent = apiJson?.chapter?.text || apiJson?.text || "";
+          if (apiContent.length > 50) {
+             content = apiContent.split('\n').map(p => `<p>${p}</p>`).join('');
+             text = apiContent;
+          }
+        } catch {}
+      }
+    }
+
+    if (text.length > 50) return content;
+    last = content || last;
+
+    if (/story-page-text_folded/.test(html) || text.includes("Writers Write") || text.includes("Galatea app")) {
+      // Gated response — the cookie didn't reach the origin or was ignored.
       blockedHosts.delete(new URL(url).hostname);
-      await sleep(1200 * (i + 1));
+      await sleep(1500 * (i + 1));
       continue;
     }
-    await sleep(600 * (i + 1));
+    await sleep(800 * (i + 1));
   }
   return last;
 }
+
 
 
 // --- ReadLightNovel (.me / .org / .mobi): AJAX chapter list ---
