@@ -80,11 +80,26 @@ const INKITT_COOKIE =
 async function httpGet(url: string, extra: Record<string, string> = {}): Promise<Response> {
   let lastErr: unknown = null;
   const extraHeaders = { ...extra };
-  if (url.includes("inkitt.com")) {
-    extraHeaders["Cookie"] = INKITT_COOKIE;
+  const isInkitt = url.includes("inkitt.com");
+  if (isInkitt) {
+    // Browsers silently drop a `Cookie` header, so only the x-proxy-cookie
+    // hint (understood by our own proxies) can unlock gated chapters.
     extraHeaders["x-proxy-cookie"] = INKITT_COOKIE;
   }
-  for (const build of getActiveCorsProxies()) {
+  // Inkitt needs a cookie-forwarding proxy; public ones strip it and return
+  // an empty chapter body after the free preview chapters.
+  const cookieAwareProxies = () => {
+    const backends = getBackendProxies();
+    const own = CORS_PROXY_LIST.filter((p) =>
+      /lovable\.app|alwaysdata\.net|onrender\.com/.test(p.url)
+    );
+    const list = [...backends, ...own];
+    return (list.length ? list : CORS_PROXY_LIST).map(
+      (p) => (u: string) => buildProxyUrl(p.url, u)
+    );
+  };
+  const proxies = isInkitt ? cookieAwareProxies() : getActiveCorsProxies();
+  for (const build of proxies) {
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 7_000);
     try {
@@ -102,6 +117,7 @@ async function httpGet(url: string, extra: Record<string, string> = {}): Promise
   }
   throw lastErr instanceof Error ? lastErr : new Error("All CORS proxies failed");
 }
+
 
 async function getText(url: string): Promise<string> {
   const r = await httpGet(url);
