@@ -620,9 +620,27 @@ async function tocInkitt(url: string): Promise<string[]> {
 }
 
 async function bodyInkitt(url: string): Promise<string> {
-  const doc = parseHtml(await getText(url));
-  return extractWithSelector(doc, '#chapterText, .story-page-text, .story-body, article');
+  // Chapters past the free preview come back with an empty #chapterText inside
+  // a `story-page-text_folded` wrapper unless the login cookie reached Inkitt.
+  // Retry a few times so a proxy that drops cookies doesn't produce blanks.
+  let last = "";
+  for (let i = 0; i < 3; i++) {
+    let html = "";
+    try {
+      html = await getText(url);
+    } catch {
+      await new Promise((r) => setTimeout(r, 800 * (i + 1)));
+      continue;
+    }
+    const doc = parseHtml(html);
+    const content = extractWithSelector(doc, '#chapterText, .story-page-text, .story-body, article');
+    if (content && content.replace(/<[^>]+>/g, "").trim().length > 30) return content;
+    last = content || "";
+    await new Promise((r) => setTimeout(r, (/story-page-text_folded/.test(html) ? 1200 : 600) * (i + 1)));
+  }
+  return last;
 }
+
 
 async function tocNovelhall(url: string): Promise<string[]> {
   const doc = parseHtml(await getText(url));
