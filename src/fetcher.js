@@ -1960,14 +1960,37 @@ async function tocInkitt(url) {
 }
 
 async function bodyInkitt(url) {
-  const html = await getText(url);
-  const doc = parseHtml(html);
-  const content = extractWithSelector(doc, '#chapterText, .story-page-text, .story-body, article');
-  if (content && content.replace(/<[^>]+>/g, '').trim().length > 30) {
-    return content;
+  // Inkitt only serves the first few chapters anonymously; the rest come back
+  // with an empty `#chapterText` inside a `story-page-text_folded` wrapper.
+  // The logged-in cookie unlocks them, but public CORS proxies strip Cookie
+  // headers — so retry (direct fetch carries the cookie) before giving up.
+  const attempts = 3;
+  let last = "";
+  for (let i = 0; i < attempts; i++) {
+    let html = "";
+    try {
+      html = await getText(url);
+    } catch {
+      await sleep(800 * (i + 1));
+      continue;
+    }
+    const doc = parseHtml(html);
+    const content = extractWithSelector(doc, '#chapterText, .story-page-text, .story-body, article');
+    const text = (content || "").replace(/<[^>]+>/g, "").trim();
+    if (text.length > 30) return content;
+    last = content || "";
+    if (/story-page-text_folded/.test(html)) {
+      // Gated response — the cookie didn't reach the origin. Back off, then
+      // force a direct (cookie-carrying) hit by clearing any temporary block.
+      blockedHosts.delete(new URL(url).hostname);
+      await sleep(1200 * (i + 1));
+      continue;
+    }
+    await sleep(600 * (i + 1));
   }
-  return content;
+  return last;
 }
+
 
 // --- ReadLightNovel (.me / .org / .mobi): AJAX chapter list ---
 async function tocReadLightNovel(url) {
