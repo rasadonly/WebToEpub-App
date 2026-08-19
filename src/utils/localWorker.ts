@@ -557,6 +557,30 @@ async function bodyNovelFire(url: string): Promise<string> {
   return extractWithSelector(doc, "#content, .chapter-content");
 }
 
+async function bodyNovelFull(url: string): Promise<string> {
+  const doc = parseHtml(await getText(url));
+  const el = doc.querySelector("#chapter-content, .chapter-content, #chr-content");
+  if (!el) return "";
+  stripInside(el, "script, style, ins, iframe, .ad, .ads, .advertisement");
+  return sanitizeHtml(el.innerHTML);
+}
+
+async function bodyNovelBin(url: string): Promise<string> {
+  const doc = parseHtml(await getText(url));
+  const el = doc.querySelector("#chapter-content, #chr-content, .chr-c");
+  if (!el) return "";
+  stripInside(el, "script, style, ins, iframe, .ad, .ads, .advertisement");
+  return sanitizeHtml(el.innerHTML);
+}
+
+async function bodyWtrLab(url: string): Promise<string> {
+  const doc = parseHtml(await getText(url));
+  const el = doc.querySelector(".chapter-content, #chapter-content");
+  if (!el) return "";
+  stripInside(el, "script, style, ins, iframe, .ad, .ads, .advertisement");
+  return sanitizeHtml(el.innerHTML);
+}
+
 async function bodyNovGo(url: string): Promise<string> {
   const doc = parseHtml(await getText(url));
   const container = doc.querySelector("#chapter-content, #chr-content");
