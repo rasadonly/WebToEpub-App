@@ -4,11 +4,6 @@ export interface WorkerResponse {
 }
 
 
-export interface WorkerResponse {
-  results?: string[];
-  error?: string;
-}
-
 /** A chapter URL + title pair streamed by fetchChapterLinksLive. */
 export interface ChapterLink {
   url: string;
