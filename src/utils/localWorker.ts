@@ -753,22 +753,6 @@ async function fetchChapterContent(url: string, selector: string): Promise<strin
       case "novgo":        return bodyNovGo(url);
       case "novelbuddy":   return bodyNovelBuddy(url);
       case "novelarrow":   return bodyNovelArrow(url);
-      case "novelfullnet":
-      case "novelfullcom":
-      case "novelfull":    return bodyNovelFull(url);
-      case "novelbin":     return bodyNovelBin(url);
-      case "wtrlab":       return bodyWtrLab(url);
-      case "wattpad":      return bodyWattpad(url);
-      case "readnovelmtl": {
-        const doc = parseHtml(await getText(url));
-        return extractWithSelector(doc, "#content, .chapter-content, #chr-content");
-      }
-      case "inkitt": return bodyInkitt(url);
-      case "novelight": return bodyNovelight(url);
-
-      default:             return bodyGeneric(url, selector);
-    }
-  };
 
   // Hosts that rate-limit hard need longer, exponential waits between tries.
   const RATE_LIMITED = /(freewebnovel\.com|novelfull(l)?\.(net|com)|allnovelfull|allnovelnext|allnovel\.org|novelfire\.net|novelhall\.com|scribblehub\.com|novelgo\.id|novgo\.net|novelcodex\.com|novel-?next\.(com|net)|novel-?bin\.(com|net)|novelbin\.(com|me|net)|novelmax\.net|novelgate\.net|novelhulk\.net|fanfiction\.net|archiveofourown\.org|akknovel\.com|readlightnovel\.me)$/i;
