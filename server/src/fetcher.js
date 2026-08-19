@@ -36,33 +36,149 @@ function buildUrl(base, target) {
     : base + target;
 }
 
-const blockedHosts = new Set();
+/* ------------------------------------------------------------------ *
+ * Politeness layer — the top failure cause in the logs is HTTP 429/403
+ * (rate limiting / bot blocking), not broken selectors. We therefore:
+ *   1. serialise requests per host with a minimum gap between them,
+ *   2. retry 429/403/503 with exponential backoff (honouring Retry-After),
+ *   3. rotate User-Agents and send a same-origin Referer,
+ *   4. only *temporarily* mark a host as direct-blocked (was permanent).
+ * ------------------------------------------------------------------ */
+
+const UA_POOL = [
+  UA,
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:126.0) Gecko/20100101 Firefox/126.0",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+];
+
+/** Hosts that rate-limit aggressively → bigger gap between hits. */
+const HOST_THROTTLE = [
+  [/freewebnovel\.com$/i, 2500],
+  [/novelfull(l)?\.(net|com)$/i, 1800],
+  [/(^|\.)(all-?novelfull|allnovelfull|allnovelnext|allnovelbook|allnovel)\.(com|net|org)$/i, 1800],
+  [/novelfullbook\.com$/i, 1800],
+  [/novelfire\.net$/i, 1500],
+  [/novelhall\.com$/i, 1500],
+  [/scribblehub\.com$/i, 1500],
+  [/(novelgo\.id|novgo\.net)$/i, 1500],
+  [/novelcodex\.com$/i, 1200],
+  [/novel-?next\.(com|net)$/i, 1200],
+  [/novel-?bin\.(com|net)$/i, 1200],
+  [/novelbin\.(com|me|net)$/i, 1200],
+  [/(novelmax\.net|novelgate\.net|novelhulk\.net)$/i, 1200],
+  [/fanfiction\.net$/i, 2000],
+  [/archiveofourown\.org$/i, 2000],
+  [/(akknovel\.com|readlightnovel\.me)$/i, 1500],
+];
+
+const DEFAULT_GAP_MS = 250;
+
+function gapFor(host) {
+  for (const [re, ms] of HOST_THROTTLE) if (re.test(host)) return ms;
+  return DEFAULT_GAP_MS;
+}
+
+// host -> promise chain tail, so requests to the same host queue up
+const hostQueues = new Map();
+
+function throttle(host) {
+  const gap = gapFor(host);
+  const prev = hostQueues.get(host) || Promise.resolve();
+  let release;
+  const next = new Promise((r) => (release = r));
+  hostQueues.set(host, prev.then(() => next));
+  return prev.then(() => ({
+    done: () => setTimeout(release, gap),
+  }));
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// host -> timestamp until which direct fetching is skipped
+const blockedUntil = new Map();
+const BLOCK_TTL_MS = 5 * 60 * 1000;
+
+const blockedHosts = {
+  has: (h) => (blockedUntil.get(h) || 0) > Date.now(),
+  add: (h) => blockedUntil.set(h, Date.now() + BLOCK_TTL_MS),
+  delete: (h) => blockedUntil.delete(h),
+};
+
+const RETRY_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
+
+const INKITT_COOKIE =
+  "user_credentials=4be4b2f459c9113e1a86bad353c1c89e9886c0285d11bf7cb9441e3f3f61278655ae43c8e47c607dfc31ccd985f88faa3e216542766d50d0b1b2d2fc181e4889%3A%3A12744546%3A%3A2026-09-16T06%3A16%3A52Z; _rocky_session_1=92ea8ac4dcdd4c3c8b169a722c1e9f36; __stripe_mid=94754462-ddb8-4b14-ba53-f09d65f073847cf17b";
 
 async function httpGet(url, extra = {}, timeoutMs = 7000) {
-  const host = new URL(url).hostname;
+  const parsed = new URL(url);
+  const host = parsed.hostname;
+  const origin = parsed.origin;
   let lastErr = null;
-  for (const proxy of PROXIES) {
-    if (!proxy && blockedHosts.has(host)) continue;
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-    try {
-      const r = await fetch(buildUrl(proxy, url), {
-        headers: { ...DEFAULT_HEADERS, ...extra },
-        signal: ctrl.signal,
-        redirect: "follow",
-      });
-      if (r.ok) return r;
-      if (!proxy) blockedHosts.add(host);
-      lastErr = new Error(`HTTP ${r.status}`);
-    } catch (e) {
-      if (!proxy) blockedHosts.add(host);
-      lastErr = e;
-    } finally {
-      clearTimeout(timer);
+  let uaIndex = 0;
+
+  const lease = await throttle(host);
+  try {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      for (const proxy of PROXIES) {
+        if (!proxy && blockedHosts.has(host)) continue;
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+        try {
+          const headers = {
+            ...DEFAULT_HEADERS,
+            "User-Agent": UA_POOL[uaIndex++ % UA_POOL.length],
+            Referer: origin + "/",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "same-origin",
+            ...extra,
+          };
+          if (host.includes("inkitt.com")) {
+            headers["Cookie"] = extra.Cookie || INKITT_COOKIE;
+            headers["x-proxy-cookie"] = extra.Cookie || INKITT_COOKIE;
+          }
+          const r = await fetch(buildUrl(proxy, url), {
+            headers,
+            signal: ctrl.signal,
+            redirect: "follow",
+          });
+          if (r.ok) {
+            if (!proxy) blockedHosts.delete(host);
+            return r;
+          }
+          if (!proxy && (r.status === 403 || r.status === 401 || r.status === 429)) {
+            blockedHosts.add(host);
+          }
+          lastErr = new Error(`HTTP ${r.status}`);
+          lastErr.status = r.status;
+          if (r.status === 429) {
+            const ra = parseInt(r.headers.get("retry-after") || "", 10);
+            if (Number.isFinite(ra) && ra > 0 && ra <= 30) await sleep(ra * 1000);
+          }
+          if (!RETRY_STATUS.has(r.status) && r.status !== 403 && r.status !== 401) {
+            // 404 and friends won't change on retry with another proxy
+            if (r.status === 404) throw lastErr;
+          }
+        } catch (e) {
+          if (e?.status === 404) throw e;
+          if (!proxy) blockedHosts.add(host);
+          lastErr = e;
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+      // All proxies failed this round — back off before the next sweep.
+      if (attempt < 2) await sleep(800 * Math.pow(2, attempt) + Math.random() * 400);
     }
+    throw lastErr || new Error("All fetch attempts failed");
+  } finally {
+    lease.done();
   }
-  throw lastErr || new Error("All fetch attempts failed");
 }
+
 
 async function getText(url) {
   return (await httpGet(url)).text();
@@ -1718,6 +1834,380 @@ async function tocGravityTales(url) {
   // Chapter table or list
   const items = linksFrom(html, origin, 'table.tablepress a[href], .chapter-list a[href], .entry-content a[href]')
     .filter(i => /chapter|chap|ch[-_]?\d|\d+-\d+/i.test(i.title + i.url));
+  return dedupeByUrl(items);
+}
+
+// --- WuxiaWorld.com: gRPC-web binary chapter list decoder ---
+async function tocWuxiaWorld(url) {
+  const u = new URL(url);
+  const parts = u.pathname.split('/').filter(Boolean);
+  const novelIdx = parts.indexOf('novel');
+  const slug = novelIdx >= 0 ? parts[novelIdx + 1] : parts[0];
+  if (!slug) throw new Error('WuxiaWorld: novel slug not found');
+
+  const novelUrl = `https://www.wuxiaworld.com/novel/${slug}`;
+  const html = await getText(novelUrl);
+
+  let novelId = null;
+  const match = html.match(/window\.__REACT_QUERY_STATE__\s*=\s*(\{[\s\S]*?\});\s*(?:window|\n|<\/script>)/);
+  if (match) {
+    try {
+      const data = JSON.parse(match[1]);
+      novelId = data.queries?.[0]?.state?.data?.item?.id;
+    } catch {}
+  }
+  if (!novelId) {
+    const idMatch = html.match(/"item"\s*:\s*\{\s*"id"\s*:\s*(\d+)/) || html.match(/"id"\s*:\s*(\d+)/);
+    if (idMatch) novelId = Number(idMatch[1]);
+  }
+
+  if (novelId) {
+    try {
+      const protoPayload = Buffer.from([0x08, novelId]);
+      const header = Buffer.alloc(5);
+      header.writeUInt8(0, 0);
+      header.writeUInt32BE(protoPayload.length, 1);
+      const body = Buffer.concat([header, protoPayload]);
+
+      const gRes = await fetch("https://api2.wuxiaworld.com/wuxiaworld.api.v2.Chapters/GetChapterList", {
+        method: "POST",
+        headers: {
+          "User-Agent": UA,
+          "Content-Type": "application/grpc-web+proto",
+          "Accept": "application/grpc-web+proto",
+          "x-grpc-web": "1"
+        },
+        body
+      });
+
+      if (gRes.ok) {
+        const buf = Buffer.from(await gRes.arrayBuffer());
+        const chapters = [];
+        let pos = 5;
+        while (pos < buf.length - 10) {
+          if (buf[pos] === 0x12) {
+            let nameLen = buf[pos + 1];
+            let nameOffset = pos + 2;
+            if (nameLen & 0x80) {
+              nameLen = (nameLen & 0x7f) | (buf[pos + 2] << 7);
+              nameOffset = pos + 3;
+            }
+            if (nameLen > 0 && nameLen < 250 && nameOffset + nameLen < buf.length) {
+              const name = buf.subarray(nameOffset, nameOffset + nameLen).toString("utf-8");
+              const nextTagPos = nameOffset + nameLen;
+              if (buf[nextTagPos] === 0x1a) {
+                let slugLen = buf[nextTagPos + 1];
+                let slugOffset = nextTagPos + 2;
+                if (slugLen & 0x80) {
+                  slugLen = (slugLen & 0x7f) | (buf[nextTagPos + 2] << 7);
+                  slugOffset = nextTagPos + 3;
+                }
+                if (slugLen > 0 && slugLen < 250 && slugOffset + slugLen <= buf.length) {
+                  const chapSlug = buf.subarray(slugOffset, slugOffset + slugLen).toString("utf-8");
+                  if (chapSlug.includes("-") && !chapSlug.includes("http") && !chapSlug.includes("/")) {
+                    chapters.push({
+                      url: `https://www.wuxiaworld.com/novel/${slug}/${chapSlug}`,
+                      title: name.trim() || chapSlug
+                    });
+                  }
+                  pos = slugOffset + slugLen;
+                  continue;
+                }
+              }
+            }
+          }
+          pos++;
+        }
+        if (chapters.length > 0) return chapters;
+      }
+    } catch (e) {
+      console.warn("[fetcher] WuxiaWorld gRPC fetch failed", e?.message || e);
+    }
+  }
+
+  // Fallback: scrape links from the novel page
+  const items = linksFrom(html, novelUrl, 'a[href*="/novel/"][href*="-chapter-"]');
+  return dedupeByUrl(items);
+}
+
+async function bodyWuxiaWorld(url) {
+  return extractWithSelector(parseHtml(await getText(url)),
+    '.chapter-content, #chapter-content, .cha-words, .chapter-text, article .content');
+}
+
+// --- Inkitt: story reader API ---
+async function tocInkitt(url) {
+  const storyId = url.match(/stories\/(?:[^\/]+\/)?(\d+)/)?.[1] ||
+    url.match(/stories\/(\d+)/)?.[1] ||
+    url.match(/story\/(\d+)/)?.[1];
+  if (!storyId) return [];
+
+  try {
+    const json = await getJson(`https://www.inkitt.com/api/stories/${storyId}`);
+    const chapters = json?.chapters || [];
+    if (chapters.length) {
+      return chapters.map((c, i) => ({
+        url: `https://www.inkitt.com/stories/${storyId}/chapters/${c.chapter_number || i + 1}`,
+        title: c.name || c.title || `Chapter ${c.chapter_number || i + 1}`,
+      }));
+    }
+  } catch {}
+
+  // Fallback: scrape the story landing page
+  const html = await getText(`https://www.inkitt.com/stories/${storyId}`);
+  const items = linksFrom(html, `https://www.inkitt.com/stories/${storyId}`, 'a[href*="/chapters/"]');
+  return dedupeByUrl(items);
+}
+
+async function bodyInkitt(url) {
+  // Inkitt only serves the first few chapters anonymously; the rest come back
+  // with an empty `#chapterText` inside a `story-page-text_folded` wrapper.
+  // The logged-in cookie unlocks them, but public CORS proxies strip Cookie
+  // headers — so retry (direct fetch carries the cookie) before giving up.
+  // If scraping fails, we hit the internal API if we can extract a chapter ID.
+  const attempts = 4;
+  let last = "";
+  for (let i = 0; i < attempts; i++) {
+    let html = "";
+    try {
+      html = await getText(url);
+    } catch {
+      await sleep(800 * (i + 1));
+      continue;
+    }
+    const doc = parseHtml(html);
+    let content = extractWithSelector(doc, '#chapterText, .story-page-text, .story-body, article');
+    let text = (content || "").replace(/<[^>]+>/g, "").trim();
+
+    // If blank/gated, try the chapter API fallback
+    if (text.length < 50) {
+      const chapterId = url.match(/chapters\/(\d+)/)?.[1];
+      if (chapterId) {
+        try {
+          const apiJson = await getJson(`https://www.inkitt.com/api/chapters/${chapterId}`);
+          const apiContent = apiJson?.chapter?.text || apiJson?.text || "";
+          if (apiContent.length > 50) {
+             content = apiContent.split('\n').map(p => `<p>${p}</p>`).join('');
+             text = apiContent;
+          }
+        } catch {}
+      }
+    }
+
+    if (text.length > 50) return content;
+    last = content || last;
+
+    if (/story-page-text_folded/.test(html) || text.includes("Writers Write") || text.includes("Galatea app")) {
+      // Gated response — the cookie didn't reach the origin or was ignored.
+      blockedHosts.delete(new URL(url).hostname);
+      await sleep(1500 * (i + 1));
+      continue;
+    }
+    await sleep(800 * (i + 1));
+  }
+  return last;
+}
+
+
+
+// --- ReadLightNovel (.me / .org / .mobi): AJAX chapter list ---
+async function tocReadLightNovel(url) {
+  const html = await getText(url);
+  const doc = parseHtml(html);
+  const origin = new URL(url).origin;
+  // Try AJAX endpoint
+  const novelId = html.match(/data-novel-id=["'](\d+)["']/)?.[1] ||
+    html.match(/"novel_id"\s*:\s*(\d+)/)?.[1];
+  if (novelId) {
+    const ajaxHtml = await tryText(`${origin}/ajax/chapters/?novel_id=${novelId}`);
+    const items = linksFrom(ajaxHtml, origin, 'a[href]')
+      .filter(i => /chapter|chap|ch-?\d/i.test(i.url));
+    if (items.length) return items;
+  }
+  // Fallback: HTML chapter list
+  const items = linksFrom(html, url, '.list-chapter a, ul.chapter-list a, #chapter-list a');
+  return dedupeByUrl(items);
+}
+
+async function bodyReadLightNovel(url) {
+  return extractWithSelector(parseHtml(await getText(url)),
+    '.chapter-content, #chapter-content, .desc, .novel-body');
+}
+
+// --- KnoxT / KnoxT Space: WP-based EN translation ---
+async function tocKnoxT(url) {
+  const html = await getText(url);
+  const origin = new URL(url).origin;
+  const items = linksFrom(html, url, '.entry-content a[href], .chapter-list a[href], table a[href]')
+    .filter(i => /chapter|chap|ch[-_]?\d|part[-_]?\d|episode/i.test(i.title + i.url));
+  if (items.length) return dedupeByUrl(items);
+  // WP REST API fallback
+  const slug = url.split('/').filter(Boolean).pop();
+  try {
+    const json = await getJson(`${origin}/wp-json/wp/v2/posts?categories_name=${slug}&per_page=100&orderby=date&order=asc`);
+    if (Array.isArray(json) && json.length)
+      return json.map(p => ({ url: p.link, title: p.title?.rendered || p.slug }));
+  } catch {}
+  return dedupeByUrl(items);
+}
+
+// --- Chrysanthemum Garden: WP-based BL/danmei translations ---
+async function tocChrysanthemumGarden(url) {
+  const html = await getText(url);
+  const origin = new URL(url).origin;
+  // CG uses a table of contents in the post body
+  const items = linksFrom(html, url, '.entry-content a[href], article a[href]')
+    .filter(i => /chapter|chap|ch[-_]?\d|\bpart\b|\bepisode\b|\bprologue\b|\bepilogue\b/i.test(i.title + i.url)
+      && !/(author|donate|patreon|twitter|discord|tag|category)\//.test(i.url));
+  return dedupeByUrl(items);
+}
+
+// --- Genesis Translations: WP-based translation group ---
+async function tocGenesisTranslations(url) {
+  const html = await getText(url);
+  const origin = new URL(url).origin;
+  const slug = new URL(url).pathname.split('/').filter(Boolean).pop();
+  // Try WP REST API
+  try {
+    const search = await getJson(`${origin}/wp-json/wp/v2/posts?search=${slug}&per_page=1`);
+    const catId = search?.[0]?.categories?.[0];
+    if (catId) {
+      const posts = await getJson(`${origin}/wp-json/wp/v2/posts?categories=${catId}&per_page=100&orderby=date&order=asc`);
+      if (Array.isArray(posts) && posts.length)
+        return posts.map(p => ({ url: p.link, title: p.title?.rendered || p.slug }));
+    }
+  } catch {}
+  const items = linksFrom(html, url, '.entry-content a[href], .chapter-list a[href]')
+    .filter(i => /chapter|chap|ch[-_]?\d/i.test(i.title + i.url));
+  return dedupeByUrl(items);
+}
+
+// --- Novel Nest: aggregator with chapter list ---
+async function tocNovelNest(url) {
+  const html = await getText(url);
+  const origin = new URL(url).origin;
+  const novelId = html.match(/data-id=["'](\d+)["']/)?.[1] ||
+    html.match(/novel_id["'\s:=]+(\d+)/)?.[1];
+  if (novelId) {
+    const ajaxHtml = await tryText(`${origin}/ajax/chapter-archive?id=${novelId}`);
+    const items = linksFrom(ajaxHtml, origin, 'a[href]');
+    if (items.length) return items;
+  }
+  const items = linksFrom(html, url, '#chapter-list a, .chapter-list a, ul.list-chapter a');
+  return dedupeByUrl(items);
+}
+
+// --- NovelMtl: simple HTML chapter list ---
+async function tocNovelMtl(url) {
+  const base = url.split('?')[0].replace(/\/$/, '');
+  const html = await getText(base);
+  const doc = parseHtml(html);
+  const origin = new URL(url).origin;
+  const out = [];
+  doc.querySelectorAll('.chapter-list a[href], #chapters a[href], ul.list li a[href]').forEach(a => {
+    const href = a.getAttribute('href');
+    if (href) out.push({ url: absoluteUrl(base, href), title: textOf(a) });
+  });
+  if (out.length) return dedupeByUrl(out);
+  // Paginated fallback
+  return linksFrom(html, base, 'a[href]')
+    .filter(i => /chapter|chap|ch[-_]?\d/i.test(i.url));
+}
+
+// --- Literotica: adult fiction, paginated chapters ---
+async function tocLiterotica(url) {
+  const html = await getText(url);
+  const doc = parseHtml(html);
+  const origin = 'https://www.literotica.com';
+  // Series page
+  const seriesItems = linksFrom(html, origin, 'a[href*="/series/"], a[href*="/s/"]');
+  if (seriesItems.length > 2) return dedupeByUrl(seriesItems);
+  // Author page
+  const authorItems = linksFrom(html, origin, 'table.st a[href], .a-story-link a[href]');
+  if (authorItems.length) return dedupeByUrl(authorItems);
+  // Single story — check for pages
+  const pageCount = parseInt(doc.querySelector('select.b-pager-pages option:last-child')?.getAttribute('value') || '1');
+  if (pageCount <= 1) return [{ url, title: textOf(doc.querySelector('h1')) || 'Chapter 1' }];
+  const pages = [];
+  for (let p = 1; p <= pageCount; p++) pages.push({ url: `${url}?page=${p}`, title: `Page ${p}` });
+  return pages;
+}
+
+async function bodyLiterotica(url) {
+  const doc = parseHtml(await getText(url));
+  return extractWithSelector(doc, '.aa_ht, .b-story-body-x, #story_text, .story-body');
+}
+
+// --- NovelStar: CN novel site, AJAX chapter archive ---
+async function tocNovelStar(url) {
+  const html = await getText(url);
+  const origin = new URL(url).origin;
+  const novelId = html.match(/novelId["'\s:=]+(\d+)/)?.[1] ||
+    html.match(/data-novel-id=["'](\d+)["']/)?.[1];
+  if (novelId) {
+    const ajaxHtml = await tryText(`${origin}/ajax/chapter-archive?novelId=${novelId}`);
+    const items = linksFrom(ajaxHtml, origin, 'a[href]');
+    if (items.length) return items;
+  }
+  return linksFrom(html, url, 'ul.chapter-list a, .list-chapter a, #chapter-list a');
+}
+
+// --- 69shuba.com: CN raw fiction, paginated TOC ---
+async function toc69shuba(url) {
+  // Normalize: /book/<id>/ or /txt/<id>/ or /<id>/
+  const u = new URL(url);
+  const parts = u.pathname.split('/').filter(Boolean);
+  const idPart = parts.find(p => /^\d+$/.test(p)) || parts[parts.length - 1].replace(/\D/g, '');
+  const origin = u.origin;
+  // Try both URL patterns
+  const candidates = [
+    url,
+    idPart ? `${origin}/book/${idPart}/` : null,
+    idPart ? `${origin}/txt/${idPart}/` : null,
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    try {
+      const html = await getText(candidate);
+      const doc = parseHtml(html);
+      const out = [];
+      doc.querySelectorAll('#catalog a[href], .catalog a[href], dl dd a[href], #list a[href], .book-list a[href]').forEach(a => {
+        const href = a.getAttribute('href');
+        if (href && !/login|register|search/.test(href))
+          out.push({ url: absoluteUrl(origin, href), title: textOf(a) });
+      });
+      if (out.length) return dedupeByUrl(out);
+    } catch {}
+  }
+  return [];
+}
+
+async function body69shuba(url) {
+  return extractWithSelector(parseHtml(await getText(url)),
+    '#content, #booktxt, .booktxt, .readcontent');
+}
+
+// --- UUKanshu: CN raw fiction ---
+async function tocUukanshu(url) {
+  // Normalize URL - uukanshu uses /b/<id>/ or /<title>/<id>/ patterns
+  const u = new URL(url);
+  const parts = u.pathname.split('/').filter(Boolean);
+  // Find numeric id
+  const idPart = parts.find(p => /^\d+$/.test(p)) || parts[parts.length - 1];
+  const base = idPart ? `https://www.uukanshu.com/b/${idPart}/` : url;
+  const html = await getText(base);
+  const origin = new URL(base).origin;
+  const out = [];
+  parseHtml(html).querySelectorAll('#chapterList a[href], #chapterList li a[href], .book-chapter-item a[href], dl dd a[href], #catalog a[href]').forEach(a => {
+    const href = a.getAttribute('href');
+    if (href) out.push({ url: absoluteUrl(origin, href), title: textOf(a) });
+  });
+  return dedupeByUrl(out);
+}
+
+async function bodyUukanshu(url) {
+  return extractWithSelector(parseHtml(await getText(url)),
+    '#content, #booktxt, .booktxt, .content');
 }
 
 // --- ReadNovelMtl (readnovelmtl.com) ---
@@ -1746,9 +2236,51 @@ async function bodyReadNovelMtl(url) {
   return extractWithSelector(doc, "#content, .chapter-content, #chr-content");
 }
 
+// --- Novelight (novelight.net) ---
+async function tocNovelight(url) {
+  const html = await getText(url);
+  const origin = new URL(url).origin;
+
+  const matches = [...html.matchAll(/href=["']([^"']+)["']/gi)].map(m => unwrapProxyUrl(m[1]));
+  const chapterUrls = Array.from(new Set(matches.filter(u => u && u.includes("/book/chapter/"))));
+
+  const pageItems = chapterUrls.map(u => {
+    const chapterId = u.match(/chapter\/(\d+)/)?.[1] || "";
+    return {
+      url: absoluteUrl(origin, u),
+      title: chapterId ? `Chapter ${chapterId}` : "Chapter"
+    };
+  });
+
+  pageItems.reverse();
+  return dedupeByUrl(pageItems);
+}
+
+async function bodyNovelight(url) {
+  const html = await getText(url);
+  const doc = parseHtml(html);
+  const content = extractWithSelector(doc, '.chapter-text, .chapter-text__limit, .chapter-text__place, #chapter-content, article');
+  if (content && content.replace(/<[^>]+>/g, '').trim().length > 30) {
+    return content;
+  }
+  const chapterId = url.match(/chapter\/(\d+)/)?.[1];
+  if (chapterId) {
+    try {
+      const origin = new URL(url).origin;
+      const apiUrl = `${origin}/book/ajax/read-chapter/${chapterId}`;
+      const res = await httpGet(apiUrl, { "X-Requested-With": "XMLHttpRequest" });
+      const json = await res.json();
+      const c = json?.content || "";
+      if (c && c.replace(/<[^>]+>/g, "").trim().length > 30) return c;
+    } catch {}
+  }
+  return content;
+}
+
 
 /** Hosts covered by the dedicated parsers above (used by supportedDomains). */
 const MAJOR_DOMAINS = [
+  "novelight.net",
   "royalroad.com",
   "scribblehub.com",
   "tapas.io",
@@ -1772,6 +2304,7 @@ const MAJOR_DOMAINS = [
   "novelsonline.net",
   "boxnovel.com",
   "wuxiaworld.site",
+  "wuxiaworld.com",
   "foxaholic.com",
   "1stkissnovel.love",
   "sonicmtl.com",
@@ -1794,6 +2327,20 @@ const MAJOR_DOMAINS = [
   "ptwxz.com",
   "bixiange.me",
   "fictionlog.co",
+  // New sites
+  "inkitt.com",
+  "readlightnovel.me",
+  "readlightnovel.org",
+  "readlightnovel.mobi",
+  "knoxt.space",
+  "knoxt.com",
+  "chrysanthemumgarden.com",
+  "genesistranslations.com",
+  "novelnest.org",
+  "novelmtl.com",
+  "literotica.com",
+  "novelstar.top",
+  "akknovel.com",
 ];
 
 /** Chapter-body selectors for the dedicated sites, tried in order. */
@@ -1810,7 +2357,6 @@ const MAJOR_BODY_SELECTORS = {
   mtlnovel: "div.par, .chapter-content, #chapter-content",
   readnovelfull: "#chr-content, #chapter-content, div.chapter-content",
   madara: "div.reading-content .text-left, div.reading-content, div.entry-content, .text-left",
-  // New sites
   novelcool: ".chapter-content, .text-content, #chapterContent, .reading-content",
   allnovelfull: ".chr-c, #chapter-content, .reading-content, div.chapter-content",
   syosetu: "#novel_honbun, .p-novel__body, div#novel_color",
@@ -1823,13 +2369,24 @@ const MAJOR_BODY_SELECTORS = {
   novelhi: "#chr-content, #chapter-content, div.chapter-content",
   lightnovelpub: "#chapter-content, .chapter-content, .chapter-body",
   asianfanfics: ".story-body, .chapter-text, .container .text",
-  // Batch 3
   jjwxc: "div.noveltext, #noveltext, .readtxt",
   pixivnovel: "section.novel-text, .works-display, p",
   storiesonline: "#chapter_body, .chapter-text, div#story",
   ficwad: ".storytext, #story, .storyBody",
   volarenovels: ".entry-content, .chapter-content, article .post-content",
   gravitytales: ".entry-content, .chapter-content, article",
+  // New sites
+  wuxiaworld: ".chapter-content, #chapter-content, .cha-words, article .content",
+  readlightnovel: ".chapter-content, #chapter-content, .desc, .novel-body",
+  knoxt: ".entry-content, .chapter-content, article .post-content",
+  chrysanthemumgarden: ".entry-content, .chapter-content, article",
+  genesistranslations: ".entry-content, .chapter-content, article",
+  novelnest: "#chr-content, #chapter-content, div.chapter-content",
+  novelmtl: ".chapter-content, #chapter-content, .text-content",
+  novelstar: "#chr-content, #chapter-content, div.chapter-content",
+  akknovel: "#chr-content, .chapter-content, #chapter-content",
+  "69shuba": "#content, #booktxt, .booktxt, .readcontent",
+  uukanshu: "#content, #booktxt, .booktxt, .content",
 };
 
 
@@ -1874,6 +2431,19 @@ const MAJOR_SITES = [
   [/(^|\.)ficwad\.com$/, "ficwad"],
   [/(^|\.)volarenovels\.com$/, "volarenovels"],
   [/(^|\.)gravitytales\.com$/, "gravitytales"],
+  [/(^|\.)wuxiaworld\.com$/, "wuxiaworld"],
+  [/(^|\.)inkitt\.com$/, "inkitt"],
+  [/(^|\.)readlightnovel\.(me|org|mobi)$/, "readlightnovel"],
+  [/(^|\.)akknovel\.com$/, "readlightnovel"],
+  [/(^|\.)knoxt\.(space|com)$/, "knoxt"],
+  [/(^|\.)chrysanthemumgarden\.com$/, "chrysanthemumgarden"],
+  [/(^|\.)genesistranslations\.com$/, "genesistranslations"],
+  [/(^|\.)novelnest\.org$/, "novelnest"],
+  [/(^|\.)novelmtl\.com$/, "novelmtl"],
+  [/(^|\.)literotica\.com$/, "literotica"],
+  [/(^|\.)novelstar\.top$/, "novelstar"],
+  [/(^|\.)69shuba\.com$/, "69shuba"],
+  [/(^|\.)uukanshu\.com$/, "uukanshu"],
 ];
 
 function siteKey(hostname) {
@@ -1894,6 +2464,20 @@ function siteKey(hostname) {
   if (host.includes("lightnovelpub.") || host.includes("novelpub.")) return "lightnovelpub";
   if (host.includes("creative-novels.com")) return "creativenovels";
   if (host.includes("readnovelmtl.com")) return "readnovelmtl";
+  // New sites
+  if (host === "wuxiaworld.com" || host.endsWith(".wuxiaworld.com")) return "wuxiaworld";
+  if (host.includes("inkitt.com")) return "inkitt";
+  if (host.includes("readlightnovel.") || host === "akknovel.com") return "readlightnovel";
+  if (host.includes("knoxt.")) return "knoxt";
+  if (host.includes("chrysanthemumgarden.com")) return "chrysanthemumgarden";
+  if (host.includes("genesistranslations.com")) return "genesistranslations";
+  if (host.includes("novelnest.org")) return "novelnest";
+  if (host.includes("novelmtl.com")) return "novelmtl";
+  if (host.includes("literotica.com")) return "literotica";
+  if (host.includes("novelstar.top")) return "novelstar";
+  if (host.includes("69shuba.com")) return "69shuba";
+  if (host.includes("uukanshu.com")) return "uukanshu";
+  if (host.includes("novelight.net")) return "novelight";
 
   for (const [re, key] of MAJOR_SITES) {
     if (re.test(host)) return key;
@@ -1992,6 +2576,33 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         return tocGravityTales(tocUrl);
       case "readnovelmtl":
         return tocReadNovelMtl(tocUrl);
+      // New sites
+      case "wuxiaworld":
+        return tocWuxiaWorld(tocUrl);
+      case "inkitt":
+        return tocInkitt(tocUrl);
+      case "readlightnovel":
+        return tocReadLightNovel(tocUrl);
+      case "knoxt":
+        return tocKnoxT(tocUrl);
+      case "chrysanthemumgarden":
+        return tocChrysanthemumGarden(tocUrl);
+      case "genesistranslations":
+        return tocGenesisTranslations(tocUrl);
+      case "novelnest":
+        return tocNovelNest(tocUrl);
+      case "novelmtl":
+        return tocNovelMtl(tocUrl);
+      case "literotica":
+        return tocLiterotica(tocUrl);
+      case "novelstar":
+        return tocNovelStar(tocUrl);
+      case "69shuba":
+        return toc69shuba(tocUrl);
+      case "uukanshu":
+        return tocUukanshu(tocUrl);
+      case "novelight":
+        return tocNovelight(tocUrl);
 
       default:
         return [];
@@ -2045,7 +2656,21 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
         return bodyWtrLab(chapterUrl);
       case "readnovelmtl":
         return bodyReadNovelMtl(chapterUrl);
-
+      // New sites
+      case "wuxiaworld":
+        return bodyWuxiaWorld(chapterUrl);
+      case "inkitt":
+        return bodyInkitt(chapterUrl);
+      case "readlightnovel":
+        return bodyReadLightNovel(chapterUrl);
+      case "literotica":
+        return bodyLiterotica(chapterUrl);
+      case "69shuba":
+        return body69shuba(chapterUrl);
+      case "uukanshu":
+        return bodyUukanshu(chapterUrl);
+      case "novelight":
+        return bodyNovelight(chapterUrl);
 
       default:
         if (MAJOR_BODY_SELECTORS[key]) {

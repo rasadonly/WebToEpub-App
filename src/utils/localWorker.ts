@@ -3,6 +3,7 @@ export interface WorkerResponse {
   error?: string;
 }
 
+
 /** A chapter URL + title pair streamed by fetchChapterLinksLive. */
 export interface ChapterLink {
   url: string;
@@ -12,6 +13,7 @@ export interface ChapterLink {
 /** Called progressively as TOC pages are fetched. */
 export type OnChapterBatch = (batch: ChapterLink[]) => void;
 
+const FETCH_CONCURRENCY = 10;
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
 
@@ -32,6 +34,17 @@ export const CORS_PROXY_LIST: Array<{ name: string; url: string }> = [
   { name: "corsproxy.io (with key)", url: "https://corsproxy.io/?key=ab3170e1&url=" },
   { name: "allOrigins (raw)", url: "https://api.allorigins.win/raw?url=" },
   { name: "cors.lol", url: "https://api.cors.lol/?url=" },
+];
+
+export const aiContentSelectors = [
+  "#chapter-content",
+  ".chapter-content",
+  "article",
+  ".content",
+  ".read-content",
+  ".entry-content",
+  "#content",
+  "#chr-content"
 ];
 
 const BACKEND_URL_KEY = 'backendUrl';
@@ -74,14 +87,37 @@ const CORS_PROXIES: Array<(url: string) => string> = CORS_PROXY_LIST.map(
 );
 
 
+const INKITT_COOKIE =
+  "user_credentials=4be4b2f459c9113e1a86bad353c1c89e9886c0285d11bf7cb9441e3f3f61278655ae43c8e47c607dfc31ccd985f88faa3e216542766d50d0b1b2d2fc181e4889%3A%3A12744546%3A%3A2026-09-16T06%3A16%3A52Z; _rocky_session_1=92ea8ac4dcdd4c3c8b169a722c1e9f36; __stripe_mid=94754462-ddb8-4b14-ba53-f09d65f073847cf17b";
+
 async function httpGet(url: string, extra: Record<string, string> = {}): Promise<Response> {
   let lastErr: unknown = null;
-  for (const build of getActiveCorsProxies()) {
+  const extraHeaders = { ...extra };
+  const isInkitt = url.includes("inkitt.com");
+  if (isInkitt) {
+    // Browsers silently drop a `Cookie` header, so only the x-proxy-cookie
+    // hint (understood by our own proxies) can unlock gated chapters.
+    extraHeaders["x-proxy-cookie"] = INKITT_COOKIE;
+  }
+  // Inkitt needs a cookie-forwarding proxy; public ones strip it and return
+  // an empty chapter body after the free preview chapters.
+  const cookieAwareProxies = () => {
+    const backends = getBackendProxies();
+    const own = CORS_PROXY_LIST.filter((p) =>
+      /lovable\.app|alwaysdata\.net|onrender\.com/.test(p.url)
+    );
+    const list = [...backends, ...own];
+    return (list.length ? list : CORS_PROXY_LIST).map(
+      (p) => (u: string) => buildProxyUrl(p.url, u)
+    );
+  };
+  const proxies = isInkitt ? cookieAwareProxies() : getActiveCorsProxies();
+  for (const build of proxies) {
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 7_000);
     try {
       const r = await fetch(build(url), {
-        headers: { ...DEFAULT_HEADERS, ...extra },
+        headers: { ...DEFAULT_HEADERS, ...extraHeaders },
         signal: controller.signal,
       });
       if (r.ok) return r;
@@ -94,6 +130,7 @@ async function httpGet(url: string, extra: Record<string, string> = {}): Promise
   }
   throw lastErr instanceof Error ? lastErr : new Error("All CORS proxies failed");
 }
+
 
 async function getText(url: string): Promise<string> {
   const r = await httpGet(url);
@@ -443,7 +480,7 @@ async function tocNovelBin(
 }
 
 
-async function tocWtrLab(url: string): Promise<string[]> {
+async function tocWtrLab(url: string, onBatch?: OnChapterBatch): Promise<string[]> {
   const u = new URL(url);
   const parts = u.pathname.split("/").filter(Boolean);
   const language = parts[0] || "en";
@@ -461,9 +498,14 @@ async function tocWtrLab(url: string): Promise<string[]> {
   if (!id) throw new Error("wtr-lab: serie id missing");
   const json = await getJson(`https://wtr-lab.com/api/chapters/${id}`);
   const chapters = json.chapters || json.data?.chapters || [];
-  return chapters.map(
-    (a: any) => `https://wtr-lab.com/${language}/serie-${id}/${slug}/${a.order ?? a.id}`
+  const results: ChapterLink[] = chapters.map(
+    (a: any) => ({
+      url: `https://wtr-lab.com/${language}/serie-${id}/${slug}/${a.order ?? a.id}`,
+      title: a.title || a.name || `Chapter ${a.order ?? a.id}`
+    })
   );
+  if (onBatch && results.length > 0) onBatch(results);
+  return results.map(c => c.url);
 }
 
 // ---------- Site-specific chapter body ----------
@@ -488,6 +530,30 @@ async function bodyFreeWebNovel(url: string): Promise<string> {
 async function bodyNovelFire(url: string): Promise<string> {
   const doc = parseHtml(await getText(url));
   return extractWithSelector(doc, "#content, .chapter-content");
+}
+
+async function bodyNovelFull(url: string): Promise<string> {
+  const doc = parseHtml(await getText(url));
+  const el = doc.querySelector("#chapter-content, .chapter-content, #chr-content");
+  if (!el) return "";
+  stripInside(el, "script, style, ins, iframe, .ad, .ads, .advertisement");
+  return sanitizeHtml(el.innerHTML);
+}
+
+async function bodyNovelBin(url: string): Promise<string> {
+  const doc = parseHtml(await getText(url));
+  const el = doc.querySelector("#chapter-content, #chr-content, .chr-c");
+  if (!el) return "";
+  stripInside(el, "script, style, ins, iframe, .ad, .ads, .advertisement");
+  return sanitizeHtml(el.innerHTML);
+}
+
+async function bodyWtrLab(url: string): Promise<string> {
+  const doc = parseHtml(await getText(url));
+  const el = doc.querySelector(".chapter-content, #chapter-content");
+  if (!el) return "";
+  stripInside(el, "script, style, ins, iframe, .ad, .ads, .advertisement");
+  return sanitizeHtml(el.innerHTML);
 }
 
 async function bodyNovGo(url: string): Promise<string> {
@@ -519,7 +585,7 @@ async function bodyGeneric(url: string, selector: string): Promise<string> {
 
 // ---------- Dispatch ----------
 
-function siteKey(hostname: string): string {
+export function siteKey(hostname: string): string {
   if (hostname.includes("novelhall.com")) return "novelhall";
   if (hostname.includes("freewebnovel.com")) return "freewebnovel";
   if (hostname.includes("novelfire.")) return "novelfire";
@@ -533,9 +599,110 @@ function siteKey(hostname: string): string {
   if (hostname.includes("wtr-lab.com")) return "wtrlab";
   if (hostname.includes("wattpad.com")) return "wattpad";
   if (hostname.includes("readnovelmtl.com")) return "readnovelmtl";
+  if (hostname.includes("inkitt.com")) return "inkitt";
+  if (hostname.includes("novelight.net")) return "novelight";
   return "generic";
 
 }
+
+async function tocNovelight(url: string): Promise<string[]> {
+  const html = await getText(url);
+  const origin = new URL(url).origin;
+
+  const matches = [...html.matchAll(/href=["']([^"']+)["']/gi)].map(m => unwrapProxyUrl(m[1]));
+  const chapterUrls = Array.from(new Set(matches.filter(u => u && u.includes("/book/chapter/")))).map(u => absoluteUrl(origin, u));
+
+  chapterUrls.reverse();
+  return Array.from(new Set(chapterUrls));
+}
+
+async function bodyNovelight(url: string): Promise<string> {
+  const html = await getText(url);
+  const doc = parseHtml(html);
+  const content = extractWithSelector(doc, '.chapter-text, .chapter-text__limit, .chapter-text__place, #chapter-content, article');
+  if (content && content.replace(/<[^>]+>/g, '').trim().length > 30) {
+    return content;
+  }
+  const chapterId = url.match(/chapter\/(\d+)/)?.[1];
+  if (chapterId) {
+    try {
+      const origin = new URL(url).origin;
+      const apiUrl = `${origin}/book/ajax/read-chapter/${chapterId}`;
+      const r = await httpGet(apiUrl, { "X-Requested-With": "XMLHttpRequest" });
+      const json = await r.json();
+      const c = json?.content || "";
+      if (c && c.replace(/<[^>]+>/g, "").trim().length > 30) return c;
+    } catch {}
+  }
+  return content;
+}
+
+async function tocInkitt(url: string): Promise<string[]> {
+  const storyId = url.match(/stories\/(?:[^\/]+\/)?(\d+)/)?.[1] ||
+    url.match(/stories\/(\d+)/)?.[1] ||
+    url.match(/story\/(\d+)/)?.[1];
+  if (!storyId) return [];
+
+  try {
+    const json = await getJson(`https://www.inkitt.com/api/stories/${storyId}`);
+    const chapters: any[] = json?.chapters || [];
+    if (chapters.length) {
+      return chapters.map((c, i) => `https://www.inkitt.com/stories/${storyId}/chapters/${c.chapter_number || i + 1}`);
+    }
+  } catch {}
+
+  const html = await getText(`https://www.inkitt.com/stories/${storyId}`);
+  const doc = parseHtml(html);
+  const out: string[] = [];
+  doc.querySelectorAll('a[href*="/chapters/"]').forEach((a) => {
+    const href = a.getAttribute("href");
+    if (href) out.push(absoluteUrl(`https://www.inkitt.com/stories/${storyId}`, href));
+  });
+  return Array.from(new Set(out));
+}
+
+async function bodyInkitt(url: string): Promise<string> {
+  // Chapters past the free preview come back with an empty #chapterText inside
+  // a `story-page-text_folded` wrapper unless the login cookie reached Inkitt.
+  // Retry a few times so a proxy that drops cookies doesn't produce blanks.
+  // Also attempts an API fallback if the chapter ID is present.
+  let last = "";
+  for (let i = 0; i < 4; i++) {
+    let html = "";
+    try {
+      html = await getText(url);
+    } catch {
+      await new Promise((r) => setTimeout(r, 800 * (i + 1)));
+      continue;
+    }
+    const doc = parseHtml(html);
+    let content = extractWithSelector(doc, '#chapterText, .story-page-text, .story-body, article');
+    let text = (content || "").replace(/<[^>]+>/g, "").trim();
+
+    if (text.length < 50) {
+      const chapterId = url.match(/chapters\/(\d+)/)?.[1];
+      if (chapterId) {
+        try {
+          const apiJson = await getJson(`https://www.inkitt.com/api/chapters/${chapterId}`);
+          const apiContent = apiJson?.chapter?.text || apiJson?.text || "";
+          if (apiContent.length > 50) {
+            content = apiContent.split('\n').map((p: string) => `<p>${p}</p>`).join('');
+            text = apiContent;
+          }
+        } catch {}
+      }
+    }
+
+    if (text.length > 50) return content;
+    last = content || last;
+
+    const isFolded = /story-page-text_folded/.test(html) || text.includes("Writers Write") || text.includes("Galatea app");
+    await new Promise((r) => setTimeout(r, (isFolded ? 1500 : 800) * (i + 1)));
+  }
+  return last;
+}
+
+
 
 async function tocNovelhall(url: string): Promise<string[]> {
   const doc = parseHtml(await getText(url));
@@ -545,6 +712,56 @@ async function tocNovelhall(url: string): Promise<string[]> {
     if (href) out.push(absoluteUrl(url, href));
   });
   return out;
+}
+
+async function fetchChapterContent(url: string, selector: string): Promise<string> {
+  const hostname = (() => {
+    try { return new URL(url).hostname; } catch { return ""; }
+  })();
+  const key = siteKey(hostname);
+
+  const attempt = async (): Promise<string> => {
+    switch (key) {
+      case "novelhall":    return bodyNovelhall(url);
+      case "freewebnovel": return bodyFreeWebNovel(url);
+      case "novelfire":    return bodyNovelFire(url);
+      case "novgo":        return bodyNovGo(url);
+      case "novelbuddy":   return bodyNovelBuddy(url);
+      case "novelarrow":   return bodyNovelArrow(url);
+      case "novelfullnet":
+      case "novelfullcom":
+      case "novelfull":    return bodyNovelFull(url);
+      case "novelbin":     return bodyNovelBin(url);
+      case "wtrlab":       return bodyWtrLab(url);
+      case "wattpad":      return bodyWattpad(url);
+      case "readnovelmtl": {
+        const doc = parseHtml(await getText(url));
+        return extractWithSelector(doc, "#content, .chapter-content, #chr-content");
+      }
+      case "inkitt": return bodyInkitt(url);
+      case "novelight": return bodyNovelight(url);
+
+      default:             return bodyGeneric(url, selector);
+    }
+  };
+
+  // Hosts that rate-limit hard need longer, exponential waits between tries.
+  const RATE_LIMITED = /(freewebnovel\.com|novelfull(l)?\.(net|com)|allnovelfull|allnovelnext|allnovel\.org|novelfire\.net|novelhall\.com|scribblehub\.com|novelgo\.id|novgo\.net|novelcodex\.com|novel-?next\.(com|net)|novel-?bin\.(com|net)|novelbin\.(com|me|net)|novelmax\.net|novelgate\.net|novelhulk\.net|fanfiction\.net|archiveofourown\.org|akknovel\.com|readlightnovel\.me)$/i;
+  const base = RATE_LIMITED.test(hostname) ? 1500 : 400;
+
+  let last = "";
+  for (let i = 0; i < 4; i++) {
+    try {
+      const html = await attempt();
+      if (html && html.replace(/<[^>]+>/g, "").trim().length >= 20) return html;
+      last = html;
+    } catch (e) {
+      last = "";
+    }
+    await new Promise((r) => setTimeout(r, base * Math.pow(2, i) + Math.random() * 300));
+  }
+  if (last) return last;
+  throw new Error("Chapter content appears to be empty");
 }
 
 async function bodyNovelhall(url: string): Promise<string> {
@@ -714,6 +931,8 @@ export async function fetchChapterLinks(tocUrl: string, linkSelector: string): P
         }
         return out;
       }
+      case "inkitt": return await tocInkitt(tocUrl);
+      case "novelight": return await tocNovelight(tocUrl);
 
       default: {
         const doc = parseHtml(await getText(tocUrl));
@@ -729,6 +948,38 @@ export async function fetchChapterLinks(tocUrl: string, linkSelector: string): P
     throw new Error(`Failed to fetch chapter links: ${(e as Error).message}`);
   }
 }
+
+export async function fetchChaptersFull(
+  urls: string[],
+  selector: string,
+  onProgress?: (current: number, total: number) => void
+): Promise<string[]> {
+  const total = urls.length;
+  let completed = 0;
+  
+  const results: string[] = new Array(total);
+  const pool = [...urls.entries()];
+  
+  const workers = Array(Math.min(FETCH_CONCURRENCY, total)).fill(null).map(async () => {
+    while (pool.length > 0) {
+      const item = pool.shift();
+      if (!item) break;
+      const [index, url] = item;
+      try {
+        results[index] = await fetchChapterContent(url, selector);
+      } catch (e) {
+        console.error(`Failed to fetch chapter at ${url}:`, e);
+        results[index] = `<!-- Error fetching chapter: ${(e as Error).message} -->`;
+      }
+      completed++;
+      onProgress?.(completed, total);
+    }
+  });
+
+  await Promise.all(workers);
+  return results;
+}
+
 
 /**
  * Streaming version of fetchChapterLinks.
@@ -757,6 +1008,7 @@ export async function fetchChapterLinksLive(
       case "novelfullcom": await tocNovelFull(tocUrl, wrap); break;
       case "novelfull":    await tocNovelFull(tocUrl, wrap); break;
       case "novelbin":     await tocNovelBin(tocUrl, wrap); break;
+      case "wtrlab":       await tocWtrLab(tocUrl, wrap); break;
       default: {
         // For sites that return everything at once (API-based / single-page),
         // fetch and emit one batch so the UI still updates.
@@ -774,47 +1026,6 @@ export async function fetchChapterLinksLive(
 }
 
 
-export async function fetchChapterContent(
-  chapterUrl: string,
-  contentSelector: string
-): Promise<string> {
-  const hostname = (() => {
-    try { return new URL(chapterUrl).hostname; } catch { return ""; }
-  })();
-  const key = siteKey(hostname);
-
-  const attempt = async (): Promise<string> => {
-    switch (key) {
-      case "novelhall":    return bodyNovelhall(chapterUrl);
-      case "freewebnovel": return bodyFreeWebNovel(chapterUrl);
-      case "novelfire":    return bodyNovelFire(chapterUrl);
-      case "novgo":        return bodyNovGo(chapterUrl);
-      case "novelbuddy":   return bodyNovelBuddy(chapterUrl);
-      case "novelarrow":   return bodyNovelArrow(chapterUrl);
-      case "wattpad":      return bodyWattpad(chapterUrl);
-      case "readnovelmtl": {
-        const doc = parseHtml(await getText(chapterUrl));
-        return extractWithSelector(doc, "#content, .chapter-content, #chr-content");
-      }
-
-      default:             return bodyGeneric(chapterUrl, contentSelector);
-    }
-  };
-
-  let last = "";
-  for (let i = 0; i < 3; i++) {
-    try {
-      const html = await attempt();
-      if (html && html.replace(/<[^>]+>/g, "").trim().length >= 20) return html;
-      last = html;
-    } catch (e) {
-      last = "";
-    }
-    await new Promise((r) => setTimeout(r, 400 * (i + 1)));
-  }
-  if (last) return last;
-  throw new Error("Chapter content appears to be empty");
-}
 
 // Kept for backwards compatibility with older imports.
 export async function fetchHtmlContent(

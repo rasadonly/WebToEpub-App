@@ -500,7 +500,8 @@ export async function engineFetchTocLive(
 export async function enginePackEpub(
   orderedChapters: EngineChapter[],
   metadata: EngineMetadata,
-  onProgress?: (p: EnginePackProgress) => void
+  onProgress?: (p: EnginePackProgress) => void,
+  prefetchedHtml?: Map<string, string>
 ): Promise<void> {
   const win = await ensureIframe();
   if (!win.main) throw new Error('Engine not ready');
@@ -545,6 +546,20 @@ export async function enginePackEpub(
     );
   } catch {
     /* ignore – table may not have data attributes in this build */
+  }
+
+  // ── If caller pre-fetched chapters in parallel, intercept HttpClient.wrapFetch
+  // so the engine reads from in-memory cache instead of making sequential requests.
+  let origWrapFetch: ((url: string) => Promise<{ responseXML?: Document; responseText?: string }>) | null = null;
+  if (prefetchedHtml && prefetchedHtml.size > 0 && win.HttpClient) {
+    origWrapFetch = win.HttpClient.wrapFetch.bind(win.HttpClient);
+    win.HttpClient.wrapFetch = async (url: string) => {
+      const cached = prefetchedHtml.get(url);
+      if (cached !== undefined) {
+        return { responseText: `<html><body>${cached}</body></html>` };
+      }
+      return origWrapFetch!(url);
+    };
   }
 
   // ── Intercept the engine's Download.save() so the blob is triggered from
@@ -639,6 +654,10 @@ export async function enginePackEpub(
     }
     if (iframeWin.URL.createObjectURL !== origCreateObjectURL) {
       iframeWin.URL.createObjectURL = origCreateObjectURL;
+    }
+    // Restore wrapFetch if we patched it
+    if (origWrapFetch && win.HttpClient) {
+      win.HttpClient.wrapFetch = origWrapFetch;
     }
   }
 
@@ -1008,12 +1027,43 @@ function prettyTitleFromPath(path: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase()) || 'Untitled';
 }
 
+const HF_TREE_BASE = `https://huggingface.co/api/datasets/${HF_COMMUNITY_REPO_ID}/tree/main/books?recursive=true&limit=1000`;
+
+/** HF's tree API pages at 1000 entries; follow the `Link: rel="next"` cursor. */
+async function fetchCommunityTree(): Promise<HFTreeEntry[]> {
+  const all: HFTreeEntry[] = [];
+  let url: string | null = HF_TREE_BASE;
+  let pages = 0;
+
+  // Direct fetch first — only it exposes the Link header needed for paging.
+  while (url && pages < 50) {
+    let response: Response;
+    try {
+      response = await withTimeout(url, { cache: 'no-store' }, 20_000);
+    } catch {
+      break;
+    }
+    if (!response.ok) break;
+    const page = (await response.json()) as HFTreeEntry[];
+    if (!Array.isArray(page)) break;
+    all.push(...page);
+    pages++;
+    const link = response.headers.get('link') || '';
+    const next = link.match(/<([^>]+)>;\s*rel="next"/);
+    url = next && page.length > 0 ? next[1] : null;
+  }
+
+  if (all.length > 0) return all;
+
+  // Fallback: proxied single page (no headers available through proxies).
+  const list = await fetchJsonWithProxyFallback<HFTreeEntry[]>(HF_TREE_BASE, 15_000);
+  return Array.isArray(list) ? list : [];
+}
+
 export async function libraryGetCommunity(): Promise<LibraryBook[]> {
-  const list = await fetchJsonWithProxyFallback<HFTreeEntry[]>(
-    `https://huggingface.co/api/datasets/${HF_COMMUNITY_REPO_ID}/tree/main/books?recursive=true`,
-    15_000
-  );
-  if (!Array.isArray(list)) return [];
+  const list = await fetchCommunityTree();
+  if (!Array.isArray(list) || list.length === 0) return [];
+
 
   // Remove files smaller than 100 KB (102,400 bytes)
   const valid = list.filter(
