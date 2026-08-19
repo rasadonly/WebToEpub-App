@@ -1027,12 +1027,43 @@ function prettyTitleFromPath(path: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase()) || 'Untitled';
 }
 
+const HF_TREE_BASE = `https://huggingface.co/api/datasets/${HF_COMMUNITY_REPO_ID}/tree/main/books?recursive=true&limit=1000`;
+
+/** HF's tree API pages at 1000 entries; follow the `Link: rel="next"` cursor. */
+async function fetchCommunityTree(): Promise<HFTreeEntry[]> {
+  const all: HFTreeEntry[] = [];
+  let url: string | null = HF_TREE_BASE;
+  let pages = 0;
+
+  // Direct fetch first — only it exposes the Link header needed for paging.
+  while (url && pages < 50) {
+    let response: Response;
+    try {
+      response = await withTimeout(url, { cache: 'no-store' }, 20_000);
+    } catch {
+      break;
+    }
+    if (!response.ok) break;
+    const page = (await response.json()) as HFTreeEntry[];
+    if (!Array.isArray(page)) break;
+    all.push(...page);
+    pages++;
+    const link = response.headers.get('link') || '';
+    const next = link.match(/<([^>]+)>;\s*rel="next"/);
+    url = next && page.length > 0 ? next[1] : null;
+  }
+
+  if (all.length > 0) return all;
+
+  // Fallback: proxied single page (no headers available through proxies).
+  const list = await fetchJsonWithProxyFallback<HFTreeEntry[]>(HF_TREE_BASE, 15_000);
+  return Array.isArray(list) ? list : [];
+}
+
 export async function libraryGetCommunity(): Promise<LibraryBook[]> {
-  const list = await fetchJsonWithProxyFallback<HFTreeEntry[]>(
-    `https://huggingface.co/api/datasets/${HF_COMMUNITY_REPO_ID}/tree/main/books?recursive=true`,
-    15_000
-  );
-  if (!Array.isArray(list)) return [];
+  const list = await fetchCommunityTree();
+  if (!Array.isArray(list) || list.length === 0) return [];
+
 
   // Remove files smaller than 100 KB (102,400 bytes)
   const valid = list.filter(
