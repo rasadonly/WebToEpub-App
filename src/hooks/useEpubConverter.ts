@@ -8,7 +8,7 @@ import {
   engineAbort,
   EngineChapter,
 } from '@/utils/webtoepub/bridge';
-import { fetchChapterLinksLive, fetchChaptersFull, ChapterLink } from '@/utils/localWorker';
+import { fetchChapterLinksLive, fetchChaptersFull, ChapterLink, siteKey } from '@/utils/localWorker';
 import { generateEpub } from '@/utils/epubGenerator';
 import { ChapterData } from '@/types';
 import { getSiteConfig } from '@/utils/siteConfigs';
@@ -300,59 +300,73 @@ export function useEpubConverter() {
           `Handing ${orderedChapters.length} chapters to the engine for fetch + pack`
         );
 
+        const hostname = (() => { try { return new URL(data.tocUrl).hostname; } catch { return ''; } })();
+        const key = siteKey(hostname);
+        const hasDirectParser = key !== 'generic' && key !== '';
 
-        // Pre-fetch all chapters in parallel (10 at a time), then pack with
-        // JSZip directly — bypasses the engine's sequential fetch loop entirely.
-        const total = orderedChapters.length;
-        updateProgress({
-          status: 'processing-chapters',
-          currentChapter: 0,
-          totalChapters: total,
-          message: `Downloading ${total} chapters (0/${total})`,
-        });
-        addLog(`Pre-fetching ${total} chapters in parallel (10 at a time)…`);
+        if (hasDirectParser) {
+          // Known site: pre-fetch 10 in parallel with our own parsers, then pack with JSZip.
+          const total = orderedChapters.length;
+          updateProgress({
+            status: 'processing-chapters',
+            currentChapter: 0,
+            totalChapters: total,
+            message: `Downloading ${total} chapters (0/${total})`,
+          });
+          addLog(`Pre-fetching ${total} chapters in parallel (10 at a time)…`);
 
-        const urls = orderedChapters.map(c => c.url);
-        const selector = data.contentSelector || '';
+          const urls = orderedChapters.map(c => c.url);
+          const selector = data.contentSelector || '';
 
-        const htmlContents = await fetchChaptersFull(
-          urls,
-          selector,
-          (current, total) => {
+          const htmlContents = await fetchChaptersFull(
+            urls,
+            selector,
+            (current, total) => {
+              updateProgress({
+                status: 'processing-chapters',
+                currentChapter: current,
+                totalChapters: total,
+                message: `Downloading ${total} chapters (${current}/${total})`,
+              });
+            }
+          );
+
+          addLog(`Pre-fetch done — packing EPUB…`);
+          updateProgress({
+            status: 'processing-chapters',
+            currentChapter: total,
+            totalChapters: total,
+            message: `Packing EPUB…`,
+          });
+
+          const chapterDataList: ChapterData[] = orderedChapters.map((c, i) => ({
+            title: c.title,
+            content: htmlContents[i] || `<p>Chapter content unavailable.</p>`,
+            url: c.url,
+            index: i,
+          }));
+
+          await generateEpub(chapterDataList, {
+            title: meta.title,
+            author: meta.author,
+            language: meta.language,
+            description: meta.description,
+            fileName: meta.fileName,
+            coverUrl: meta.coverUrl,
+          });
+        } else {
+          // Unknown/generic site: let the WebToEpub engine handle fetch + pack.
+          addLog('Using engine for fetch + pack (generic site)…');
+          await enginePackEpub(orderedChapters, meta, ({ current, total, message }) => {
             updateProgress({
-              status: 'processing-chapters',
               currentChapter: current,
-              totalChapters: total,
-              message: `Downloading ${total} chapters (${current}/${total})`,
+              totalChapters: total || orderedChapters.length,
+              message: message
+                ? `${message} — fetching chapters…`
+                : `Fetching ${orderedChapters.length} chapters and packing EPUB…`,
             });
-          }
-        );
-
-        addLog(`Pre-fetch done — packing EPUB…`);
-        updateProgress({
-          status: 'processing-chapters',
-          currentChapter: total,
-          totalChapters: total,
-          message: `Packing EPUB…`,
-        });
-
-        // Build ChapterData array from pre-fetched HTML and pack with JSZip directly.
-        // This completely bypasses the engine's sequential fetch loop.
-        const chapterDataList: ChapterData[] = orderedChapters.map((c, i) => ({
-          title: c.title,
-          content: htmlContents[i] || `<p>Chapter content unavailable.</p>`,
-          url: c.url,
-          index: i,
-        }));
-
-        await generateEpub(chapterDataList, {
-          title: meta.title,
-          author: meta.author,
-          language: meta.language,
-          description: meta.description,
-          fileName: meta.fileName,
-          coverUrl: meta.coverUrl,
-        });
+          });
+        }
 
         saveRecentDownload({
           id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
