@@ -9,6 +9,8 @@ import {
   EngineChapter,
 } from '@/utils/webtoepub/bridge';
 import { fetchChapterLinksLive, fetchChaptersFull, ChapterLink } from '@/utils/localWorker';
+import { generateEpub } from '@/utils/epubGenerator';
+import { ChapterData } from '@/types';
 import { getSiteConfig } from '@/utils/siteConfigs';
 import {
   isBackendEnabled,
@@ -299,9 +301,8 @@ export function useEpubConverter() {
         );
 
 
-        // Pre-fetch all chapters in parallel (10 at a time) using our own
-        // site-aware parsers, then hand the cache to the engine so it reads
-        // from memory instead of fetching sequentially.
+        // Pre-fetch all chapters in parallel (10 at a time), then pack with
+        // JSZip directly — bypasses the engine's sequential fetch loop entirely.
         const total = orderedChapters.length;
         updateProgress({
           status: 'processing-chapters',
@@ -311,7 +312,6 @@ export function useEpubConverter() {
         });
         addLog(`Pre-fetching ${total} chapters in parallel (10 at a time)…`);
 
-        const prefetchedHtml = new Map<string, string>();
         const urls = orderedChapters.map(c => c.url);
         const selector = data.contentSelector || '';
 
@@ -328,10 +328,6 @@ export function useEpubConverter() {
           }
         );
 
-        htmlContents.forEach((html, i) => {
-          prefetchedHtml.set(urls[i], html);
-        });
-
         addLog(`Pre-fetch done — packing EPUB…`);
         updateProgress({
           status: 'processing-chapters',
@@ -340,14 +336,23 @@ export function useEpubConverter() {
           message: `Packing EPUB…`,
         });
 
-        await enginePackEpub(
-          orderedChapters,
-          meta,
-          ({ current, total, message }) => {
-            if (message) addLog(message);
-          },
-          prefetchedHtml
-        );
+        // Build ChapterData array from pre-fetched HTML and pack with JSZip directly.
+        // This completely bypasses the engine's sequential fetch loop.
+        const chapterDataList: ChapterData[] = orderedChapters.map((c, i) => ({
+          title: c.title,
+          content: htmlContents[i] || `<p>Chapter content unavailable.</p>`,
+          url: c.url,
+          index: i,
+        }));
+
+        await generateEpub(chapterDataList, {
+          title: meta.title,
+          author: meta.author,
+          language: meta.language,
+          description: meta.description,
+          fileName: meta.fileName,
+          coverUrl: meta.coverUrl,
+        });
 
         saveRecentDownload({
           id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
