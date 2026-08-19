@@ -1,33 +1,8 @@
-export async function fetchChaptersFull(
-  urls: string[],
-  selector: string,
-  onProgress?: (current: number, total: number) => void
-): Promise<string[]> {
-  const total = urls.length;
-  let completed = 0;
-  
-  const results: string[] = new Array(total);
-  const pool = [...urls.entries()];
-  
-  const workers = Array(Math.min(FETCH_CONCURRENCY, total)).fill(null).map(async () => {
-    while (pool.length > 0) {
-      const item = pool.shift();
-      if (!item) break;
-      const [index, url] = item;
-      try {
-        results[index] = await fetchChapterContent(url, selector);
-      } catch (e) {
-        console.error(`Failed to fetch chapter at ${url}:`, e);
-        results[index] = `<!-- Error fetching chapter: ${(e as Error).message} -->`;
-      }
-      completed++;
-      onProgress?.(completed, total);
-    }
-  });
-
-  await Promise.all(workers);
-  return results;
+export interface WorkerResponse {
+  results?: string[];
+  error?: string;
 }
+
 
 export interface WorkerResponse {
   results?: string[];
