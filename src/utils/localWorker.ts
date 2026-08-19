@@ -480,7 +480,7 @@ async function tocNovelBin(
 }
 
 
-async function tocWtrLab(url: string): Promise<string[]> {
+async function tocWtrLab(url: string, onBatch?: OnChapterBatch): Promise<string[]> {
   const u = new URL(url);
   const parts = u.pathname.split("/").filter(Boolean);
   const language = parts[0] || "en";
@@ -498,9 +498,14 @@ async function tocWtrLab(url: string): Promise<string[]> {
   if (!id) throw new Error("wtr-lab: serie id missing");
   const json = await getJson(`https://wtr-lab.com/api/chapters/${id}`);
   const chapters = json.chapters || json.data?.chapters || [];
-  return chapters.map(
-    (a: any) => `https://wtr-lab.com/${language}/serie-${id}/${slug}/${a.order ?? a.id}`
+  const results: ChapterLink[] = chapters.map(
+    (a: any) => ({
+      url: `https://wtr-lab.com/${language}/serie-${id}/${slug}/${a.order ?? a.id}`,
+      title: a.title || a.name || `Chapter ${a.order ?? a.id}`
+    })
   );
+  if (onBatch && results.length > 0) onBatch(results);
+  return results.map(c => c.url);
 }
 
 // ---------- Site-specific chapter body ----------
@@ -1003,6 +1008,7 @@ export async function fetchChapterLinksLive(
       case "novelfullcom": await tocNovelFull(tocUrl, wrap); break;
       case "novelfull":    await tocNovelFull(tocUrl, wrap); break;
       case "novelbin":     await tocNovelBin(tocUrl, wrap); break;
+      case "wtrlab":       await tocWtrLab(tocUrl, wrap); break;
       default: {
         // For sites that return everything at once (API-based / single-page),
         // fetch and emit one batch so the UI still updates.
