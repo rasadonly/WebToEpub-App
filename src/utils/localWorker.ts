@@ -1,3 +1,34 @@
+export async function fetchChaptersFull(
+  urls: string[],
+  selector: string,
+  onProgress?: (current: number, total: number) => void
+): Promise<string[]> {
+  const total = urls.length;
+  let completed = 0;
+  
+  const results: string[] = new Array(total);
+  const pool = [...urls.entries()];
+  
+  const workers = Array(Math.min(FETCH_CONCURRENCY, total)).fill(null).map(async () => {
+    while (pool.length > 0) {
+      const item = pool.shift();
+      if (!item) break;
+      const [index, url] = item;
+      try {
+        results[index] = await fetchChapterContent(url, selector);
+      } catch (e) {
+        console.error(`Failed to fetch chapter at ${url}:`, e);
+        results[index] = `<!-- Error fetching chapter: ${(e as Error).message} -->`;
+      }
+      completed++;
+      onProgress?.(completed, total);
+    }
+  });
+
+  await Promise.all(workers);
+  return results;
+}
+
 export interface WorkerResponse {
   results?: string[];
   error?: string;
@@ -12,6 +43,7 @@ export interface ChapterLink {
 /** Called progressively as TOC pages are fetched. */
 export type OnChapterBatch = (batch: ChapterLink[]) => void;
 
+const FETCH_CONCURRENCY = 10;
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
 
@@ -670,6 +702,35 @@ async function tocNovelhall(url: string): Promise<string[]> {
     if (href) out.push(absoluteUrl(url, href));
   });
   return out;
+}
+
+async function fetchChapterContent(url: string, selector: string): Promise<string> {
+  const hostname = new URL(url).hostname;
+  const key = siteKey(hostname);
+  try {
+    switch (key) {
+      case "novelhall":    return await bodyNovelhall(url);
+      case "freewebnovel": return await bodyFreeWebNovel(url);
+      case "novelfire":    return await bodyNovelFire(url);
+      case "novgo":        return await bodyNovGo(url);
+      case "novelbuddy":   return await bodyNovelBuddy(url);
+      case "novelarrow":   return await bodyNovelArrow(url);
+      case "novelfullnet": return await bodyNovelFull(url);
+      case "novelfullcom": return await bodyNovelFull(url);
+      case "novelfull":    return await bodyNovelFull(url);
+      case "novelbin":     return await bodyNovelBin(url);
+      case "wtrlab":       return await bodyWtrLab(url);
+      case "wattpad":      return await bodyWattpad(url);
+      case "inkitt":       return await bodyInkitt(url);
+      case "novelight":    return await bodyNovelight(url);
+      default: {
+        const doc = parseHtml(await getText(url));
+        return extractWithSelector(doc, selector || aiContentSelectors.join(", "));
+      }
+    }
+  } catch (e) {
+    throw new Error(`Failed to fetch chapter content: ${(e as Error).message}`);
+  }
 }
 
 async function bodyNovelhall(url: string): Promise<string> {
