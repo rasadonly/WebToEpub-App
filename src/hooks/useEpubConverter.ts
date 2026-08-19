@@ -8,7 +8,7 @@ import {
   engineAbort,
   EngineChapter,
 } from '@/utils/webtoepub/bridge';
-import { fetchChapterLinksLive, ChapterLink } from '@/utils/localWorker';
+import { fetchChapterLinksLive, fetchChaptersFull, ChapterLink } from '@/utils/localWorker';
 import { getSiteConfig } from '@/utils/siteConfigs';
 import {
   isBackendEnabled,
@@ -299,19 +299,54 @@ export function useEpubConverter() {
         );
 
 
+        // Pre-fetch all chapters in parallel (10 at a time) using our own
+        // site-aware parsers, then hand the cache to the engine so it reads
+        // from memory instead of fetching sequentially.
+        const total = orderedChapters.length;
+        updateProgress({
+          status: 'processing-chapters',
+          currentChapter: 0,
+          totalChapters: total,
+          message: `Downloading ${total} chapters (0/${total})`,
+        });
+        addLog(`Pre-fetching ${total} chapters in parallel (10 at a time)…`);
+
+        const prefetchedHtml = new Map<string, string>();
+        const urls = orderedChapters.map(c => c.url);
+        const selector = data.contentSelector || '';
+
+        const htmlContents = await fetchChaptersFull(
+          urls,
+          selector,
+          (current, total) => {
+            updateProgress({
+              status: 'processing-chapters',
+              currentChapter: current,
+              totalChapters: total,
+              message: `Downloading ${total} chapters (${current}/${total})`,
+            });
+          }
+        );
+
+        htmlContents.forEach((html, i) => {
+          prefetchedHtml.set(urls[i], html);
+        });
+
+        addLog(`Pre-fetch done — packing EPUB…`);
+        updateProgress({
+          status: 'processing-chapters',
+          currentChapter: total,
+          totalChapters: total,
+          message: `Packing EPUB…`,
+        });
+
         await enginePackEpub(
           orderedChapters,
           meta,
-
           ({ current, total, message }) => {
-            updateProgress({
-              currentChapter: current,
-              totalChapters: total || orderedChapters.length,
-              message: message
-                ? `${message} — fetching chapters…`
-                : `Fetching ${orderedChapters.length} chapters and packing EPUB…`,
-            });
-          }
+            if (message) addLog(message);
+          },
+          prefetchedHtml
         );
 
         saveRecentDownload({

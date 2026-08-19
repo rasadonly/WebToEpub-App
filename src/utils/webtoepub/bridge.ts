@@ -500,7 +500,8 @@ export async function engineFetchTocLive(
 export async function enginePackEpub(
   orderedChapters: EngineChapter[],
   metadata: EngineMetadata,
-  onProgress?: (p: EnginePackProgress) => void
+  onProgress?: (p: EnginePackProgress) => void,
+  prefetchedHtml?: Map<string, string>
 ): Promise<void> {
   const win = await ensureIframe();
   if (!win.main) throw new Error('Engine not ready');
@@ -545,6 +546,20 @@ export async function enginePackEpub(
     );
   } catch {
     /* ignore – table may not have data attributes in this build */
+  }
+
+  // ── If caller pre-fetched chapters in parallel, intercept HttpClient.wrapFetch
+  // so the engine reads from in-memory cache instead of making sequential requests.
+  let origWrapFetch: ((url: string) => Promise<{ responseXML?: Document; responseText?: string }>) | null = null;
+  if (prefetchedHtml && prefetchedHtml.size > 0 && win.HttpClient) {
+    origWrapFetch = win.HttpClient.wrapFetch.bind(win.HttpClient);
+    win.HttpClient.wrapFetch = async (url: string) => {
+      const cached = prefetchedHtml.get(url);
+      if (cached !== undefined) {
+        return { responseText: `<html><body>${cached}</body></html>` };
+      }
+      return origWrapFetch!(url);
+    };
   }
 
   // ── Intercept the engine's Download.save() so the blob is triggered from
@@ -639,6 +654,10 @@ export async function enginePackEpub(
     }
     if (iframeWin.URL.createObjectURL !== origCreateObjectURL) {
       iframeWin.URL.createObjectURL = origCreateObjectURL;
+    }
+    // Restore wrapFetch if we patched it
+    if (origWrapFetch && win.HttpClient) {
+      win.HttpClient.wrapFetch = origWrapFetch;
     }
   }
 
