@@ -66,6 +66,17 @@ export const CORS_PROXY_LIST: Array<{ name: string; url: string }> = [
   { name: "cors.lol", url: "https://api.cors.lol/?url=" },
 ];
 
+export const aiContentSelectors = [
+  "#chapter-content",
+  ".chapter-content",
+  "article",
+  ".content",
+  ".read-content",
+  ".entry-content",
+  "#content",
+  "#chr-content"
+];
+
 const BACKEND_URL_KEY = 'backendUrl';
 const HEROKU_BACKEND = 'https://link-to-epub-37130-dfa858b712fc.herokuapp.com';
 const HF_BACKEND = 'https://prasadonly-web-to-epub-bot.hf.space';
@@ -705,32 +716,53 @@ async function tocNovelhall(url: string): Promise<string[]> {
 }
 
 async function fetchChapterContent(url: string, selector: string): Promise<string> {
-  const hostname = new URL(url).hostname;
+  const hostname = (() => {
+    try { return new URL(url).hostname; } catch { return ""; }
+  })();
   const key = siteKey(hostname);
-  try {
+
+  const attempt = async (): Promise<string> => {
     switch (key) {
-      case "novelhall":    return await bodyNovelhall(url);
-      case "freewebnovel": return await bodyFreeWebNovel(url);
-      case "novelfire":    return await bodyNovelFire(url);
-      case "novgo":        return await bodyNovGo(url);
-      case "novelbuddy":   return await bodyNovelBuddy(url);
-      case "novelarrow":   return await bodyNovelArrow(url);
-      case "novelfullnet": return await bodyNovelFull(url);
-      case "novelfullcom": return await bodyNovelFull(url);
-      case "novelfull":    return await bodyNovelFull(url);
-      case "novelbin":     return await bodyNovelBin(url);
-      case "wtrlab":       return await bodyWtrLab(url);
-      case "wattpad":      return await bodyWattpad(url);
-      case "inkitt":       return await bodyInkitt(url);
-      case "novelight":    return await bodyNovelight(url);
-      default: {
+      case "novelhall":    return bodyNovelhall(url);
+      case "freewebnovel": return bodyFreeWebNovel(url);
+      case "novelfire":    return bodyNovelFire(url);
+      case "novgo":        return bodyNovGo(url);
+      case "novelbuddy":   return bodyNovelBuddy(url);
+      case "novelarrow":   return bodyNovelArrow(url);
+      case "novelfullnet":
+      case "novelfullcom":
+      case "novelfull":    return bodyNovelFull(url);
+      case "novelbin":     return bodyNovelBin(url);
+      case "wtrlab":       return bodyWtrLab(url);
+      case "wattpad":      return bodyWattpad(url);
+      case "readnovelmtl": {
         const doc = parseHtml(await getText(url));
-        return extractWithSelector(doc, selector || aiContentSelectors.join(", "));
+        return extractWithSelector(doc, "#content, .chapter-content, #chr-content");
       }
+      case "inkitt": return bodyInkitt(url);
+      case "novelight": return bodyNovelight(url);
+
+      default:             return bodyGeneric(url, selector);
     }
-  } catch (e) {
-    throw new Error(`Failed to fetch chapter content: ${(e as Error).message}`);
+  };
+
+  // Hosts that rate-limit hard need longer, exponential waits between tries.
+  const RATE_LIMITED = /(freewebnovel\.com|novelfull(l)?\.(net|com)|allnovelfull|allnovelnext|allnovel\.org|novelfire\.net|novelhall\.com|scribblehub\.com|novelgo\.id|novgo\.net|novelcodex\.com|novel-?next\.(com|net)|novel-?bin\.(com|net)|novelbin\.(com|me|net)|novelmax\.net|novelgate\.net|novelhulk\.net|fanfiction\.net|archiveofourown\.org|akknovel\.com|readlightnovel\.me)$/i;
+  const base = RATE_LIMITED.test(hostname) ? 1500 : 400;
+
+  let last = "";
+  for (let i = 0; i < 4; i++) {
+    try {
+      const html = await attempt();
+      if (html && html.replace(/<[^>]+>/g, "").trim().length >= 20) return html;
+      last = html;
+    } catch (e) {
+      last = "";
+    }
+    await new Promise((r) => setTimeout(r, base * Math.pow(2, i) + Math.random() * 300));
   }
+  if (last) return last;
+  throw new Error("Chapter content appears to be empty");
 }
 
 async function bodyNovelhall(url: string): Promise<string> {
@@ -962,53 +994,6 @@ export async function fetchChapterLinksLive(
 }
 
 
-export async function fetchChapterContent(
-  chapterUrl: string,
-  contentSelector: string
-): Promise<string> {
-  const hostname = (() => {
-    try { return new URL(chapterUrl).hostname; } catch { return ""; }
-  })();
-  const key = siteKey(hostname);
-
-  const attempt = async (): Promise<string> => {
-    switch (key) {
-      case "novelhall":    return bodyNovelhall(chapterUrl);
-      case "freewebnovel": return bodyFreeWebNovel(chapterUrl);
-      case "novelfire":    return bodyNovelFire(chapterUrl);
-      case "novgo":        return bodyNovGo(chapterUrl);
-      case "novelbuddy":   return bodyNovelBuddy(chapterUrl);
-      case "novelarrow":   return bodyNovelArrow(chapterUrl);
-      case "wattpad":      return bodyWattpad(chapterUrl);
-      case "readnovelmtl": {
-        const doc = parseHtml(await getText(chapterUrl));
-        return extractWithSelector(doc, "#content, .chapter-content, #chr-content");
-      }
-      case "inkitt": return bodyInkitt(chapterUrl);
-      case "novelight": return bodyNovelight(chapterUrl);
-
-      default:             return bodyGeneric(chapterUrl, contentSelector);
-    }
-  };
-
-  // Hosts that rate-limit hard need longer, exponential waits between tries.
-  const RATE_LIMITED = /(freewebnovel\.com|novelfull(l)?\.(net|com)|allnovelfull|allnovelnext|allnovel\.org|novelfire\.net|novelhall\.com|scribblehub\.com|novelgo\.id|novgo\.net|novelcodex\.com|novel-?next\.(com|net)|novel-?bin\.(com|net)|novelbin\.(com|me|net)|novelmax\.net|novelgate\.net|novelhulk\.net|fanfiction\.net|archiveofourown\.org|akknovel\.com|readlightnovel\.me)$/i;
-  const base = RATE_LIMITED.test(hostname) ? 1500 : 400;
-
-  let last = "";
-  for (let i = 0; i < 4; i++) {
-    try {
-      const html = await attempt();
-      if (html && html.replace(/<[^>]+>/g, "").trim().length >= 20) return html;
-      last = html;
-    } catch (e) {
-      last = "";
-    }
-    await new Promise((r) => setTimeout(r, base * Math.pow(2, i) + Math.random() * 300));
-  }
-  if (last) return last;
-  throw new Error("Chapter content appears to be empty");
-}
 
 // Kept for backwards compatibility with older imports.
 export async function fetchHtmlContent(
