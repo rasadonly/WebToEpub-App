@@ -33,7 +33,7 @@ app.use((err, _req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3000;
-const CONCURRENCY = Number(process.env.FETCH_CONCURRENCY || 12);
+const CONCURRENCY = Number(process.env.FETCH_CONCURRENCY || 10);
 const JOB_TTL_MS = Number(process.env.JOB_TTL_MS || 6 * 60 * 60 * 1000); // 6h
 const OUT_DIR = path.join(os.tmpdir(), "link-to-epub");
 fs.mkdirSync(OUT_DIR, { recursive: true });
