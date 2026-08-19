@@ -3,6 +3,7 @@ export interface WorkerResponse {
   error?: string;
 }
 
+
 /** A chapter URL + title pair streamed by fetchChapterLinksLive. */
 export interface ChapterLink {
   url: string;
@@ -12,6 +13,7 @@ export interface ChapterLink {
 /** Called progressively as TOC pages are fetched. */
 export type OnChapterBatch = (batch: ChapterLink[]) => void;
 
+const FETCH_CONCURRENCY = 10;
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
 
@@ -32,6 +34,17 @@ export const CORS_PROXY_LIST: Array<{ name: string; url: string }> = [
   { name: "corsproxy.io (with key)", url: "https://corsproxy.io/?key=ab3170e1&url=" },
   { name: "allOrigins (raw)", url: "https://api.allorigins.win/raw?url=" },
   { name: "cors.lol", url: "https://api.cors.lol/?url=" },
+];
+
+export const aiContentSelectors = [
+  "#chapter-content",
+  ".chapter-content",
+  "article",
+  ".content",
+  ".read-content",
+  ".entry-content",
+  "#content",
+  "#chr-content"
 ];
 
 const BACKEND_URL_KEY = 'backendUrl';
@@ -514,6 +527,30 @@ async function bodyNovelFire(url: string): Promise<string> {
   return extractWithSelector(doc, "#content, .chapter-content");
 }
 
+async function bodyNovelFull(url: string): Promise<string> {
+  const doc = parseHtml(await getText(url));
+  const el = doc.querySelector("#chapter-content, .chapter-content, #chr-content");
+  if (!el) return "";
+  stripInside(el, "script, style, ins, iframe, .ad, .ads, .advertisement");
+  return sanitizeHtml(el.innerHTML);
+}
+
+async function bodyNovelBin(url: string): Promise<string> {
+  const doc = parseHtml(await getText(url));
+  const el = doc.querySelector("#chapter-content, #chr-content, .chr-c");
+  if (!el) return "";
+  stripInside(el, "script, style, ins, iframe, .ad, .ads, .advertisement");
+  return sanitizeHtml(el.innerHTML);
+}
+
+async function bodyWtrLab(url: string): Promise<string> {
+  const doc = parseHtml(await getText(url));
+  const el = doc.querySelector(".chapter-content, #chapter-content");
+  if (!el) return "";
+  stripInside(el, "script, style, ins, iframe, .ad, .ads, .advertisement");
+  return sanitizeHtml(el.innerHTML);
+}
+
 async function bodyNovGo(url: string): Promise<string> {
   const doc = parseHtml(await getText(url));
   const container = doc.querySelector("#chapter-content, #chr-content");
@@ -670,6 +707,56 @@ async function tocNovelhall(url: string): Promise<string[]> {
     if (href) out.push(absoluteUrl(url, href));
   });
   return out;
+}
+
+async function fetchChapterContent(url: string, selector: string): Promise<string> {
+  const hostname = (() => {
+    try { return new URL(url).hostname; } catch { return ""; }
+  })();
+  const key = siteKey(hostname);
+
+  const attempt = async (): Promise<string> => {
+    switch (key) {
+      case "novelhall":    return bodyNovelhall(url);
+      case "freewebnovel": return bodyFreeWebNovel(url);
+      case "novelfire":    return bodyNovelFire(url);
+      case "novgo":        return bodyNovGo(url);
+      case "novelbuddy":   return bodyNovelBuddy(url);
+      case "novelarrow":   return bodyNovelArrow(url);
+      case "novelfullnet":
+      case "novelfullcom":
+      case "novelfull":    return bodyNovelFull(url);
+      case "novelbin":     return bodyNovelBin(url);
+      case "wtrlab":       return bodyWtrLab(url);
+      case "wattpad":      return bodyWattpad(url);
+      case "readnovelmtl": {
+        const doc = parseHtml(await getText(url));
+        return extractWithSelector(doc, "#content, .chapter-content, #chr-content");
+      }
+      case "inkitt": return bodyInkitt(url);
+      case "novelight": return bodyNovelight(url);
+
+      default:             return bodyGeneric(url, selector);
+    }
+  };
+
+  // Hosts that rate-limit hard need longer, exponential waits between tries.
+  const RATE_LIMITED = /(freewebnovel\.com|novelfull(l)?\.(net|com)|allnovelfull|allnovelnext|allnovel\.org|novelfire\.net|novelhall\.com|scribblehub\.com|novelgo\.id|novgo\.net|novelcodex\.com|novel-?next\.(com|net)|novel-?bin\.(com|net)|novelbin\.(com|me|net)|novelmax\.net|novelgate\.net|novelhulk\.net|fanfiction\.net|archiveofourown\.org|akknovel\.com|readlightnovel\.me)$/i;
+  const base = RATE_LIMITED.test(hostname) ? 1500 : 400;
+
+  let last = "";
+  for (let i = 0; i < 4; i++) {
+    try {
+      const html = await attempt();
+      if (html && html.replace(/<[^>]+>/g, "").trim().length >= 20) return html;
+      last = html;
+    } catch (e) {
+      last = "";
+    }
+    await new Promise((r) => setTimeout(r, base * Math.pow(2, i) + Math.random() * 300));
+  }
+  if (last) return last;
+  throw new Error("Chapter content appears to be empty");
 }
 
 async function bodyNovelhall(url: string): Promise<string> {
@@ -857,6 +944,38 @@ export async function fetchChapterLinks(tocUrl: string, linkSelector: string): P
   }
 }
 
+export async function fetchChaptersFull(
+  urls: string[],
+  selector: string,
+  onProgress?: (current: number, total: number) => void
+): Promise<string[]> {
+  const total = urls.length;
+  let completed = 0;
+  
+  const results: string[] = new Array(total);
+  const pool = [...urls.entries()];
+  
+  const workers = Array(Math.min(FETCH_CONCURRENCY, total)).fill(null).map(async () => {
+    while (pool.length > 0) {
+      const item = pool.shift();
+      if (!item) break;
+      const [index, url] = item;
+      try {
+        results[index] = await fetchChapterContent(url, selector);
+      } catch (e) {
+        console.error(`Failed to fetch chapter at ${url}:`, e);
+        results[index] = `<!-- Error fetching chapter: ${(e as Error).message} -->`;
+      }
+      completed++;
+      onProgress?.(completed, total);
+    }
+  });
+
+  await Promise.all(workers);
+  return results;
+}
+
+
 /**
  * Streaming version of fetchChapterLinks.
  * Calls onBatch() each time a page of the TOC is fetched, so chapters appear
@@ -901,53 +1020,6 @@ export async function fetchChapterLinksLive(
 }
 
 
-export async function fetchChapterContent(
-  chapterUrl: string,
-  contentSelector: string
-): Promise<string> {
-  const hostname = (() => {
-    try { return new URL(chapterUrl).hostname; } catch { return ""; }
-  })();
-  const key = siteKey(hostname);
-
-  const attempt = async (): Promise<string> => {
-    switch (key) {
-      case "novelhall":    return bodyNovelhall(chapterUrl);
-      case "freewebnovel": return bodyFreeWebNovel(chapterUrl);
-      case "novelfire":    return bodyNovelFire(chapterUrl);
-      case "novgo":        return bodyNovGo(chapterUrl);
-      case "novelbuddy":   return bodyNovelBuddy(chapterUrl);
-      case "novelarrow":   return bodyNovelArrow(chapterUrl);
-      case "wattpad":      return bodyWattpad(chapterUrl);
-      case "readnovelmtl": {
-        const doc = parseHtml(await getText(chapterUrl));
-        return extractWithSelector(doc, "#content, .chapter-content, #chr-content");
-      }
-      case "inkitt": return bodyInkitt(chapterUrl);
-      case "novelight": return bodyNovelight(chapterUrl);
-
-      default:             return bodyGeneric(chapterUrl, contentSelector);
-    }
-  };
-
-  // Hosts that rate-limit hard need longer, exponential waits between tries.
-  const RATE_LIMITED = /(freewebnovel\.com|novelfull(l)?\.(net|com)|allnovelfull|allnovelnext|allnovel\.org|novelfire\.net|novelhall\.com|scribblehub\.com|novelgo\.id|novgo\.net|novelcodex\.com|novel-?next\.(com|net)|novel-?bin\.(com|net)|novelbin\.(com|me|net)|novelmax\.net|novelgate\.net|novelhulk\.net|fanfiction\.net|archiveofourown\.org|akknovel\.com|readlightnovel\.me)$/i;
-  const base = RATE_LIMITED.test(hostname) ? 1500 : 400;
-
-  let last = "";
-  for (let i = 0; i < 4; i++) {
-    try {
-      const html = await attempt();
-      if (html && html.replace(/<[^>]+>/g, "").trim().length >= 20) return html;
-      last = html;
-    } catch (e) {
-      last = "";
-    }
-    await new Promise((r) => setTimeout(r, base * Math.pow(2, i) + Math.random() * 300));
-  }
-  if (last) return last;
-  throw new Error("Chapter content appears to be empty");
-}
 
 // Kept for backwards compatibility with older imports.
 export async function fetchHtmlContent(
