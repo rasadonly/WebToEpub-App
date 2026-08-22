@@ -931,12 +931,24 @@ export async function engineFetchChapter(
       "script,style,iframe,object,embed,form,input,button,select,textarea,noscript,nav,header,footer,[class*='ad-'],[id*='ad-'],[class*='banner'],[class*='share']"
     )
     .forEach((el) => el.remove());
-  // Remove inline event handlers.
+  // Remove inline event handlers and non-standard framework attributes.
   clone.querySelectorAll('*').forEach((el) => {
     for (const attr of Array.from(el.attributes)) {
-      if (attr.name.startsWith('on')) el.removeAttribute(attr.name);
+      const name = attr.name.toLowerCase();
+      const isXmlNs = name === 'xmlns' || name.startsWith('xmlns:') || name === 'xml:lang' || name === 'xml:space';
+      if (
+        (name.includes(':') && !isXmlNs) ||
+        name.startsWith('on') ||
+        name.startsWith('x-') ||
+        name.startsWith('v-') ||
+        name.startsWith('@') ||
+        name.startsWith(':')
+      ) {
+        el.removeAttribute(attr.name);
+      }
     }
   });
+
 
   return { title, html: clone.innerHTML };
 }

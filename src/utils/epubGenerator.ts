@@ -213,14 +213,24 @@ function toXhtml(html: string): string {
       .querySelectorAll('script, style, iframe, ins, form, input, button, noscript, svg, canvas, video, audio, .left-rail, .right-rail, #sticky-nav, .sidebar, .share-tools, .part-footer-actions, .component-wrapper, .author-info, .avatar, .reading-widget, .promoted-stories-container, figure.media-share, .share-buttons, [class*="share"], [class*="social"], .btn-fan, .follow-button, .report-story, .carousel-indicators, .social-icons-container, .image-options-container, a[href*="pinterest"], a[href*="facebook.com/sharer"], a[href*="twitter.com/intent"], a[href*="tumblr.com"]')
       .forEach((el) => el.remove());
 
-    // Strip event handlers, microdata, ARIA, and other non-EPUB attributes.
+    // Strip event handlers, framework directives (Alpine.js x-bind, Vue v-bind, etc.), non-standard XML namespace colons, microdata, ARIA, and non-EPUB attributes.
     wrap.querySelectorAll('*').forEach((el) => {
       [...el.attributes].forEach((attr) => {
         const name = attr.name.toLowerCase();
+        const isXmlNs = name === 'xmlns' || name.startsWith('xmlns:') || name === 'xml:lang' || name === 'xml:space';
+        const hasColon = name.includes(':');
+
         if (
+          (hasColon && !isXmlNs) ||
           name.startsWith('on') ||
+          name.startsWith('x-') ||
+          name.startsWith('v-') ||
+          name.startsWith('@') ||
+          name.startsWith(':') ||
+          name.startsWith('?') ||
           name.startsWith('data-') ||
           name.startsWith('aria-') ||
+          name.startsWith('ng-') ||
           name === 'contenteditable' ||
           name === 'itemscope' ||
           name === 'itemprop' ||
@@ -235,6 +245,7 @@ function toXhtml(html: string): string {
         }
       });
     });
+
 
     const serialized = new XMLSerializer().serializeToString(wrap);
     // Remove the wrapper element itself, keep its children.
