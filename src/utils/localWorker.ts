@@ -306,37 +306,61 @@ async function tocNovelFire(
   const chaptersUrl = `${base}/chapters`;
 
   const firstHtml = await getText(chaptersUrl);
-  const pages = Array.from(
-    new Set(Array.from(firstHtml.matchAll(/chapters\?page=(\d+)/g)).map((m) => parseInt(m[1])))
-  ).sort((a, b) => a - b);
-  const maxPage = pages.length ? Math.max(...pages) : 1;
 
   const collectPage = (html: string): ChapterLink[] => {
     const items: ChapterLink[] = [];
     const d = parseHtml(html);
-    d.querySelectorAll(".chapter-list li a").forEach((a) => {
+    d.querySelectorAll(".chapter-list li a, #chapter-list li a").forEach((a) => {
       const href = a.getAttribute("href");
       const title = (a.textContent || '').trim();
-      if (href) items.push({ url: absoluteUrl(chaptersUrl, href), title });
+      // Only include actual chapter URLs, not nav/latest links
+      if (href && href.includes('/chapter-')) {
+        items.push({ url: absoluteUrl(chaptersUrl, href), title });
+      }
     });
     return items;
   };
 
-  const results: string[] = [];
   const firstBatch = collectPage(firstHtml);
+  const chapsPerPage = firstBatch.length || 100;
+
+  // Detect max page from pagination links
+  const paginationPages = Array.from(
+    new Set(Array.from(firstHtml.matchAll(/chapters\?page=(\d+)/g)).map((m) => parseInt(m[1])))
+  );
+  const pageFromPagination = paginationPages.length ? Math.max(...paginationPages) : 1;
+
+  // Fallback: use max="" attribute on the chapter-number input to calculate pages
+  const maxChapMatch = firstHtml.match(/max="(\d+)"/);
+  const totalChaps = maxChapMatch ? parseInt(maxChapMatch[1]) : 0;
+  const pageFromTotal = totalChaps > 0 ? Math.ceil(totalChaps / chapsPerPage) : 1;
+
+  const maxPage = Math.max(pageFromPagination, pageFromTotal);
+
+  const results: string[] = [];
   firstBatch.forEach(c => results.push(c.url));
   if (onBatch && firstBatch.length > 0) onBatch(firstBatch);
 
-  for (let p = 2; p <= maxPage; p++) {
-    try {
-      const h = await getText(`${chaptersUrl}?page=${p}`);
+  // Fetch all remaining pages in PARALLEL to avoid sequential rate-limiting
+  if (maxPage > 1) {
+    const pageNums = Array.from({ length: maxPage - 1 }, (_, i) => i + 2);
+    const htmls = await Promise.all(
+      pageNums.map(async (p) => {
+        try { return await getText(`${chaptersUrl}?page=${p}`); }
+        catch { return ''; }
+      })
+    );
+    for (const h of htmls) {
       if (h) {
         const batch = collectPage(h);
-        batch.forEach(c => results.push(c.url));
-        if (onBatch && batch.length > 0) onBatch(batch);
+        if (batch.length > 0) {
+          batch.forEach(c => results.push(c.url));
+          if (onBatch) onBatch(batch);
+        }
       }
-    } catch { /* skip */ }
+    }
   }
+
   return results;
 }
 

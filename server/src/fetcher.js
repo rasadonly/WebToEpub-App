@@ -304,33 +304,46 @@ async function tocNovelFire(url) {
   if (base.endsWith("/chapters")) base = base.slice(0, -"/chapters".length);
   const chaptersUrl = `${base}/chapters`;
   const firstHtml = await getText(chaptersUrl);
-  const pages = [...new Set([...firstHtml.matchAll(/chapters\?page=(\d+)/g)].map((m) => +m[1]))];
-  const maxPage = pages.length ? Math.max(...pages) : 1;
 
   const collect = (html) => {
     const items = [];
     parseHtml(html)
-      .querySelectorAll(".chapter-list li a")
+      .querySelectorAll(".chapter-list li a, #chapter-list li a")
       .forEach((a) => {
         const href = a.getAttribute("href");
-        if (href) items.push({ url: absoluteUrl(chaptersUrl, href), title: (a.textContent || "").trim() });
+        // Only include actual chapter URLs, not nav/latest links
+        if (href && href.includes('/chapter-'))
+          items.push({ url: absoluteUrl(chaptersUrl, href), title: (a.textContent || "").trim() });
       });
     return items;
   };
 
-  const results = collect(firstHtml);
-  const urls = [];
-  for (let p = 2; p <= maxPage; p++) urls.push(`${chaptersUrl}?page=${p}`);
-  const htmls = await mapPool(urls, 8, async (u) => {
-    try {
-      return await getText(u);
-    } catch {
-      return "";
-    }
-  });
-  htmls.forEach((h) => h && results.push(...collect(h)));
+  const firstBatch = collect(firstHtml);
+  const chapsPerPage = firstBatch.length || 100;
+
+  // Detect max page from pagination links
+  const paginationPages = [...new Set([...firstHtml.matchAll(/chapters\?page=(\d+)/g)].map((m) => +m[1]))];
+  const pageFromPagination = paginationPages.length ? Math.max(...paginationPages) : 1;
+
+  // Fallback: use max="" attribute on chapter-number input to calculate total pages
+  const maxChapMatch = firstHtml.match(/max="(\d+)"/);
+  const totalChaps = maxChapMatch ? parseInt(maxChapMatch[1]) : 0;
+  const pageFromTotal = totalChaps > 0 ? Math.ceil(totalChaps / chapsPerPage) : 1;
+
+  const maxPage = Math.max(pageFromPagination, pageFromTotal);
+
+  const results = [...firstBatch];
+  if (maxPage > 1) {
+    const pageNums = Array.from({ length: maxPage - 1 }, (_, i) => i + 2);
+    const htmls = await mapPool(pageNums, 8, async (p) => {
+      try { return await getText(`${chaptersUrl}?page=${p}`); }
+      catch { return ""; }
+    });
+    htmls.forEach((h) => h && results.push(...collect(h)));
+  }
   return results;
 }
+
 
 async function tocNovGo(url) {
   const html = await getText(url);
