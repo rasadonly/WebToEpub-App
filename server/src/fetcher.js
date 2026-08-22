@@ -2399,7 +2399,7 @@ const MAJOR_SITES = [
   [/(^|\.)fictionpress\.com$/, "fanfiction"],
   [/(^|\.)archiveofourown\.org$/, "ao3"],
   [
-    /(^|\.)(lightnovelworld\.(com|co)|lightnovelcave\.com|lightnovelpub\.(com|fan)|novelpub\.com|webnovelpub\.(com|pro)|pandanovel\.co|novelbob\.org|findnovel\.net|lightnovelstranslations\.com)$/,
+    /(^|\.)(lightnovelworld\.(com|co)|lightnovelcave\.com|lightnovelpub\.(com|fan)|novelpub\.com|webnovelpub\.(com|pro)|pandanovel\.co|novelbob\.org|lightnovelstranslations\.com)$/,
     "lightnovelworld",
   ],
   [/(^|\.)ranobes\.(top|net|com)$/, "ranobes"],
@@ -2450,7 +2450,7 @@ function siteKey(hostname) {
   const host = String(hostname || "").toLowerCase().replace(/^www\./, "");
   if (host.includes("novelhall.com")) return "novelhall";
   if (host.includes("freewebnovel.com")) return "freewebnovel";
-  if (host.includes("novelfire.")) return "novelfire";
+  if (host.includes("novelfire.") || host.includes("findnovel.net") || host.includes("novelcake.") || host.includes("readfromhome.")) return "novelfire";
   if (host.includes("novgo.")) return "novgo";
   if (host.includes("novelbuddy.com")) return "novelbuddy";
   if (host.includes("novelarrow.com")) return "novelarrow";

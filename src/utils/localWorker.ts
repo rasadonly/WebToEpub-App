@@ -588,7 +588,7 @@ async function bodyGeneric(url: string, selector: string): Promise<string> {
 export function siteKey(hostname: string): string {
   if (hostname.includes("novelhall.com")) return "novelhall";
   if (hostname.includes("freewebnovel.com")) return "freewebnovel";
-  if (hostname.includes("novelfire.")) return "novelfire";
+  if (hostname.includes("novelfire.") || hostname.includes("findnovel.net") || hostname.includes("novelcake.") || hostname.includes("readfromhome.")) return "novelfire";
   if (hostname.includes("novgo.")) return "novgo";
   if (hostname.includes("novelbuddy.com")) return "novelbuddy";
   if (hostname.includes("novelarrow.com")) return "novelarrow";
