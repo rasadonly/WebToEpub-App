@@ -77,10 +77,20 @@ function toXhtml(html = "") {
     wrap.querySelectorAll("*").forEach((el) => {
       [...el.attributes].forEach((attr) => {
         const name = attr.name.toLowerCase();
+        const isXmlNs = name === "xmlns" || name.startsWith("xmlns:") || name === "xml:lang" || name === "xml:space";
+        const hasColon = name.includes(":");
+
         if (
+          (hasColon && !isXmlNs) ||
           name.startsWith("on") ||
+          name.startsWith("x-") ||
+          name.startsWith("v-") ||
+          name.startsWith("@") ||
+          name.startsWith(":") ||
+          name.startsWith("?") ||
           name.startsWith("data-") ||
           name.startsWith("aria-") ||
+          name.startsWith("ng-") ||
           name === "contenteditable" ||
           name === "itemscope" ||
           name === "itemprop" ||
@@ -95,6 +105,7 @@ function toXhtml(html = "") {
         }
       });
     });
+
 
     const clean = wrap.innerHTML
       .replace(/<(img|br|hr|input|meta|link|embed|source|param|track|wbr)(\s+[^>]*?)?(?<!\/)>/gi, '<$1$2 />')
