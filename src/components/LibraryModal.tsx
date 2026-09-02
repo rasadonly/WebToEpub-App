@@ -52,6 +52,8 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
   const [megaUrl, setMegaUrl] = useState(DEFAULT_MEGA_URL);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_BOOKS);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
