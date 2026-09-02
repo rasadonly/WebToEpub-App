@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { X, Send, Cloud, Archive, Loader2, Download, Search, BookOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,6 +52,8 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
   const [megaUrl, setMegaUrl] = useState(DEFAULT_MEGA_URL);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_BOOKS);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -143,6 +145,29 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
   );
   const visibleBooks = filtered.slice(0, visibleCount);
 
+  // Reset paging whenever the search or tab changes
+  useEffect(() => {
+    setVisibleCount(INITIAL_VISIBLE_BOOKS);
+  }, [query, tab]);
+
+  // Infinite scroll: append more books when the sentinel scrolls into view
+  useEffect(() => {
+    if (!open || loading) return;
+    const sentinel = sentinelRef.current;
+    const root = scrollRef.current;
+    if (!sentinel || !root || visibleCount >= filtered.length) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setVisibleCount((count) => Math.min(count + LOAD_MORE_COUNT, filtered.length));
+        }
+      },
+      { root, rootMargin: '400px' }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [open, loading, tab, visibleCount, filtered.length]);
+
   if (!open) return null;
 
   return (
@@ -211,7 +236,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto p-4">
           {loading && (
             <div className="flex items-center justify-center h-full gap-2 text-muted-foreground">
               <Loader2 className="w-5 h-5 animate-spin" />
@@ -306,15 +331,25 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
                 ))}
               </div>
               {visibleCount < filtered.length && (
-                <div className="flex justify-center pt-5">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setVisibleCount((count) => count + LOAD_MORE_COUNT)}
-                  >
-                    Load more
-                  </Button>
-                </div>
+                <>
+                  <div ref={sentinelRef} className="h-px w-full" aria-hidden="true" />
+                  <div className="flex justify-center gap-2 pt-5">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setVisibleCount((count) => Math.min(count + LOAD_MORE_COUNT, filtered.length))}
+                    >
+                      Load more
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setVisibleCount(filtered.length)}
+                    >
+                      Show all ({filtered.length})
+                    </Button>
+                  </div>
+                </>
               )}
             </>
           )}
