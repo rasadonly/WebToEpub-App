@@ -143,6 +143,29 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
   );
   const visibleBooks = filtered.slice(0, visibleCount);
 
+  // Reset paging whenever the search or tab changes
+  useEffect(() => {
+    setVisibleCount(INITIAL_VISIBLE_BOOKS);
+  }, [query, tab]);
+
+  // Infinite scroll: append more books when the sentinel scrolls into view
+  useEffect(() => {
+    if (!open || loading) return;
+    const sentinel = sentinelRef.current;
+    const root = scrollRef.current;
+    if (!sentinel || !root || visibleCount >= filtered.length) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setVisibleCount((count) => Math.min(count + LOAD_MORE_COUNT, filtered.length));
+        }
+      },
+      { root, rootMargin: '400px' }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [open, loading, tab, visibleCount, filtered.length]);
+
   if (!open) return null;
 
   return (
