@@ -306,15 +306,25 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
                 ))}
               </div>
               {visibleCount < filtered.length && (
-                <div className="flex justify-center pt-5">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setVisibleCount((count) => count + LOAD_MORE_COUNT)}
-                  >
-                    Load more
-                  </Button>
-                </div>
+                <>
+                  <div ref={sentinelRef} className="h-px w-full" aria-hidden="true" />
+                  <div className="flex justify-center gap-2 pt-5">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setVisibleCount((count) => Math.min(count + LOAD_MORE_COUNT, filtered.length))}
+                    >
+                      Load more
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setVisibleCount(filtered.length)}
+                    >
+                      Show all ({filtered.length})
+                    </Button>
+                  </div>
+                </>
               )}
             </>
           )}
