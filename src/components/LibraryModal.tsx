@@ -211,7 +211,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto p-4">
           {loading && (
             <div className="flex items-center justify-center h-full gap-2 text-muted-foreground">
               <Loader2 className="w-5 h-5 animate-spin" />
