@@ -115,7 +115,7 @@ const RETRY_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
  */
 const CF_PROTECTED = [
   /(^|\.)zenithtls\.com$/i,
-  /(^|\.)cherrymist\.cafe$/i,
+  // cherrymist.cafe HTML pages are directly accessible — no CF interstitial
   /(^|\.)novgo\.(net|com)$/i,
   /(^|\.)novelgo\.id$/i,
   /(^|\.)novelfire\.(net|com|io)$/i,
@@ -618,10 +618,11 @@ async function wtrlabReaderGet(payload) {
 
 /** True when a block of text is mostly non-Latin (i.e. still needs translating). */
 function needsTranslation(text) {
-  const sample = String(text || "").slice(0, 2000);
+  const sample = String(text || "").slice(0, 4000);
   if (!sample.trim()) return false;
   const cjk = (sample.match(/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/g) || []).length;
-  return cjk > sample.length * 0.05;
+  // Lower threshold (0.03 instead of 0.05) so mixed chapters are caught
+  return cjk > sample.length * 0.03;
 }
 
 /** One call to a public translate endpoint. Returns "" when the route fails. */
@@ -661,6 +662,18 @@ async function translateOnce(text) {
       }
       return "";
     },
+    // MyMemory — free, generous quota, good quality for CJK→EN
+    async () => {
+      const res = await fetch(
+        "https://api.mymemory.translated.net/get?q=" +
+          encodeURIComponent(text.slice(0, 500)) +
+          "&langpair=zh|en",
+        { headers: { "User-Agent": UA } }
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      return json?.responseData?.translatedText || "";
+    },
     async () => {
       const res = await fetch(
         "https://lingva.ml/api/v1/auto/en/" + encodeURIComponent(text),
@@ -674,7 +687,7 @@ async function translateOnce(text) {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const out = await call();
-        if (out && out.trim()) return out;
+        if (out && out.trim() && !out.includes("MYMEMORY WARNING")) return out;
       } catch {
         /* next attempt / endpoint */
       }
@@ -692,7 +705,9 @@ async function translateOnce(text) {
  */
 async function translateToEnglish(paragraphs) {
   if (!paragraphs.length) return paragraphs;
-  if (!needsTranslation(paragraphs.slice(0, 8).join(" "))) return paragraphs;
+  // Sample broadly — first 8 paras might be English headings before Chinese body text
+  const sample = paragraphs.slice(0, 25).join(" ");
+  if (!needsTranslation(sample)) return paragraphs;
 
   const SEP = "\n";
   const out = [];
@@ -785,24 +800,31 @@ async function bodyWtrLab(chapterUrl) {
     // times before giving up, otherwise the chapter lands in the book blank.
     let decrypted = null;
     let lastErr = null;
-    for (let attempt = 0; attempt < 3 && !decrypted; attempt++) {
+    for (let attempt = 0; attempt < 4 && !decrypted; attempt++) {
       try {
         const wp = await wtrlabReaderGet({
           ...base,
           translate: "webplus",
           retry: attempt > 0,
+          // On 3rd attempt, force the server to re-generate the translation
+          force_retry: attempt >= 2,
         });
         title = wp?.chapter?.title || title;
+        const wpStatus = wp?.data?.status;
         const enc = wp?.data?.data?.body;
         if (typeof enc === "string" && enc.length) {
           const d = decryptWtrlabBody(enc);
           const arr = Array.isArray(d) ? d : [d];
           if (arr.filter((p) => String(p).trim()).length) decrypted = arr;
+        } else if (wpStatus !== undefined && wpStatus !== 0) {
+          // Server is still processing — back off longer
+          await sleep(1500 * (attempt + 1));
+          continue;
         }
       } catch (e) {
         lastErr = e;
       }
-      if (!decrypted) await sleep(700 * (attempt + 1));
+      if (!decrypted) await sleep(900 * (attempt + 1));
     }
     if (!decrypted) {
       throw new Error(
@@ -864,6 +886,55 @@ async function tocWattpad(url) {
     url: p.url?.startsWith("http") ? p.url : `https://www.wattpad.com/${p.id}`,
     title: p.title || `Chapter ${i + 1}`,
   }));
+}
+
+// ---------------- Fictioneer / cherrymist.cafe ----------------
+
+/**
+ * Parse a Fictioneer story page (e.g. cherrymist.cafe/story/SLUG/).
+ * Chapter list lives in <ol class="chapter-group__list"> with <li._publish a>.
+ * Fictioneer uses single-quoted href attributes, so we combine DOM + regex.
+ */
+async function tocCherrymist(url) {
+  const html = await getText(url);
+  const doc = parseHtml(html);
+  const items = [];
+
+  // DOM query first (linkedom handles single-quote attrs)
+  doc
+    .querySelectorAll('.chapter-group__list ._publish a, .chapter-group__list-item._publish a')
+    .forEach((a) => {
+      const href = a.getAttribute('href');
+      const title = (a.textContent || '').trim();
+      if (href && href.includes('/chapter/')) {
+        items.push({ url: absoluteUrl(url, href), title });
+      }
+    });
+
+  // Fallback: regex for single-quoted hrefs (some Fictioneer versions)
+  if (!items.length) {
+    const seenUrls = new Set();
+    for (const m of html.matchAll(/href='(https?:\/\/[^']+\/chapter\/[^']+)'/g)) {
+      if (!seenUrls.has(m[1])) {
+        seenUrls.add(m[1]);
+        items.push({ url: m[1], title: '' });
+      }
+    }
+    // Try to recover titles from surrounding text
+    const titleMatches = [...html.matchAll(/chapter-group__list-item-link[^>]+>\s*([^<\n]+?)\s*<\/a/g)];
+    items.forEach((item, i) => {
+      if (!item.title && titleMatches[i]) item.title = titleMatches[i][1].trim();
+    });
+  }
+
+  return items;
+}
+
+async function bodyCherrymist(url) {
+  return extractWithSelector(
+    parseHtml(await getText(url)),
+    '.chapter__content, .chapter-formatting, #chapter-content, .entry-content'
+  );
 }
 
 // ---------------- Body parsers ----------------
@@ -2612,6 +2683,8 @@ function siteKey(hostname) {
   if (host.includes("freewebnovel.com")) return "freewebnovel";
   if (host.includes("novelfire.") || host.includes("findnovel.net") || host.includes("novelcake.") || host.includes("readfromhome.")) return "novelfire";
   if (host.includes("novgo.")) return "novgo";
+  if (host.includes("cherrymist.cafe")) return "cherrymist";
+  if (host.includes("zenithtls.com")) return "zenithtls";
   if (host.includes("novelbuddy.com")) return "novelbuddy";
   if (host.includes("novelarrow.com")) return "novelarrow";
   if (host.includes("novelfull.net")) return "novelfullnet";
@@ -2674,6 +2747,8 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         return tocWtrLab(tocUrl);
       case "wattpad":
         return tocWattpad(tocUrl);
+      case "cherrymist":
+        return tocCherrymist(tocUrl);
       case "royalroad":
         return tocRoyalRoad(tocUrl);
       case "scribblehub":
@@ -2814,6 +2889,10 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
         return bodyWattpad(chapterUrl);
       case "wtrlab":
         return bodyWtrLab(chapterUrl);
+      case "cherrymist":
+        return bodyCherrymist(chapterUrl);
+      case "zenithtls":
+        return bodyGeneric(chapterUrl, '.chapter__content, article, .entry-content');
       case "readnovelmtl":
         return bodyReadNovelMtl(chapterUrl);
       // New sites

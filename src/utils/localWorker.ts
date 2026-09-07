@@ -614,6 +614,8 @@ export function siteKey(hostname: string): string {
   if (hostname.includes("freewebnovel.com")) return "freewebnovel";
   if (hostname.includes("novelfire.") || hostname.includes("findnovel.net") || hostname.includes("novelcake.") || hostname.includes("readfromhome.")) return "novelfire";
   if (hostname.includes("novgo.")) return "novgo";
+  if (hostname.includes("cherrymist.cafe")) return "cherrymist";
+  if (hostname.includes("zenithtls.com")) return "zenithtls";
   if (hostname.includes("novelbuddy.com")) return "novelbuddy";
   if (hostname.includes("novelarrow.com")) return "novelarrow";
   if (hostname.includes("novelfull.net")) return "novelfullnet";
@@ -1011,6 +1013,49 @@ export async function fetchChaptersFull(
  * in the UI progressively rather than all at once at the end.
  * Returns the complete flat list when all pages are done.
  */
+/**
+ * Fictioneer (cherrymist.cafe, similar sites) chapter list.
+ * Chapter links are in <ol class="chapter-group__list"> with <li._publish a>.
+ * Uses single-quoted href attributes in HTML.
+ */
+async function tocCherrymist(
+  url: string,
+  onBatch?: OnChapterBatch
+): Promise<string[]> {
+  const html = await getText(url);
+  const doc = parseHtml(html);
+  const items: ChapterLink[] = [];
+
+  // linkedom handles single-quote href attrs
+  doc
+    .querySelectorAll('.chapter-group__list ._publish a, .chapter-group__list-item._publish a')
+    .forEach((a) => {
+      const href = a.getAttribute('href');
+      const title = (a.textContent || '').trim();
+      if (href && href.includes('/chapter/')) {
+        items.push({ url: absoluteUrl(url, href), title });
+      }
+    });
+
+  // Fallback: regex scan for single-quoted chapter hrefs
+  if (!items.length) {
+    const seen = new Set<string>();
+    const titleMatches = [...html.matchAll(/chapter-group__list-item-link[^>]+>\s*([^<\n]+?)\s*<\/a/g)];
+    let idx = 0;
+    for (const m of html.matchAll(/href='(https?:\/\/[^']+\/chapter\/[^']+)'/g)) {
+      if (!seen.has(m[1])) {
+        seen.add(m[1]);
+        items.push({ url: m[1], title: titleMatches[idx]?.[1]?.trim() || '' });
+        idx++;
+      }
+    }
+  }
+
+  const urls = items.map(c => c.url);
+  if (onBatch && items.length) onBatch(items);
+  return urls;
+}
+
 export async function fetchChapterLinksLive(
   tocUrl: string,
   linkSelector: string,
@@ -1033,6 +1078,7 @@ export async function fetchChapterLinksLive(
       case "novelfull":    await tocNovelFull(tocUrl, wrap); break;
       case "novelbin":     await tocNovelBin(tocUrl, wrap); break;
       case "wtrlab":       await tocWtrLab(tocUrl, wrap); break;
+      case "cherrymist":   await tocCherrymist(tocUrl, wrap); break;
       default: {
         // For sites that return everything at once (API-based / single-page),
         // fetch and emit one batch so the UI still updates.

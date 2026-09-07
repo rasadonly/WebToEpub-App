@@ -43,7 +43,9 @@ export const BACKEND_SUPPORTED_HOSTS: readonly string[] = [
   'syosetu.com', 'kakuyomu.jp',
   'novelcool.com',
   'archiveofourown.org', 'fanfiction.net',
-  'boxnovel.com', 'wuxiaworld.site', 'foxaholic.com', 'znovel.com'
+  'boxnovel.com', 'wuxiaworld.site', 'foxaholic.com', 'znovel.com',
+  'cherrymist.cafe',
+  'zenithtls.com',
 ];
 
 /** Domains reported live by the backend's /api/sites (526+ entries). */
