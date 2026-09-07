@@ -108,6 +108,39 @@ const blockedHosts = {
 
 const RETRY_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
 
+/**
+ * Hosts sitting behind a Cloudflare "Just a moment…" interstitial. A plain
+ * server fetch always gets the challenge page, so we go through the rendering
+ * proxies first (they solve it) and only try direct as a last resort.
+ */
+const CF_PROTECTED = [
+  /(^|\.)zenithtls\.com$/i,
+  /(^|\.)cherrymist\.cafe$/i,
+  /(^|\.)novgo\.(net|com)$/i,
+  /(^|\.)novelgo\.id$/i,
+  /(^|\.)novelfire\.(net|com|io)$/i,
+  /(^|\.)novelbuddy\.(com|io)$/i,
+];
+
+function isCfProtected(host) {
+  return CF_PROTECTED.some((re) => re.test(host));
+}
+
+function proxyOrderFor(host) {
+  if (!isCfProtected(host)) return PROXIES;
+  return [...PROXIES.filter(Boolean), ""];
+}
+
+/** True when the HTML we got back is a Cloudflare/bot interstitial, not content. */
+function looksLikeChallenge(text) {
+  const head = String(text || "").slice(0, 5000);
+  return (
+    /<title>\s*Just a moment/i.test(head) ||
+    /cf-browser-verification|challenge-platform|cf_chl_opt|Checking your browser before/i.test(head) ||
+    /Enable JavaScript and cookies to continue/i.test(head)
+  );
+}
+
 const INKITT_COOKIE =
   "user_credentials=4be4b2f459c9113e1a86bad353c1c89e9886c0285d11bf7cb9441e3f3f61278655ae43c8e47c607dfc31ccd985f88faa3e216542766d50d0b1b2d2fc181e4889%3A%3A12744546%3A%3A2026-09-16T06%3A16%3A52Z; _rocky_session_1=92ea8ac4dcdd4c3c8b169a722c1e9f36; __stripe_mid=94754462-ddb8-4b14-ba53-f09d65f073847cf17b";
 
@@ -117,14 +150,16 @@ async function httpGet(url, extra = {}, timeoutMs = 7000) {
   const origin = parsed.origin;
   let lastErr = null;
   let uaIndex = 0;
+  // Rendering proxies need much longer than a direct fetch.
+  const effTimeout = isCfProtected(host) ? Math.max(timeoutMs, 45000) : timeoutMs;
 
   const lease = await throttle(host);
   try {
     for (let attempt = 0; attempt < 3; attempt++) {
-      for (const proxy of PROXIES) {
+      for (const proxy of proxyOrderFor(host)) {
         if (!proxy && blockedHosts.has(host)) continue;
         const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+        const timer = setTimeout(() => ctrl.abort(), effTimeout);
         try {
           const headers = {
             ...DEFAULT_HEADERS,
@@ -146,6 +181,20 @@ async function httpGet(url, extra = {}, timeoutMs = 7000) {
             redirect: "follow",
           });
           if (r.ok) {
+            const ct = r.headers.get("content-type") || "";
+            if (/html|text\/plain/i.test(ct)) {
+              const text = await r.text();
+              if (looksLikeChallenge(text)) {
+                if (!proxy) blockedHosts.add(host);
+                lastErr = new Error("Cloudflare challenge");
+                continue; // this route is blocked — try the next one
+              }
+              if (!proxy) blockedHosts.delete(host);
+              return new Response(text, {
+                status: 200,
+                headers: { "content-type": ct || "text/html; charset=utf-8" },
+              });
+            }
             if (!proxy) blockedHosts.delete(host);
             return r;
           }
@@ -567,21 +616,18 @@ async function wtrlabReaderGet(payload) {
   throw lastErr || new Error("wtr-lab reader request failed");
 }
 
-/** Translates raw paragraphs to English via the public Google translate endpoint. */
-async function translateToEnglish(paragraphs) {
-  if (!paragraphs.length) return paragraphs;
-  const sample = paragraphs.slice(0, 5).join(" ");
-  const latin = (sample.match(/[a-zA-Z]/g) || []).length;
-  if (latin > sample.length * 0.5) return paragraphs; // already English
+/** True when a block of text is mostly non-Latin (i.e. still needs translating). */
+function needsTranslation(text) {
+  const sample = String(text || "").slice(0, 2000);
+  if (!sample.trim()) return false;
+  const cjk = (sample.match(/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/g) || []).length;
+  return cjk > sample.length * 0.05;
+}
 
-  const out = [];
-  const SEP = "\n\n";
-  let batch = [];
-  let size = 0;
-  const flush = async () => {
-    if (!batch.length) return;
-    const text = batch.join(SEP);
-    try {
+/** One call to a public translate endpoint. Returns "" when the route fails. */
+async function translateOnce(text) {
+  const endpoints = [
+    async () => {
       const res = await fetch(
         "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t",
         {
@@ -593,20 +639,89 @@ async function translateToEnglish(paragraphs) {
           body: "q=" + encodeURIComponent(text),
         }
       );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
-      let translated = "";
-      for (const part of json?.[0] || []) if (part?.[0]) translated += part[0];
-      const pieces = translated.split(SEP).map((s) => s.trim());
-      out.push(...(pieces.length === batch.length ? pieces : [translated]));
-    } catch {
-      out.push(...batch); // fall back to the raw text rather than failing the chapter
+      let out = "";
+      for (const part of json?.[0] || []) if (part?.[0]) out += part[0];
+      return out;
+    },
+    async () => {
+      const res = await fetch(
+        "https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=auto&tl=en&q=" +
+          encodeURIComponent(text),
+        { headers: { "User-Agent": UA } }
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      if (Array.isArray(json)) {
+        return json
+          .map((p) => (Array.isArray(p) ? p[0] : p))
+          .filter((p) => typeof p === "string")
+          .join("");
+      }
+      return "";
+    },
+    async () => {
+      const res = await fetch(
+        "https://lingva.ml/api/v1/auto/en/" + encodeURIComponent(text),
+        { headers: { "User-Agent": UA } }
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return (await res.json())?.translation || "";
+    },
+  ];
+  for (const call of endpoints) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const out = await call();
+        if (out && out.trim()) return out;
+      } catch {
+        /* next attempt / endpoint */
+      }
+      await sleep(300 * (attempt + 1));
     }
+  }
+  return "";
+}
+
+/**
+ * Translates raw paragraphs to English. Paragraphs are sent in small batches
+ * separated by a newline; when the batch comes back with a different paragraph
+ * count we re-translate that batch one paragraph at a time so nothing is lost
+ * or misaligned (this was the cause of chapters staying in Chinese).
+ */
+async function translateToEnglish(paragraphs) {
+  if (!paragraphs.length) return paragraphs;
+  if (!needsTranslation(paragraphs.slice(0, 8).join(" "))) return paragraphs;
+
+  const SEP = "\n";
+  const out = [];
+  let batch = [];
+  let size = 0;
+
+  const flush = async () => {
+    if (!batch.length) return;
+    const current = batch;
     batch = [];
     size = 0;
+    const translated = await translateOnce(current.join(SEP));
+    const pieces = translated
+      ? translated.split(/\n+/).map((s) => s.trim()).filter(Boolean)
+      : [];
+    if (pieces.length === current.length) {
+      out.push(...pieces);
+      return;
+    }
+    // Misaligned (or failed) — translate each paragraph on its own.
+    for (const p of current) {
+      const one = await translateOnce(p);
+      out.push(one && one.trim() ? one.trim() : p);
+    }
   };
+
   for (const p of paragraphs) {
-    if (size + p.length > 1800) await flush();
-    batch.push(p);
+    if (size + p.length > 1500) await flush();
+    batch.push(String(p));
     size += p.length + SEP.length;
   }
   await flush();
@@ -666,15 +781,35 @@ async function bodyWtrLab(chapterUrl) {
 
 
   if (!paragraphs) {
-    const wp = await wtrlabReaderGet({ ...base, translate: "webplus" });
-    title = wp?.chapter?.title || title;
-    const enc = wp?.data?.data?.body;
-    if (typeof enc !== "string" || !enc.length) {
-      throw new Error(`wtr-lab returned no content for chapter ${chapterNo}`);
+    // webplus may need a moment on first request for a chapter — retry a few
+    // times before giving up, otherwise the chapter lands in the book blank.
+    let decrypted = null;
+    let lastErr = null;
+    for (let attempt = 0; attempt < 3 && !decrypted; attempt++) {
+      try {
+        const wp = await wtrlabReaderGet({
+          ...base,
+          translate: "webplus",
+          retry: attempt > 0,
+        });
+        title = wp?.chapter?.title || title;
+        const enc = wp?.data?.data?.body;
+        if (typeof enc === "string" && enc.length) {
+          const d = decryptWtrlabBody(enc);
+          const arr = Array.isArray(d) ? d : [d];
+          if (arr.filter((p) => String(p).trim()).length) decrypted = arr;
+        }
+      } catch (e) {
+        lastErr = e;
+      }
+      if (!decrypted) await sleep(700 * (attempt + 1));
     }
-    const decrypted = decryptWtrlabBody(enc);
-    paragraphs = Array.isArray(decrypted) ? decrypted : [decrypted];
-    paragraphs = await translateToEnglish(paragraphs.filter((p) => String(p).trim()));
+    if (!decrypted) {
+      throw new Error(
+        `wtr-lab returned no content for chapter ${chapterNo}${lastErr ? `: ${lastErr.message}` : ""}`
+      );
+    }
+    paragraphs = decrypted.filter((p) => String(p).trim());
   }
 
   // AI bodies use ※n⛬ placeholders that map into the chapter glossary.
@@ -690,6 +825,18 @@ async function bodyWtrLab(chapterUrl) {
       }
       return text;
     });
+  }
+
+  // Whatever route produced the text (AI or webplus), auto-translate anything
+  // that came back in the original language so the EPUB is always English.
+  paragraphs = await translateToEnglish(paragraphs.map((p) => String(p)));
+  if (title && needsTranslation(title)) {
+    const t = await translateOnce(title);
+    if (t.trim()) title = t.trim();
+  }
+  paragraphs = paragraphs.filter((p) => String(p).trim());
+  if (!paragraphs.length) {
+    throw new Error(`wtr-lab returned no content for chapter ${chapterNo}`);
   }
 
   const esc = (s) =>
