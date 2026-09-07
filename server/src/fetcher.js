@@ -616,21 +616,18 @@ async function wtrlabReaderGet(payload) {
   throw lastErr || new Error("wtr-lab reader request failed");
 }
 
-/** Translates raw paragraphs to English via the public Google translate endpoint. */
-async function translateToEnglish(paragraphs) {
-  if (!paragraphs.length) return paragraphs;
-  const sample = paragraphs.slice(0, 5).join(" ");
-  const latin = (sample.match(/[a-zA-Z]/g) || []).length;
-  if (latin > sample.length * 0.5) return paragraphs; // already English
+/** True when a block of text is mostly non-Latin (i.e. still needs translating). */
+function needsTranslation(text) {
+  const sample = String(text || "").slice(0, 2000);
+  if (!sample.trim()) return false;
+  const cjk = (sample.match(/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/g) || []).length;
+  return cjk > sample.length * 0.05;
+}
 
-  const out = [];
-  const SEP = "\n\n";
-  let batch = [];
-  let size = 0;
-  const flush = async () => {
-    if (!batch.length) return;
-    const text = batch.join(SEP);
-    try {
+/** One call to a public translate endpoint. Returns "" when the route fails. */
+async function translateOnce(text) {
+  const endpoints = [
+    async () => {
       const res = await fetch(
         "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t",
         {
@@ -642,20 +639,89 @@ async function translateToEnglish(paragraphs) {
           body: "q=" + encodeURIComponent(text),
         }
       );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
-      let translated = "";
-      for (const part of json?.[0] || []) if (part?.[0]) translated += part[0];
-      const pieces = translated.split(SEP).map((s) => s.trim());
-      out.push(...(pieces.length === batch.length ? pieces : [translated]));
-    } catch {
-      out.push(...batch); // fall back to the raw text rather than failing the chapter
+      let out = "";
+      for (const part of json?.[0] || []) if (part?.[0]) out += part[0];
+      return out;
+    },
+    async () => {
+      const res = await fetch(
+        "https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=auto&tl=en&q=" +
+          encodeURIComponent(text),
+        { headers: { "User-Agent": UA } }
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      if (Array.isArray(json)) {
+        return json
+          .map((p) => (Array.isArray(p) ? p[0] : p))
+          .filter((p) => typeof p === "string")
+          .join("");
+      }
+      return "";
+    },
+    async () => {
+      const res = await fetch(
+        "https://lingva.ml/api/v1/auto/en/" + encodeURIComponent(text),
+        { headers: { "User-Agent": UA } }
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return (await res.json())?.translation || "";
+    },
+  ];
+  for (const call of endpoints) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const out = await call();
+        if (out && out.trim()) return out;
+      } catch {
+        /* next attempt / endpoint */
+      }
+      await sleep(300 * (attempt + 1));
     }
+  }
+  return "";
+}
+
+/**
+ * Translates raw paragraphs to English. Paragraphs are sent in small batches
+ * separated by a newline; when the batch comes back with a different paragraph
+ * count we re-translate that batch one paragraph at a time so nothing is lost
+ * or misaligned (this was the cause of chapters staying in Chinese).
+ */
+async function translateToEnglish(paragraphs) {
+  if (!paragraphs.length) return paragraphs;
+  if (!needsTranslation(paragraphs.slice(0, 8).join(" "))) return paragraphs;
+
+  const SEP = "\n";
+  const out = [];
+  let batch = [];
+  let size = 0;
+
+  const flush = async () => {
+    if (!batch.length) return;
+    const current = batch;
     batch = [];
     size = 0;
+    const translated = await translateOnce(current.join(SEP));
+    const pieces = translated
+      ? translated.split(/\n+/).map((s) => s.trim()).filter(Boolean)
+      : [];
+    if (pieces.length === current.length) {
+      out.push(...pieces);
+      return;
+    }
+    // Misaligned (or failed) — translate each paragraph on its own.
+    for (const p of current) {
+      const one = await translateOnce(p);
+      out.push(one && one.trim() ? one.trim() : p);
+    }
   };
+
   for (const p of paragraphs) {
-    if (size + p.length > 1800) await flush();
-    batch.push(p);
+    if (size + p.length > 1500) await flush();
+    batch.push(String(p));
     size += p.length + SEP.length;
   }
   await flush();
