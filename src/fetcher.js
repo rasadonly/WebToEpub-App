@@ -781,15 +781,35 @@ async function bodyWtrLab(chapterUrl) {
 
 
   if (!paragraphs) {
-    const wp = await wtrlabReaderGet({ ...base, translate: "webplus" });
-    title = wp?.chapter?.title || title;
-    const enc = wp?.data?.data?.body;
-    if (typeof enc !== "string" || !enc.length) {
-      throw new Error(`wtr-lab returned no content for chapter ${chapterNo}`);
+    // webplus may need a moment on first request for a chapter — retry a few
+    // times before giving up, otherwise the chapter lands in the book blank.
+    let decrypted = null;
+    let lastErr = null;
+    for (let attempt = 0; attempt < 3 && !decrypted; attempt++) {
+      try {
+        const wp = await wtrlabReaderGet({
+          ...base,
+          translate: "webplus",
+          retry: attempt > 0,
+        });
+        title = wp?.chapter?.title || title;
+        const enc = wp?.data?.data?.body;
+        if (typeof enc === "string" && enc.length) {
+          const d = decryptWtrlabBody(enc);
+          const arr = Array.isArray(d) ? d : [d];
+          if (arr.filter((p) => String(p).trim()).length) decrypted = arr;
+        }
+      } catch (e) {
+        lastErr = e;
+      }
+      if (!decrypted) await sleep(700 * (attempt + 1));
     }
-    const decrypted = decryptWtrlabBody(enc);
-    paragraphs = Array.isArray(decrypted) ? decrypted : [decrypted];
-    paragraphs = await translateToEnglish(paragraphs.filter((p) => String(p).trim()));
+    if (!decrypted) {
+      throw new Error(
+        `wtr-lab returned no content for chapter ${chapterNo}${lastErr ? `: ${lastErr.message}` : ""}`
+      );
+    }
+    paragraphs = decrypted.filter((p) => String(p).trim());
   }
 
   // AI bodies use ※n⛬ placeholders that map into the chapter glossary.
@@ -805,6 +825,18 @@ async function bodyWtrLab(chapterUrl) {
       }
       return text;
     });
+  }
+
+  // Whatever route produced the text (AI or webplus), auto-translate anything
+  // that came back in the original language so the EPUB is always English.
+  paragraphs = await translateToEnglish(paragraphs.map((p) => String(p)));
+  if (title && needsTranslation(title)) {
+    const t = await translateOnce(title);
+    if (t.trim()) title = t.trim();
+  }
+  paragraphs = paragraphs.filter((p) => String(p).trim());
+  if (!paragraphs.length) {
+    throw new Error(`wtr-lab returned no content for chapter ${chapterNo}`);
   }
 
   const esc = (s) =>
