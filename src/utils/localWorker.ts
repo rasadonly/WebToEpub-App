@@ -616,6 +616,10 @@ export function siteKey(hostname: string): string {
   if (hostname.includes("novgo.")) return "novgo";
   if (hostname.includes("cherrymist.cafe")) return "cherrymist";
   if (hostname.includes("zenithtls.com")) return "zenithtls";
+  if (hostname.includes("hako.vn") || hostname.includes("docln.")) return "hako";
+  if (hostname.includes("kanunu8.com") || hostname.includes("kanunu.")) return "kanunu";
+  if (hostname.includes("tianyabooks.com")) return "tianya";
+  if (hostname.includes("readthedrama.com")) return "readthedrama";
   if (hostname.includes("novelbuddy.com")) return "novelbuddy";
   if (hostname.includes("novelarrow.com")) return "novelarrow";
   if (hostname.includes("novelfull.net")) return "novelfullnet";
@@ -764,6 +768,14 @@ async function fetchChapterContent(url: string, selector: string): Promise<strin
         const doc = parseHtml(await getText(url));
         return extractWithSelector(doc, "#content, .chapter-content, #chr-content");
       }
+      case "hako":
+        return bodyGeneric(url, "#chapter-content, .long-text, .chapter-content");
+      case "kanunu":
+        return bodyGeneric(url, "#neirong, .neirong, .book-content");
+      case "tianya":
+        return bodyGeneric(url, ".article, .container");
+      case "readthedrama":
+        return bodyGeneric(url, ".chapter-content, article .prose, article");
       case "inkitt": return bodyInkitt(url);
       case "novelight": return bodyNovelight(url);
 
@@ -955,6 +967,29 @@ export async function fetchChapterLinks(tocUrl: string, linkSelector: string): P
             if (href) out.push(absoluteUrl(origin, href));
           });
         }
+        return out;
+      }
+      case "hako":
+      case "kanunu":
+      case "tianya":
+      case "readthedrama": {
+        const doc = parseHtml(await getText(tocUrl));
+        const sel =
+          key === "hako"
+            ? ".chapter-name a, .list-chapters a, ul.list-chapters li a"
+            : key === "readthedrama"
+              ? 'a[href*="/chapters/"]'
+              : ".mulu-list a, .idx-list a";
+        const out: string[] = [];
+        const seen = new Set<string>();
+        doc.querySelectorAll(sel).forEach((a) => {
+          const href = a.getAttribute("href");
+          if (!href || href.startsWith("#")) return;
+          const abs = absoluteUrl(tocUrl, href);
+          if (seen.has(abs)) return;
+          seen.add(abs);
+          out.push(abs);
+        });
         return out;
       }
       case "inkitt": return await tocInkitt(tocUrl);
