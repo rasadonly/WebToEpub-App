@@ -120,6 +120,10 @@ const CF_PROTECTED = [
   /(^|\.)novelgo\.id$/i,
   /(^|\.)novelfire\.(net|com|io)$/i,
   /(^|\.)novelbuddy\.(com|io)$/i,
+  /(^|\.)hako\.vn$/i,
+  /(^|\.)docln\.(net|sbs)$/i,
+  // Next.js app that renders chapter text client-side
+  /(^|\.)readthedrama\.com$/i,
 ];
 
 function isCfProtected(host) {
@@ -934,6 +938,91 @@ async function bodyCherrymist(url) {
   return extractWithSelector(
     parseHtml(await getText(url)),
     '.chapter__content, .chapter-formatting, #chapter-content, .entry-content'
+  );
+}
+
+// ---------------- ln.hako.vn / docln (Vietnamese light novels) ----------------
+
+async function tocHako(url) {
+  const doc = parseHtml(await getText(url));
+  const out = [];
+  doc
+    .querySelectorAll(".chapter-name a, .list-chapters a, .chapter_list a, ul.list-chapters li a")
+    .forEach((a) => {
+      const href = a.getAttribute("href");
+      if (!href) return;
+      out.push({ url: absoluteUrl(url, href), title: (a.textContent || "").trim() });
+    });
+  return out;
+}
+
+async function bodyHako(url) {
+  return extractWithSelector(
+    parseHtml(await getText(url)),
+    "#chapter-content, .long-text, .chapter-content"
+  );
+}
+
+// ---------------- kanunu8.com (努努书坊) ----------------
+
+async function tocKanunu(url) {
+  const doc = parseHtml(await getText(url));
+  const out = [];
+  doc.querySelectorAll(".mulu-list a, .idx-list a, .book-list a").forEach((a) => {
+    const href = a.getAttribute("href");
+    if (!href || href.startsWith("#")) return;
+    out.push({ url: absoluteUrl(url, href), title: (a.textContent || "").trim() });
+  });
+  return out;
+}
+
+async function bodyKanunu(url) {
+  return extractWithSelector(parseHtml(await getText(url)), "#neirong, .neirong, .book-content");
+}
+
+// ---------------- tianyabooks.com (天涯书库) ----------------
+
+async function tocTianya(url) {
+  const doc = parseHtml(await getText(url));
+  const out = [];
+  doc.querySelectorAll(".idx-list a, .mulu-list a").forEach((a) => {
+    const href = a.getAttribute("href");
+    if (!href || href.startsWith("#")) return;
+    out.push({ url: absoluteUrl(url, href), title: (a.textContent || "").trim() });
+  });
+  return out;
+}
+
+async function bodyTianya(url) {
+  const doc = parseHtml(await getText(url));
+  const container = doc.querySelector(".article") || doc.querySelector(".container");
+  if (!container) return "";
+  stripInside(container, "script, style, iframe, ins, .meta, .breadcrumb, .chapter-links, .ad-bottom");
+  return container.innerHTML;
+}
+
+// ---------------- readthedrama.com ----------------
+
+async function tocReadTheDrama(url) {
+  const html = await getText(url);
+  const doc = parseHtml(html);
+  const out = [];
+  const seen = new Set();
+  doc.querySelectorAll('a[href*="/chapters/"]').forEach((a) => {
+    const href = a.getAttribute("href");
+    if (!href) return;
+    const abs = absoluteUrl(url, href);
+    if (seen.has(abs)) return;
+    seen.add(abs);
+    out.push({ url: abs, title: (a.textContent || "").trim().replace(/\s+/g, " ") });
+  });
+  return out;
+}
+
+async function bodyReadTheDrama(url) {
+  return extractWithSelector(
+    parseHtml(await getText(url)),
+    ".chapter-content, article .prose, article, main [class*='prose']"
   );
 }
 
