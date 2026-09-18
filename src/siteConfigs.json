@@ -1225,6 +1225,15 @@
       "div.widget-episode"
     ]
   },
+  "kanunu8.com": {
+    "parser": "KanunuParser",
+    "toc": [
+      ".mulu-list a"
+    ],
+    "content": [
+      "#neirong"
+    ]
+  },
   "karistudio.com": {
     "parser": "KariStudioParser",
     "toc": [
@@ -1409,6 +1418,17 @@
     "toc": [],
     "content": [
       "body div"
+    ]
+  },
+  "ln.hako.vn": {
+    "parser": "HakoParser",
+    "toc": [
+      ".chapter-name a",
+      "ul.list-chapters li a"
+    ],
+    "content": [
+      "#chapter-content",
+      ".long-text"
     ]
   },
   "lnmtl.com": {
@@ -2727,6 +2747,16 @@
       "#content"
     ]
   },
+  "readthedrama.com": {
+    "parser": "ReadTheDramaParser",
+    "toc": [
+      "a[href*=\"/chapters/\"]"
+    ],
+    "content": [
+      ".chapter-content",
+      "article"
+    ]
+  },
   "readwebnovel.xyz": {
     "parser": "MadaraParser",
     "toc": [
@@ -3220,6 +3250,15 @@
     ],
     "content": [
       "article"
+    ]
+  },
+  "tianyabooks.com": {
+    "parser": "TianyaParser",
+    "toc": [
+      ".idx-list a"
+    ],
+    "content": [
+      ".article"
     ]
   },
   "tigertranslations.org": {
