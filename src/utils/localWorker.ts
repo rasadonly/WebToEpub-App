@@ -616,6 +616,10 @@ export function siteKey(hostname: string): string {
   if (hostname.includes("novgo.")) return "novgo";
   if (hostname.includes("cherrymist.cafe")) return "cherrymist";
   if (hostname.includes("zenithtls.com")) return "zenithtls";
+  if (hostname.includes("hako.vn") || hostname.includes("docln.")) return "hako";
+  if (hostname.includes("kanunu8.com") || hostname.includes("kanunu.")) return "kanunu";
+  if (hostname.includes("tianyabooks.com")) return "tianya";
+  if (hostname.includes("readthedrama.com")) return "readthedrama";
   if (hostname.includes("novelbuddy.com")) return "novelbuddy";
   if (hostname.includes("novelarrow.com")) return "novelarrow";
   if (hostname.includes("novelfull.net")) return "novelfullnet";
