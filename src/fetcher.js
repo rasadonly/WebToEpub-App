@@ -2774,6 +2774,10 @@ function siteKey(hostname) {
   if (host.includes("novgo.")) return "novgo";
   if (host.includes("cherrymist.cafe")) return "cherrymist";
   if (host.includes("zenithtls.com")) return "zenithtls";
+  if (host.includes("hako.vn") || host.includes("docln.")) return "hako";
+  if (host.includes("kanunu8.com") || host.includes("kanunu.")) return "kanunu";
+  if (host.includes("tianyabooks.com")) return "tianya";
+  if (host.includes("readthedrama.com")) return "readthedrama";
   if (host.includes("novelbuddy.com")) return "novelbuddy";
   if (host.includes("novelarrow.com")) return "novelarrow";
   if (host.includes("novelfull.net")) return "novelfullnet";
@@ -2836,6 +2840,14 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         return tocWtrLab(tocUrl);
       case "wattpad":
         return tocWattpad(tocUrl);
+      case "hako":
+        return tocHako(tocUrl);
+      case "kanunu":
+        return tocKanunu(tocUrl);
+      case "tianya":
+        return tocTianya(tocUrl);
+      case "readthedrama":
+        return tocReadTheDrama(tocUrl);
       case "cherrymist":
         return tocCherrymist(tocUrl);
       case "royalroad":
@@ -2978,6 +2990,14 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
         return bodyWattpad(chapterUrl);
       case "wtrlab":
         return bodyWtrLab(chapterUrl);
+      case "hako":
+        return bodyHako(chapterUrl);
+      case "kanunu":
+        return bodyKanunu(chapterUrl);
+      case "tianya":
+        return bodyTianya(chapterUrl);
+      case "readthedrama":
+        return bodyReadTheDrama(chapterUrl);
       case "cherrymist":
         return bodyCherrymist(chapterUrl);
       case "zenithtls":
