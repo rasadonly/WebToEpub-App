@@ -145,6 +145,55 @@ function looksLikeChallenge(text) {
   );
 }
 
+/* ------------------------------------------------------------------ *
+ * Stealth routes — curl_cffi (real Chrome TLS fingerprint), cloudscraper
+ * and Tor. The Hugging Face image runs these locally as a Python sidecar;
+ * Heroku (Node-only dyno) borrows the same capability over HTTP from the
+ * Hugging Face Space, so both backends can beat Cloudflare.
+ * ------------------------------------------------------------------ */
+
+const LOCAL_STEALTH = (process.env.STEALTH_URL || "").replace(/\/$/, "");
+const REMOTE_STEALTH = (
+  process.env.REMOTE_STEALTH_URL ||
+  "https://prasadonly-web-to-epub-bot.hf.space/api/stealth"
+).replace(/\/$/, "");
+
+const STEALTH_ROUTES = [
+  LOCAL_STEALTH ? `${LOCAL_STEALTH}/fetch?url=` : "",
+  REMOTE_STEALTH ? `${REMOTE_STEALTH}?url=` : "",
+].filter(Boolean);
+
+let localStealthOk = Boolean(LOCAL_STEALTH);
+
+/** Fetches through the stealth chain. Returns the HTML, or null if unavailable. */
+export async function stealthGet(url, timeoutMs = 45000, tor = "auto") {
+  for (const base of STEALTH_ROUTES) {
+    const isLocal = LOCAL_STEALTH && base.startsWith(LOCAL_STEALTH);
+    if (isLocal && !localStealthOk) continue;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs + 5000);
+    try {
+      const r = await fetch(
+        `${base}${encodeURIComponent(url)}&tor=${tor}&timeout=${Math.round(timeoutMs / 1000)}`,
+        { signal: ctrl.signal }
+      );
+      if (r.ok) {
+        const text = await r.text();
+        if (text && !looksLikeChallenge(text)) return text;
+      }
+    } catch {
+      if (isLocal) localStealthOk = false; // sidecar not running here
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  return null;
+}
+
+export function stealthAvailable() {
+  return STEALTH_ROUTES.length > 0;
+}
+
 const INKITT_COOKIE =
   "user_credentials=4be4b2f459c9113e1a86bad353c1c89e9886c0285d11bf7cb9441e3f3f61278655ae43c8e47c607dfc31ccd985f88faa3e216542766d50d0b1b2d2fc181e4889%3A%3A12744546%3A%3A2026-09-16T06%3A16%3A52Z; _rocky_session_1=92ea8ac4dcdd4c3c8b169a722c1e9f36; __stripe_mid=94754462-ddb8-4b14-ba53-f09d65f073847cf17b";
 
@@ -157,8 +206,19 @@ async function httpGet(url, extra = {}, timeoutMs = 7000) {
   // Rendering proxies need much longer than a direct fetch.
   const effTimeout = isCfProtected(host) ? Math.max(timeoutMs, 45000) : timeoutMs;
 
+  const htmlResponse = (text) =>
+    new Response(text, {
+      status: 200,
+      headers: { "content-type": "text/html; charset=utf-8" },
+    });
+
   const lease = await throttle(host);
   try {
+    // Cloudflare-protected or currently-blocked hosts: stealth chain first.
+    if (stealthAvailable() && (isCfProtected(host) || blockedHosts.has(host))) {
+      const st = await stealthGet(url, effTimeout);
+      if (st) return htmlResponse(st);
+    }
     for (let attempt = 0; attempt < 3; attempt++) {
       for (const proxy of proxyOrderFor(host)) {
         if (!proxy && blockedHosts.has(host)) continue;
@@ -225,6 +285,11 @@ async function httpGet(url, extra = {}, timeoutMs = 7000) {
       }
       // All proxies failed this round — back off before the next sweep.
       if (attempt < 2) await sleep(800 * Math.pow(2, attempt) + Math.random() * 400);
+    }
+    // Last resort: curl_cffi / cloudscraper / Tor.
+    if (stealthAvailable()) {
+      const st = await stealthGet(url, effTimeout, "1");
+      if (st) return htmlResponse(st);
     }
     throw lastErr || new Error("All fetch attempts failed");
   } finally {
