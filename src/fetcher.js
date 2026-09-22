@@ -206,8 +206,19 @@ async function httpGet(url, extra = {}, timeoutMs = 7000) {
   // Rendering proxies need much longer than a direct fetch.
   const effTimeout = isCfProtected(host) ? Math.max(timeoutMs, 45000) : timeoutMs;
 
+  const htmlResponse = (text) =>
+    new Response(text, {
+      status: 200,
+      headers: { "content-type": "text/html; charset=utf-8" },
+    });
+
   const lease = await throttle(host);
   try {
+    // Cloudflare-protected or currently-blocked hosts: stealth chain first.
+    if (stealthAvailable() && (isCfProtected(host) || blockedHosts.has(host))) {
+      const st = await stealthGet(url, effTimeout);
+      if (st) return htmlResponse(st);
+    }
     for (let attempt = 0; attempt < 3; attempt++) {
       for (const proxy of proxyOrderFor(host)) {
         if (!proxy && blockedHosts.has(host)) continue;
@@ -274,6 +285,11 @@ async function httpGet(url, extra = {}, timeoutMs = 7000) {
       }
       // All proxies failed this round — back off before the next sweep.
       if (attempt < 2) await sleep(800 * Math.pow(2, attempt) + Math.random() * 400);
+    }
+    // Last resort: curl_cffi / cloudscraper / Tor.
+    if (stealthAvailable()) {
+      const st = await stealthGet(url, effTimeout, "1");
+      if (st) return htmlResponse(st);
     }
     throw lastErr || new Error("All fetch attempts failed");
   } finally {
