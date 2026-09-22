@@ -177,11 +177,11 @@ export interface BackendChapter {
   title: string;
 }
 
-async function api<T>(path: string, init?: RequestInit, timeoutMs = 60_000): Promise<T> {
+async function api<T>(path: string, init?: RequestInit, timeoutMs = 60_000, base?: string): Promise<T> {
   const ctrl = new AbortController();
   const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const r = await fetch(`${getBackendUrl()}${path}`, { ...init, signal: ctrl.signal });
+    const r = await fetch(`${(base || getBackendUrl()).replace(/\/$/, '')}${path}`, { ...init, signal: ctrl.signal });
     if (!r.ok) throw new Error(`Backend error ${r.status}`);
     return (await r.json()) as T;
   } finally {
