@@ -442,7 +442,8 @@ async function runJob(job, { tocUrl, providedChapters, metadata, options, select
 
   job.status = "done";
   job.phase = "Ready to download";
-  touch();
+  job.updatedAt = Date.now();
+  persistJob(job, true);
 
 }
 
@@ -451,6 +452,55 @@ function finishCancelled(job) {
   job.status = "cancelled";
   job.phase = "Cancelled";
   job.updatedAt = Date.now();
+  persistJob(job, true);
+}
+
+/**
+ * Restores jobs written to disk before the last restart. Finished jobs stay
+ * downloadable (when the file survived); anything that was mid-flight is
+ * started again from the saved request, so no conversion is lost.
+ */
+function restoreJobs() {
+  let files = [];
+  try {
+    files = fs.readdirSync(STATE_DIR).filter((f) => f.endsWith(".json"));
+  } catch {
+    return;
+  }
+  for (const f of files) {
+    try {
+      const { job, spec } = JSON.parse(fs.readFileSync(path.join(STATE_DIR, f), "utf8"));
+      if (!job?.id) continue;
+      if (Date.now() - (job.updatedAt || 0) > JOB_TTL_MS) {
+        forgetJob(job.id);
+        continue;
+      }
+      if (job.status === "done" && job.file && fs.existsSync(job.file)) {
+        jobs.set(job.id, job);
+        if (spec) jobSpecs.set(job.id, spec);
+        continue;
+      }
+      if (job.status === "cancelled" || job.status === "error" || !spec) {
+        jobs.set(job.id, job);
+        continue;
+      }
+      // Was queued/running (or the packed file is gone) — run it again.
+      job.status = "queued";
+      job.phase = "Resuming after server restart";
+      job.completed = 0;
+      job.failed = 0;
+      job.file = null;
+      job.cancelled = false;
+      job.error = null;
+      job.updatedAt = Date.now();
+      jobs.set(job.id, job);
+      jobSpecs.set(job.id, spec);
+      startJob(job, spec);
+      console.log(`[jobs] resumed ${job.id} (${job.title})`);
+    } catch {
+      /* skip corrupt state file */
+    }
+  }
 }
 
 app.get("/api/jobs/:id", (req, res) => {
