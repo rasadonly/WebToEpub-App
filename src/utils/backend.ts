@@ -293,22 +293,25 @@ export async function backendStartJob(payload: {
   options?: Record<string, unknown>;
   selector?: string;
 }): Promise<BackendJob> {
+  // Pick one backend now (round-robin over the healthy pool) and keep the job
+  // pinned to it — jobs live in that server's memory.
+  const base = getBackendUrl();
   const job = await api<BackendJob>('/api/jobs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
-  });
-  saveActiveJobId(job.id);
+  }, 60_000, base);
+  saveActiveJobId(job.id, base);
   return job;
 }
 
 export async function backendJobStatus(id: string): Promise<BackendJob> {
-  return api<BackendJob>(`/api/jobs/${id}`, undefined, 20_000);
+  return api<BackendJob>(`/api/jobs/${id}`, undefined, 20_000, getJobBase(id));
 }
 
 export async function backendCancelJob(id: string): Promise<void> {
   try {
-    await api(`/api/jobs/${id}/cancel`, { method: 'POST' }, 15_000);
+    await api(`/api/jobs/${id}/cancel`, { method: 'POST' }, 15_000, getJobBase(id));
   } finally {
     clearActiveJobId();
   }
@@ -316,7 +319,7 @@ export async function backendCancelJob(id: string): Promise<void> {
 
 /** Downloads the finished EPUB as a real .epub file (correct MIME + extension). */
 export async function backendDownload(job: BackendJob): Promise<void> {
-  const res = await fetch(`${getBackendUrl()}/api/jobs/${job.id}/download`);
+  const res = await fetch(`${getJobBase(job.id)}/api/jobs/${job.id}/download`);
   if (!res.ok) throw new Error('EPUB not ready on the server');
   const raw = await res.blob();
   const blob = new Blob([raw], { type: 'application/epub+zip' });
