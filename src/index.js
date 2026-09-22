@@ -156,6 +156,30 @@ app.get("/api/proxy", async (req, res) => {
   }
 });
 
+// Stealth fetch (curl_cffi TLS fingerprint / cloudscraper / Tor).
+// Available where the Python sidecar runs (Hugging Face image); the Heroku
+// dyno calls this endpoint remotely so both backends get the same power.
+app.get("/api/stealth", async (req, res) => {
+  const target = String(req.query.url || "");
+  try {
+    const u = new URL(target);
+    if (!["http:", "https:"].includes(u.protocol)) throw new Error("bad protocol");
+  } catch {
+    return res.status(400).json({ error: "invalid url" });
+  }
+  const tor = String(req.query.tor || "auto");
+  const timeout = Math.min(Number(req.query.timeout) || 45, 90) * 1000;
+  try {
+    const html = await stealthGet(target, timeout, tor);
+    if (!html) return res.status(502).json({ error: "stealth routes exhausted" });
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.send(html);
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
 // Also handle POST proxying (needed for wtr-lab and similar API endpoints)
 app.post("/api/proxy", express.raw({ type: "*/*", limit: "2mb" }), async (req, res) => {
   const target = String(req.query.url || "");
