@@ -1066,12 +1066,20 @@ export async function fetchChapterLinks(tocUrl: string, linkSelector: string): P
 
       default: {
         const doc = parseHtml(await getText(tocUrl));
-        const out: string[] = [];
-        doc.querySelectorAll(linkSelector || "a[href]").forEach((a) => {
-          const href = a.getAttribute("href");
-          if (href) out.push(absoluteUrl(tocUrl, href));
-        });
-        return out;
+        if (linkSelector) {
+          const out: string[] = [];
+          const seen = new Set<string>();
+          doc.querySelectorAll(linkSelector).forEach((a) => {
+            const href = a.getAttribute("href");
+            if (!href) return;
+            const abs = absoluteUrl(tocUrl, href);
+            if (seen.has(abs)) return;
+            seen.add(abs);
+            out.push(abs);
+          });
+          if (out.length) return out;
+        }
+        return smartChapterLinks(doc, tocUrl);
       }
     }
   } catch (e) {
