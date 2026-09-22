@@ -513,6 +513,7 @@ app.post("/api/jobs/:id/cancel", (req, res) => {
   const job = jobs.get(req.params.id);
   if (!job) return res.status(404).json({ error: "job not found" });
   job.cancelled = true;
+  persistJob(job, true);
   res.json(publicJob(job));
 });
 
