@@ -335,8 +335,14 @@ export async function backendDownload(job: BackendJob): Promise<void> {
 
 // ----- session persistence (survives closing the page) -----
 
-export function saveActiveJobId(id: string) {
+export function saveActiveJobId(id: string, base?: string) {
   localStorage.setItem(JOB_KEY, id);
+  if (base) localStorage.setItem(`${JOB_KEY}:${id}`, base.replace(/\/$/, ''));
+}
+
+/** The backend that owns this job (jobs are not shared between servers). */
+export function getJobBase(id: string): string {
+  return (localStorage.getItem(`${JOB_KEY}:${id}`) || getBackendUrl()).replace(/\/$/, '');
 }
 
 export function getActiveJobId(): string | null {
