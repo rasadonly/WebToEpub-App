@@ -41,6 +41,32 @@ fs.mkdirSync(OUT_DIR, { recursive: true });
 
 /** jobId -> job */
 const jobs = new Map();
+/** jobId -> the original request, so a restarted server can resume the work. */
+const jobSpecs = new Map();
+
+// Jobs survive dyno/Space restarts: state + request are mirrored to disk and
+// anything that was still running is picked up again on boot.
+const STATE_DIR = process.env.JOB_STATE_DIR || path.join(OUT_DIR, "state");
+fs.mkdirSync(STATE_DIR, { recursive: true });
+
+const lastPersist = new Map();
+
+function persistJob(job, force = false) {
+  const now = Date.now();
+  if (!force && now - (lastPersist.get(job.id) || 0) < 3000) return;
+  lastPersist.set(job.id, now);
+  const spec = jobSpecs.get(job.id) || null;
+  fs.promises
+    .writeFile(path.join(STATE_DIR, `${job.id}.json`), JSON.stringify({ job, spec }))
+    .catch(() => {});
+}
+
+function forgetJob(id) {
+  jobs.delete(id);
+  jobSpecs.delete(id);
+  lastPersist.delete(id);
+  fs.promises.unlink(path.join(STATE_DIR, `${id}.json`)).catch(() => {});
+}
 
 function publicJob(job) {
   const { file, chapters, ...rest } = job;
@@ -52,7 +78,7 @@ function cleanup() {
   for (const [id, job] of jobs) {
     if (now - job.updatedAt > JOB_TTL_MS) {
       if (job.file) fs.promises.unlink(job.file).catch(() => {});
-      jobs.delete(id);
+      forgetJob(id);
     }
   }
 }
@@ -309,19 +335,28 @@ app.post("/api/jobs", async (req, res) => {
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
+  const spec = { tocUrl, providedChapters, metadata, options, selector };
   jobs.set(id, job);
+  jobSpecs.set(id, spec);
+  persistJob(job, true);
   res.status(202).json(publicJob(job));
 
-  runJob(job, { tocUrl, providedChapters, metadata, options, selector }).catch((e) => {
+  startJob(job, spec);
+});
+
+function startJob(job, spec) {
+  return runJob(job, spec).catch((e) => {
     job.status = "error";
     job.error = e.message;
     job.updatedAt = Date.now();
+    persistJob(job, true);
   });
-});
+}
 
 async function runJob(job, { tocUrl, providedChapters, metadata, options, selector }) {
   const touch = () => {
     job.updatedAt = Date.now();
+    persistJob(job);
   };
 
   job.status = "running";
@@ -407,7 +442,8 @@ async function runJob(job, { tocUrl, providedChapters, metadata, options, select
 
   job.status = "done";
   job.phase = "Ready to download";
-  touch();
+  job.updatedAt = Date.now();
+  persistJob(job, true);
 
 }
 
@@ -416,6 +452,55 @@ function finishCancelled(job) {
   job.status = "cancelled";
   job.phase = "Cancelled";
   job.updatedAt = Date.now();
+  persistJob(job, true);
+}
+
+/**
+ * Restores jobs written to disk before the last restart. Finished jobs stay
+ * downloadable (when the file survived); anything that was mid-flight is
+ * started again from the saved request, so no conversion is lost.
+ */
+function restoreJobs() {
+  let files = [];
+  try {
+    files = fs.readdirSync(STATE_DIR).filter((f) => f.endsWith(".json"));
+  } catch {
+    return;
+  }
+  for (const f of files) {
+    try {
+      const { job, spec } = JSON.parse(fs.readFileSync(path.join(STATE_DIR, f), "utf8"));
+      if (!job?.id) continue;
+      if (Date.now() - (job.updatedAt || 0) > JOB_TTL_MS) {
+        forgetJob(job.id);
+        continue;
+      }
+      if (job.status === "done" && job.file && fs.existsSync(job.file)) {
+        jobs.set(job.id, job);
+        if (spec) jobSpecs.set(job.id, spec);
+        continue;
+      }
+      if (job.status === "cancelled" || job.status === "error" || !spec) {
+        jobs.set(job.id, job);
+        continue;
+      }
+      // Was queued/running (or the packed file is gone) — run it again.
+      job.status = "queued";
+      job.phase = "Resuming after server restart";
+      job.completed = 0;
+      job.failed = 0;
+      job.file = null;
+      job.cancelled = false;
+      job.error = null;
+      job.updatedAt = Date.now();
+      jobs.set(job.id, job);
+      jobSpecs.set(job.id, spec);
+      startJob(job, spec);
+      console.log(`[jobs] resumed ${job.id} (${job.title})`);
+    } catch {
+      /* skip corrupt state file */
+    }
+  }
 }
 
 app.get("/api/jobs/:id", (req, res) => {
@@ -428,6 +513,7 @@ app.post("/api/jobs/:id/cancel", (req, res) => {
   const job = jobs.get(req.params.id);
   if (!job) return res.status(404).json({ error: "job not found" });
   job.cancelled = true;
+  persistJob(job, true);
   res.json(publicJob(job));
 });
 
@@ -440,5 +526,7 @@ app.get("/api/jobs/:id/download", (req, res) => {
   res.setHeader("Content-Disposition", `attachment; filename="${job.filename}"`);
   fs.createReadStream(job.file).pipe(res);
 });
+
+restoreJobs();
 
 app.listen(PORT, () => console.log(`link-to-epub server listening on ${PORT}`));
