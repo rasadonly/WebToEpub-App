@@ -41,6 +41,32 @@ fs.mkdirSync(OUT_DIR, { recursive: true });
 
 /** jobId -> job */
 const jobs = new Map();
+/** jobId -> the original request, so a restarted server can resume the work. */
+const jobSpecs = new Map();
+
+// Jobs survive dyno/Space restarts: state + request are mirrored to disk and
+// anything that was still running is picked up again on boot.
+const STATE_DIR = process.env.JOB_STATE_DIR || path.join(OUT_DIR, "state");
+fs.mkdirSync(STATE_DIR, { recursive: true });
+
+const lastPersist = new Map();
+
+function persistJob(job, force = false) {
+  const now = Date.now();
+  if (!force && now - (lastPersist.get(job.id) || 0) < 3000) return;
+  lastPersist.set(job.id, now);
+  const spec = jobSpecs.get(job.id) || null;
+  fs.promises
+    .writeFile(path.join(STATE_DIR, `${job.id}.json`), JSON.stringify({ job, spec }))
+    .catch(() => {});
+}
+
+function forgetJob(id) {
+  jobs.delete(id);
+  jobSpecs.delete(id);
+  lastPersist.delete(id);
+  fs.promises.unlink(path.join(STATE_DIR, `${id}.json`)).catch(() => {});
+}
 
 function publicJob(job) {
   const { file, chapters, ...rest } = job;
