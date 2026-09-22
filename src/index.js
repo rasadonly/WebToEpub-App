@@ -78,7 +78,7 @@ function cleanup() {
   for (const [id, job] of jobs) {
     if (now - job.updatedAt > JOB_TTL_MS) {
       if (job.file) fs.promises.unlink(job.file).catch(() => {});
-      jobs.delete(id);
+      forgetJob(id);
     }
   }
 }
