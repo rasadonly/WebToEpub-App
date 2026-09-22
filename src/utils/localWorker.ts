@@ -602,9 +602,78 @@ async function bodyNovelArrow(apiChapterUrl: string): Promise<string> {
   return json?.item?.chapterInfo?.chapter_content || "";
 }
 
+/** Common chapter-body selectors tried on any unknown site. */
+const GENERIC_CONTENT_SELECTORS = [
+  "#chapter-content", "#chr-content", ".chapter-content", ".chapter-text", ".chapter-body",
+  "#chapter_content", "#content_detail", "#chaptercontent", "#htmlContent", "#article",
+  ".entry-content", ".post-content", ".reading-content .text-left", ".text-left",
+  "#content", ".content", "article", "main", "#nr", "#nr1", "#booktxt", "#TextContent",
+].join(", ");
+
+const plainLen = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().length;
+
+/**
+ * Readability-style fallback: pick the element with the most paragraph text and
+ * the fewest links. Lets us produce a chapter from a site we've never seen.
+ */
+function densestContent(doc: Document): string {
+  let best: Element | null = null;
+  let bestScore = 0;
+  doc.querySelectorAll("div, article, section, main, td, .post, #content").forEach((el) => {
+    const text = (el.textContent || "").trim();
+    if (text.length < 300) return;
+    const links = el.querySelectorAll("a");
+    let linkLen = 0;
+    links.forEach((a) => (linkLen += (a.textContent || "").length));
+    const linkRatio = Math.min(linkLen / Math.max(text.length, 1), 0.95);
+    if (linkRatio > 0.4) return;
+    const score =
+      text.length * (1 - linkRatio) +
+      el.querySelectorAll("p, br").length * 40 -
+      links.length * 25 -
+      el.querySelectorAll("div, section, article").length * 5;
+    if (score > bestScore) {
+      bestScore = score;
+      best = el;
+    }
+  });
+  if (!best) return "";
+  stripInside(
+    best,
+    "script, style, ins, iframe, noscript, nav, header, footer, form, .ad, .ads, .advertisement, .share, .comments, #comments, .breadcrumb, .navigation, .nav-links"
+  );
+  return sanitizeHtml((best as Element).innerHTML);
+}
+
+/** Last resort: stitch together the paragraph-like text nodes of the page. */
+function paragraphFallback(doc: Document): string {
+  const paras: string[] = [];
+  doc.querySelectorAll("p").forEach((p) => {
+    if (p.closest("nav, header, footer, aside")) return;
+    const t = (p.textContent || "").trim();
+    if (t.length > 40) paras.push(`<p>${t.replace(/[<>]/g, "")}</p>`);
+  });
+  return paras.length >= 3 ? paras.join("\n") : "";
+}
+
 async function bodyGeneric(url: string, selector: string): Promise<string> {
   const doc = parseHtml(await getText(url));
-  return extractWithSelector(doc, selector || "#chapter-content, .chapter-content, article, .content");
+
+  const tries = [
+    () => (selector ? extractWithSelector(doc, selector) : ""),
+    () => extractWithSelector(doc, GENERIC_CONTENT_SELECTORS),
+    () => densestContent(doc),
+    () => paragraphFallback(doc),
+  ];
+
+  let best = "";
+  for (const t of tries) {
+    let html = "";
+    try { html = t() || ""; } catch { html = ""; }
+    if (plainLen(html) >= 200) return html;
+    if (plainLen(html) > plainLen(best)) best = html;
+  }
+  return best;
 }
 
 // ---------- Dispatch ----------
