@@ -123,13 +123,14 @@ export function backendProxyUrl(): string {
 }
 
 /** Backends confirmed healthy by the last health check (round-robin pool). */
-let activePool: string[] = [];
-let poolCursor = 0;
+let activePool: string[] = [...BACKEND_URLS];
+// Random start so different visitors don't all begin on the same server.
+let poolCursor = Math.floor(Math.random() * BACKEND_URLS.length);
 
 export function getBackendUrl(): string {
   const stored = localStorage.getItem(URL_KEY);
   if (stored) return stored.replace(/\/$/, '');
-  
+
   if (activePool.length > 0) {
     const url = activePool[poolCursor % activePool.length];
     poolCursor++;
@@ -137,6 +138,44 @@ export function getBackendUrl(): string {
   }
   return DEFAULT_BACKEND_URL.replace(/\/$/, '');
 }
+
+/** Current job count reported by a backend, or null when unreachable. */
+async function backendLoad(base: string, timeoutMs: number): Promise<number | null> {
+  const ctrl = new AbortController();
+  const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const r = await fetch(`${base.replace(/\/$/, '')}/health`, { signal: ctrl.signal });
+    if (!r.ok) return null;
+    const data = await r.json().catch(() => ({}));
+    return typeof data.jobs === 'number' ? data.jobs : 0;
+  } catch {
+    return null;
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+/**
+ * Picks the backend with the fewest running jobs so work actually spreads
+ * across both servers instead of piling onto the default one.
+ */
+export async function pickLeastLoadedBackend(): Promise<string> {
+  const stored = localStorage.getItem(URL_KEY);
+  if (stored) return stored.replace(/\/$/, '');
+
+  const loads = await Promise.all(
+    BACKEND_URLS.map(async (url) => ({
+      url,
+      jobs: await backendLoad(url, url === HF_BACKEND_URL ? 35_000 : 12_000),
+    }))
+  );
+  const up = loads.filter((l) => l.jobs !== null) as { url: string; jobs: number }[];
+  if (!up.length) return getBackendUrl();
+  activePool = up.map((l) => l.url);
+  up.sort((a, b) => a.jobs - b.jobs);
+  return up[0].url.replace(/\/$/, '');
+}
+
 
 export function setBackendUrl(url: string) {
   localStorage.setItem(URL_KEY, url.trim().replace(/\/$/, ''));
@@ -293,9 +332,9 @@ export async function backendStartJob(payload: {
   options?: Record<string, unknown>;
   selector?: string;
 }): Promise<BackendJob> {
-  // Pick one backend now (round-robin over the healthy pool) and keep the job
-  // pinned to it — jobs live in that server's memory.
-  const base = getBackendUrl();
+  // Send the job to whichever server is least busy right now, then pin it
+  // there — jobs live in that server's memory.
+  const base = await pickLeastLoadedBackend();
   const job = await api<BackendJob>('/api/jobs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
