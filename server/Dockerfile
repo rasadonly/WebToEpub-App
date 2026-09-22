@@ -21,6 +21,8 @@ ENV PORT=7860
 ENV NODE_ENV=production
 ENV ENABLE_TOR=1
 ENV STEALTH_URL=http://127.0.0.1:8191
+# Local sidecar only — never call back into ourselves.
+ENV REMOTE_STEALTH_URL=""
 EXPOSE 7860
 
 CMD ["./start.sh"]

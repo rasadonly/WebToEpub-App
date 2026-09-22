@@ -14,6 +14,7 @@ import {
   mapPool,
   supportedDomains,
   lookupSiteConfig,
+  stealthGet,
 } from "./fetcher.js";
 import { buildEpub, sanitizeFilename } from "./epub.js";
 import { uploadToLibrary, libraryEnabled } from "./library.js";
