@@ -335,19 +335,28 @@ app.post("/api/jobs", async (req, res) => {
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
+  const spec = { tocUrl, providedChapters, metadata, options, selector };
   jobs.set(id, job);
+  jobSpecs.set(id, spec);
+  persistJob(job, true);
   res.status(202).json(publicJob(job));
 
-  runJob(job, { tocUrl, providedChapters, metadata, options, selector }).catch((e) => {
+  startJob(job, spec);
+});
+
+function startJob(job, spec) {
+  return runJob(job, spec).catch((e) => {
     job.status = "error";
     job.error = e.message;
     job.updatedAt = Date.now();
+    persistJob(job, true);
   });
-});
+}
 
 async function runJob(job, { tocUrl, providedChapters, metadata, options, selector }) {
   const touch = () => {
     job.updatedAt = Date.now();
+    persistJob(job);
   };
 
   job.status = "running";
