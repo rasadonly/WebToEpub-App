@@ -602,9 +602,148 @@ async function bodyNovelArrow(apiChapterUrl: string): Promise<string> {
   return json?.item?.chapterInfo?.chapter_content || "";
 }
 
+/** Common chapter-body selectors tried on any unknown site. */
+const GENERIC_CONTENT_SELECTORS = [
+  "#chapter-content", "#chr-content", ".chapter-content", ".chapter-text", ".chapter-body",
+  "#chapter_content", "#content_detail", "#chaptercontent", "#htmlContent", "#article",
+  ".entry-content", ".post-content", ".reading-content .text-left", ".text-left",
+  "#content", ".content", "article", "main", "#nr", "#nr1", "#booktxt", "#TextContent",
+].join(", ");
+
+const plainLen = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().length;
+
+/**
+ * Readability-style fallback: pick the element with the most paragraph text and
+ * the fewest links. Lets us produce a chapter from a site we've never seen.
+ */
+function densestContent(doc: Document): string {
+  let best: Element | null = null;
+  let bestScore = 0;
+  doc.querySelectorAll("div, article, section, main, td, .post, #content").forEach((el) => {
+    const text = (el.textContent || "").trim();
+    if (text.length < 300) return;
+    const links = el.querySelectorAll("a");
+    let linkLen = 0;
+    links.forEach((a) => (linkLen += (a.textContent || "").length));
+    const linkRatio = Math.min(linkLen / Math.max(text.length, 1), 0.95);
+    if (linkRatio > 0.4) return;
+    const score =
+      text.length * (1 - linkRatio) +
+      el.querySelectorAll("p, br").length * 40 -
+      links.length * 25 -
+      el.querySelectorAll("div, section, article").length * 5;
+    if (score > bestScore) {
+      bestScore = score;
+      best = el;
+    }
+  });
+  if (!best) return "";
+  stripInside(
+    best,
+    "script, style, ins, iframe, noscript, nav, header, footer, form, .ad, .ads, .advertisement, .share, .comments, #comments, .breadcrumb, .navigation, .nav-links"
+  );
+  return sanitizeHtml((best as Element).innerHTML);
+}
+
+/** Last resort: stitch together the paragraph-like text nodes of the page. */
+function paragraphFallback(doc: Document): string {
+  const paras: string[] = [];
+  doc.querySelectorAll("p").forEach((p) => {
+    if (p.closest("nav, header, footer, aside")) return;
+    const t = (p.textContent || "").trim();
+    if (t.length > 40) paras.push(`<p>${t.replace(/[<>]/g, "")}</p>`);
+  });
+  return paras.length >= 3 ? paras.join("\n") : "";
+}
+
+/**
+ * Heuristic table-of-contents reader for sites we have no config for.
+ * Groups same-origin links by URL shape and keeps the largest chapter-like
+ * family, preserving page order.
+ */
+function smartChapterLinks(doc: Document, tocUrl: string): string[] {
+  let origin = "";
+  try { origin = new URL(tocUrl).hostname; } catch { /* ignore */ }
+
+  const NOISE = /(login|register|sign-?in|sign-?up|privacy|terms|contact|about|dmca|tag|genre|category|author|search|rss|feed|donate|patreon|discord|facebook|twitter|telegram|comment|bookmark|report)/i;
+  const normToc = tocUrl.split("#")[0].replace(/\/$/, "");
+
+  type Cand = { url: string; text: string; shape: string; order: number };
+  const cands: Cand[] = [];
+  const seen = new Set<string>();
+
+  Array.from(doc.querySelectorAll("a[href]")).forEach((a, i) => {
+    const href = a.getAttribute("href");
+    if (!href || href.startsWith("#") || /^(javascript|mailto|tel):/i.test(href)) return;
+    let abs = "";
+    try { abs = absoluteUrl(tocUrl, href).split("#")[0]; } catch { return; }
+    if (seen.has(abs)) return;
+    let u: URL;
+    try { u = new URL(abs); } catch { return; }
+    if (origin && u.hostname !== origin) return;
+    if (abs.replace(/\/$/, "") === normToc) return;
+    if (u.pathname.length < 4) return;
+    if (NOISE.test(u.pathname)) return;
+    const text = (a.textContent || "").trim();
+    if (NOISE.test(text)) return;
+
+    seen.add(abs);
+    const segs = u.pathname.split("/").filter(Boolean);
+    // Shape = path with numbers masked, so /ch/1 and /ch/2 land in one group.
+    const shape = segs.map((s) => s.replace(/\d+/g, "#")).join("/");
+    cands.push({ url: abs, text, shape, order: i });
+  });
+
+  if (!cands.length) return [];
+
+  const groups = new Map<string, Cand[]>();
+  for (const c of cands) {
+    const g = groups.get(c.shape) || [];
+    g.push(c);
+    groups.set(c.shape, g);
+  }
+
+  const chapterish = (c: Cand) =>
+    /\b(chapter|chap|ch|episode|ep|part|vol|volume|book|tap|quyen)\b/i.test(c.text + " " + c.url) ||
+    /\d/.test(c.text) ||
+    /\d/.test(c.url);
+
+  let best: Cand[] = [];
+  let bestScore = 0;
+  for (const g of groups.values()) {
+    if (g.length < 2) continue;
+    const hits = g.filter(chapterish).length;
+    const score = g.length * (1 + hits / g.length);
+    if (score > bestScore) {
+      bestScore = score;
+      best = g;
+    }
+  }
+
+  if (!best.length) best = cands.filter(chapterish);
+  if (!best.length) best = cands;
+
+  return best.sort((a, b) => a.order - b.order).map((c) => c.url);
+}
+
 async function bodyGeneric(url: string, selector: string): Promise<string> {
   const doc = parseHtml(await getText(url));
-  return extractWithSelector(doc, selector || "#chapter-content, .chapter-content, article, .content");
+
+  const tries = [
+    () => (selector ? extractWithSelector(doc, selector) : ""),
+    () => extractWithSelector(doc, GENERIC_CONTENT_SELECTORS),
+    () => densestContent(doc),
+    () => paragraphFallback(doc),
+  ];
+
+  let best = "";
+  for (const t of tries) {
+    let html = "";
+    try { html = t() || ""; } catch { html = ""; }
+    if (plainLen(html) >= 200) return html;
+    if (plainLen(html) > plainLen(best)) best = html;
+  }
+  return best;
 }
 
 // ---------- Dispatch ----------
@@ -997,12 +1136,20 @@ export async function fetchChapterLinks(tocUrl: string, linkSelector: string): P
 
       default: {
         const doc = parseHtml(await getText(tocUrl));
-        const out: string[] = [];
-        doc.querySelectorAll(linkSelector || "a[href]").forEach((a) => {
-          const href = a.getAttribute("href");
-          if (href) out.push(absoluteUrl(tocUrl, href));
-        });
-        return out;
+        if (linkSelector) {
+          const out: string[] = [];
+          const seen = new Set<string>();
+          doc.querySelectorAll(linkSelector).forEach((a) => {
+            const href = a.getAttribute("href");
+            if (!href) return;
+            const abs = absoluteUrl(tocUrl, href);
+            if (seen.has(abs)) return;
+            seen.add(abs);
+            out.push(abs);
+          });
+          if (out.length) return out;
+        }
+        return smartChapterLinks(doc, tocUrl);
       }
     }
   } catch (e) {
