@@ -527,4 +527,6 @@ app.get("/api/jobs/:id/download", (req, res) => {
   fs.createReadStream(job.file).pipe(res);
 });
 
+restoreJobs();
+
 app.listen(PORT, () => console.log(`link-to-epub server listening on ${PORT}`));
