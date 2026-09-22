@@ -332,9 +332,9 @@ export async function backendStartJob(payload: {
   options?: Record<string, unknown>;
   selector?: string;
 }): Promise<BackendJob> {
-  // Pick one backend now (round-robin over the healthy pool) and keep the job
-  // pinned to it — jobs live in that server's memory.
-  const base = getBackendUrl();
+  // Send the job to whichever server is least busy right now, then pin it
+  // there — jobs live in that server's memory.
+  const base = await pickLeastLoadedBackend();
   const job = await api<BackendJob>('/api/jobs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
