@@ -656,6 +656,76 @@ function paragraphFallback(doc: Document): string {
   return paras.length >= 3 ? paras.join("\n") : "";
 }
 
+/**
+ * Heuristic table-of-contents reader for sites we have no config for.
+ * Groups same-origin links by URL shape and keeps the largest chapter-like
+ * family, preserving page order.
+ */
+function smartChapterLinks(doc: Document, tocUrl: string): string[] {
+  let origin = "";
+  try { origin = new URL(tocUrl).hostname; } catch { /* ignore */ }
+
+  const NOISE = /(login|register|sign-?in|sign-?up|privacy|terms|contact|about|dmca|tag|genre|category|author|search|rss|feed|donate|patreon|discord|facebook|twitter|telegram|comment|bookmark|report)/i;
+  const normToc = tocUrl.split("#")[0].replace(/\/$/, "");
+
+  type Cand = { url: string; text: string; shape: string; order: number };
+  const cands: Cand[] = [];
+  const seen = new Set<string>();
+
+  Array.from(doc.querySelectorAll("a[href]")).forEach((a, i) => {
+    const href = a.getAttribute("href");
+    if (!href || href.startsWith("#") || /^(javascript|mailto|tel):/i.test(href)) return;
+    let abs = "";
+    try { abs = absoluteUrl(tocUrl, href).split("#")[0]; } catch { return; }
+    if (seen.has(abs)) return;
+    let u: URL;
+    try { u = new URL(abs); } catch { return; }
+    if (origin && u.hostname !== origin) return;
+    if (abs.replace(/\/$/, "") === normToc) return;
+    if (u.pathname.length < 4) return;
+    if (NOISE.test(u.pathname)) return;
+    const text = (a.textContent || "").trim();
+    if (NOISE.test(text)) return;
+
+    seen.add(abs);
+    const segs = u.pathname.split("/").filter(Boolean);
+    // Shape = path with numbers masked, so /ch/1 and /ch/2 land in one group.
+    const shape = segs.map((s) => s.replace(/\d+/g, "#")).join("/");
+    cands.push({ url: abs, text, shape, order: i });
+  });
+
+  if (!cands.length) return [];
+
+  const groups = new Map<string, Cand[]>();
+  for (const c of cands) {
+    const g = groups.get(c.shape) || [];
+    g.push(c);
+    groups.set(c.shape, g);
+  }
+
+  const chapterish = (c: Cand) =>
+    /\b(chapter|chap|ch|episode|ep|part|vol|volume|book|tap|quyen)\b/i.test(c.text + " " + c.url) ||
+    /\d/.test(c.text) ||
+    /\d/.test(c.url);
+
+  let best: Cand[] = [];
+  let bestScore = 0;
+  for (const g of groups.values()) {
+    if (g.length < 2) continue;
+    const hits = g.filter(chapterish).length;
+    const score = g.length * (1 + hits / g.length);
+    if (score > bestScore) {
+      bestScore = score;
+      best = g;
+    }
+  }
+
+  if (!best.length) best = cands.filter(chapterish);
+  if (!best.length) best = cands;
+
+  return best.sort((a, b) => a.order - b.order).map((c) => c.url);
+}
+
 async function bodyGeneric(url: string, selector: string): Promise<string> {
   const doc = parseHtml(await getText(url));
 
