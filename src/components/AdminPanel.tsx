@@ -19,7 +19,6 @@ import {
   backendHealthy,
   DEFAULT_BACKEND_URL,
   HEROKU_BACKEND_URL,
-  HF_BACKEND_URL,
 } from '@/utils/backend';
 
 export function AdminPanel({ open, onOpenChange, hideTrigger }: { open?: boolean; onOpenChange?: (o: boolean) => void; hideTrigger?: boolean } = {}) {
@@ -259,14 +258,6 @@ export function AdminPanel({ open, onOpenChange, hideTrigger }: { open?: boolean
                     onClick={() => setServerUrl(HEROKU_BACKEND_URL)}
                   >
                     Heroku
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={serverUrl === HF_BACKEND_URL ? 'default' : 'outline'}
-                    onClick={() => setServerUrl(HF_BACKEND_URL)}
-                  >
-                    Hugging Face
                   </Button>
                 </div>
                 <div className="flex gap-2">

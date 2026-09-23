@@ -11,12 +11,10 @@ const URL_KEY = 'backendUrl';
 const JOB_KEY = 'backendJobId';
 
 export const HEROKU_BACKEND_URL = 'https://link-to-epub-37130-dfa858b712fc.herokuapp.com';
-/** Hugging Face Space running the identical Express server (Docker, port 7860). */
-export const HF_BACKEND_URL = 'https://prasadonly-web-to-epub-bot.hf.space';
 export const DEFAULT_BACKEND_URL = HEROKU_BACKEND_URL;
 
 /** Every known backend, tried in order when the active one is unreachable. */
-export const BACKEND_URLS: readonly string[] = [HEROKU_BACKEND_URL, HF_BACKEND_URL];
+export const BACKEND_URLS: readonly string[] = [HEROKU_BACKEND_URL];
 
 /**
  * Hostnames that have a dedicated server-side parser in fetcher.js.
@@ -166,7 +164,7 @@ export async function pickLeastLoadedBackend(): Promise<string> {
   const loads = await Promise.all(
     BACKEND_URLS.map(async (url) => ({
       url,
-      jobs: await backendLoad(url, url === HF_BACKEND_URL ? 35_000 : 12_000),
+      jobs: await backendLoad(url, 12_000),
     }))
   );
   const up = loads.filter((l) => l.jobs !== null) as { url: string; jobs: number }[];
@@ -242,15 +240,12 @@ async function pingBackend(base: string, timeoutMs = 15_000): Promise<boolean> {
 }
 
 /**
- * Health check with dual-backend load balancing: tests BOTH Heroku and Hugging Face
- * in parallel. If both are healthy, both stay in the active round-robin pool to
- * split traffic 50/50, doubling throughput and preventing server overload.
+ * Health check for the Heroku backend.
  */
 export async function backendHealthy(): Promise<boolean> {
   const results = await Promise.all(
     BACKEND_URLS.map(async (url) => {
-      // HF Spaces sleep — the first request wakes them, so allow more time.
-      const isUp = await pingBackend(url, url === HF_BACKEND_URL ? 35_000 : 12_000);
+      const isUp = await pingBackend(url, 12_000);
       return { url, isUp };
     })
   );

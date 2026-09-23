@@ -49,9 +49,8 @@ export const aiContentSelectors = [
 
 const BACKEND_URL_KEY = 'backendUrl';
 const HEROKU_BACKEND = 'https://link-to-epub-37130-dfa858b712fc.herokuapp.com';
-const HF_BACKEND = 'https://prasadonly-web-to-epub-bot.hf.space';
 
-/** Returns active backend proxies (Heroku + Hugging Face) if backend is enabled. */
+/** Returns active backend proxies (Heroku) if backend is enabled. */
 function getBackendProxies(): Array<{ name: string; url: string }> {
   try {
     // Check if the backend is explicitly disabled in localStorage
@@ -60,7 +59,6 @@ function getBackendProxies(): Array<{ name: string; url: string }> {
 
     return [
       { name: 'Heroku Proxy', url: `${HEROKU_BACKEND}/api/proxy?url=` },
-      { name: 'HuggingFace Proxy', url: `${HF_BACKEND}/api/proxy?url=` },
     ];
   } catch {
     return [];
