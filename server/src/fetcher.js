@@ -152,18 +152,26 @@ function looksLikeChallenge(text) {
  * Hugging Face Space, so both backends can beat Cloudflare.
  * ------------------------------------------------------------------ */
 
-const LOCAL_STEALTH = (process.env.STEALTH_URL || "").replace(/\/$/, "");
-const REMOTE_STEALTH = (
-  process.env.REMOTE_STEALTH_URL ||
-  "https://prasadonly-web-to-epub-bot.hf.space/api/stealth"
-).replace(/\/$/, "");
+const LOCAL_STEALTH = (process.env.STEALTH_URL || "http://127.0.0.1:8191").replace(/\/$/, "");
+const REMOTE_STEALTH = (process.env.REMOTE_STEALTH_URL || "").replace(/\/$/, "");
 
 const STEALTH_ROUTES = [
   LOCAL_STEALTH ? `${LOCAL_STEALTH}/fetch?url=` : "",
   REMOTE_STEALTH ? `${REMOTE_STEALTH}?url=` : "",
 ].filter(Boolean);
 
-let localStealthOk = Boolean(LOCAL_STEALTH);
+let localStealthOk = true;
+
+function isInvalidStealthBody(text) {
+  if (!text) return true;
+  const head = text.slice(0, 5000).toLowerCase();
+  return (
+    head.includes("hugging face") ||
+    head.includes("huggingface_logo") ||
+    head.includes("preparing space") ||
+    looksLikeChallenge(text)
+  );
+}
 
 /** Fetches through the stealth chain. Returns the HTML, or null if unavailable. */
 export async function stealthGet(url, timeoutMs = 45000, tor = "auto") {
@@ -173,13 +181,14 @@ export async function stealthGet(url, timeoutMs = 45000, tor = "auto") {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeoutMs + 5000);
     try {
+      const sep = base.includes("?") ? "&" : "?";
       const r = await fetch(
-        `${base}${encodeURIComponent(url)}&tor=${tor}&timeout=${Math.round(timeoutMs / 1000)}`,
+        `${base}${encodeURIComponent(url)}${sep}tor=${tor}&timeout=${Math.round(timeoutMs / 1000)}`,
         { signal: ctrl.signal }
       );
       if (r.ok) {
         const text = await r.text();
-        if (text && !looksLikeChallenge(text)) return text;
+        if (text && !isInvalidStealthBody(text)) return text;
       }
     } catch {
       if (isLocal) localStealthOk = false; // sidecar not running here
@@ -191,7 +200,7 @@ export async function stealthGet(url, timeoutMs = 45000, tor = "auto") {
 }
 
 export function stealthAvailable() {
-  return STEALTH_ROUTES.length > 0;
+  return STEALTH_ROUTES.length > 0 && (localStealthOk || Boolean(REMOTE_STEALTH));
 }
 
 const INKITT_COOKIE =
