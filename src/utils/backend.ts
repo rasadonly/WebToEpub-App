@@ -127,7 +127,14 @@ let poolCursor = Math.floor(Math.random() * BACKEND_URLS.length);
 
 export function getBackendUrl(): string {
   const stored = localStorage.getItem(URL_KEY);
-  if (stored) return stored.replace(/\/$/, '');
+  if (stored) {
+    const cleaned = stored.trim().replace(/\/$/, '');
+    if (cleaned.includes('hf.space') || cleaned.includes('huggingface.co')) {
+      localStorage.removeItem(URL_KEY);
+    } else {
+      return cleaned;
+    }
+  }
 
   if (activePool.length > 0) {
     const url = activePool[poolCursor % activePool.length];
@@ -144,6 +151,8 @@ async function backendLoad(base: string, timeoutMs: number): Promise<number | nu
   try {
     const r = await fetch(`${base.replace(/\/$/, '')}/health`, { signal: ctrl.signal });
     if (!r.ok) return null;
+    const ct = r.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) return null;
     const data = await r.json().catch(() => ({}));
     return typeof data.jobs === 'number' ? data.jobs : 0;
   } catch {
@@ -155,11 +164,18 @@ async function backendLoad(base: string, timeoutMs: number): Promise<number | nu
 
 /**
  * Picks the backend with the fewest running jobs so work actually spreads
- * across both servers instead of piling onto the default one.
+ * across available servers.
  */
 export async function pickLeastLoadedBackend(): Promise<string> {
   const stored = localStorage.getItem(URL_KEY);
-  if (stored) return stored.replace(/\/$/, '');
+  if (stored) {
+    const cleaned = stored.trim().replace(/\/$/, '');
+    if (cleaned.includes('hf.space') || cleaned.includes('huggingface.co')) {
+      localStorage.removeItem(URL_KEY);
+    } else {
+      return cleaned;
+    }
+  }
 
   const loads = await Promise.all(
     BACKEND_URLS.map(async (url) => ({
@@ -201,7 +217,6 @@ export interface BackendJob {
   size: number;
   filename: string;
   ready: boolean;
-  /** Shared Hugging Face library copy (direct .epub download link). */
   libraryUrl?: string;
   libraryPageUrl?: string;
   libraryStatus?: 'uploading' | 'saved' | 'failed';
@@ -220,6 +235,10 @@ async function api<T>(path: string, init?: RequestInit, timeoutMs = 60_000, base
   try {
     const r = await fetch(`${(base || getBackendUrl()).replace(/\/$/, '')}${path}`, { ...init, signal: ctrl.signal });
     if (!r.ok) throw new Error(`Backend error ${r.status}`);
+    const ct = r.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) {
+      throw new Error('Server returned HTML instead of JSON');
+    }
     return (await r.json()) as T;
   } finally {
     window.clearTimeout(timer);
@@ -231,7 +250,11 @@ async function pingBackend(base: string, timeoutMs = 15_000): Promise<boolean> {
   const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const r = await fetch(`${base.replace(/\/$/, '')}/health`, { signal: ctrl.signal });
-    return r.ok;
+    if (!r.ok) return false;
+    const ct = r.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) return false;
+    const data = await r.json().catch(() => null);
+    return Boolean(data && (data.status === 'ok' || typeof data.jobs === 'number'));
   } catch {
     return false;
   } finally {
