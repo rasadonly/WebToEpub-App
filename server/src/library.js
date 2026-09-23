@@ -1,17 +1,18 @@
 // Uploads finished EPUBs to the shared Hugging Face dataset library so users
 // get a permanent download link in addition to the local file.
 //
-// Dataset: https://huggingface.co/datasets/prasadonly/webtoepub-library
-// Requires the HUGGINGFACE_TOKEN (write scope) env var. Without it the upload
-// is silently skipped — conversions keep working exactly as before.
+// Dataset: https://huggingface.co/datasets/prasaduser/webtoepub-library
+// (older books stay read-only in prasadonly/webtoepub-library).
+// Requires HF_LIBRARY_TOKEN (or HUGGINGFACE_TOKEN) with write scope. Without it
+// the upload is silently skipped — conversions keep working exactly as before.
 
 import { createHash } from "node:crypto";
 
-const REPO = process.env.HF_LIBRARY_REPO || "prasadonly/webtoepub-library";
+const REPO = process.env.HF_LIBRARY_REPO || "prasaduser/webtoepub-library";
 const MAX_BYTES = Number(process.env.HF_LIBRARY_MAX_BYTES || 40 * 1024 * 1024);
 
 function token() {
-  return (process.env.HUGGINGFACE_TOKEN || process.env.HF_TOKEN || "").trim();
+  return (process.env.HF_LIBRARY_TOKEN || process.env.HUGGINGFACE_TOKEN || process.env.HF_TOKEN || "").trim();
 }
 
 export function libraryEnabled() {

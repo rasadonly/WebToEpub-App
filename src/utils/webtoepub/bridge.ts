@@ -1044,7 +1044,11 @@ export const libraryGetTelegram = () => fetchHFBooks('telegram');
 export const libraryGetPublic = () => fetchHFBooks('hf');
 
 // ── Community library (books this app uploads) ──────────────
-const HF_COMMUNITY_REPO_ID = 'prasadonly/webtoepub-library';
+/** New uploads go here (server HF_LIBRARY_REPO). */
+const HF_COMMUNITY_REPO_ID = 'prasaduser/webtoepub-library';
+/** Previous dataset — read-only archive, still shown in the library. */
+const HF_COMMUNITY_ARCHIVE_REPO_ID = 'prasadonly/webtoepub-library';
+const HF_COMMUNITY_REPOS = [HF_COMMUNITY_REPO_ID, HF_COMMUNITY_ARCHIVE_REPO_ID];
 
 interface HFTreeEntry { type: string; path: string; size?: number }
 
@@ -1059,10 +1063,12 @@ function prettyTitleFromPath(path: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase()) || 'Untitled';
 }
 
-const HF_TREE_BASE = `https://huggingface.co/api/datasets/${HF_COMMUNITY_REPO_ID}/tree/main/books?recursive=true&limit=1000`;
+const treeBase = (repoId: string) =>
+  `https://huggingface.co/api/datasets/${repoId}/tree/main/books?recursive=true&limit=1000`;
 
 /** HF's tree API pages at 1000 entries; follow the `Link: rel="next"` cursor. */
-async function fetchCommunityTree(): Promise<HFTreeEntry[]> {
+async function fetchCommunityTree(repoId: string): Promise<HFTreeEntry[]> {
+  const HF_TREE_BASE = treeBase(repoId);
   const all: HFTreeEntry[] = [];
   let url: string | null = HF_TREE_BASE;
   let pages = 0;
@@ -1093,8 +1099,16 @@ async function fetchCommunityTree(): Promise<HFTreeEntry[]> {
 }
 
 export async function libraryGetCommunity(): Promise<LibraryBook[]> {
-  const list = await fetchCommunityTree();
-  if (!Array.isArray(list) || list.length === 0) return [];
+  // Read the new dataset and the old archive together; one failing (e.g. the
+  // new one still empty) must not hide the other.
+  const results = await Promise.allSettled(HF_COMMUNITY_REPOS.map((r) => fetchCommunityTree(r)));
+  const list: (HFTreeEntry & { repoId: string })[] = [];
+  results.forEach((res, i) => {
+    if (res.status === 'fulfilled' && Array.isArray(res.value)) {
+      for (const e of res.value) list.push({ ...e, repoId: HF_COMMUNITY_REPOS[i] });
+    }
+  });
+  if (list.length === 0) return [];
 
 
   // Remove files smaller than 100 KB (102,400 bytes)
@@ -1109,13 +1123,13 @@ export async function libraryGetCommunity(): Promise<LibraryBook[]> {
     .map((item) => {
       const dateMatch = item.path.match(/books\/(\d{4}-\d{2}-\d{2})\//);
       return {
-        id: item.path,
+        id: `${item.repoId}:${item.path}`,
         title: prettyTitleFromPath(item.path),
         author: '',
         description: '',
         size: item.size,
         uploadedAt: dateMatch ? `${dateMatch[1]}T00:00:00Z` : undefined,
-        handle: { epubPath: item.path, repoId: HF_COMMUNITY_REPO_ID },
+        handle: { epubPath: item.path, repoId: item.repoId },
         source: 'hf' as const,
       };
     })
