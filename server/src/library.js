@@ -2,7 +2,7 @@
 // get a permanent download link in addition to the local file.
 //
 // Dataset: https://huggingface.co/datasets/prasaduser/webtoepub-library
-// (older books stay read-only in prasadonly/webtoepub-library).
+// (all older books were migrated into this dataset).
 // Requires HF_LIBRARY_TOKEN (or HUGGINGFACE_TOKEN) with write scope. Without it
 // the upload is silently skipped — conversions keep working exactly as before.
 
