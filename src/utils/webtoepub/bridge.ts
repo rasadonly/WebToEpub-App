@@ -1046,9 +1046,8 @@ export const libraryGetPublic = () => fetchHFBooks('hf');
 // ── Community library (books this app uploads) ──────────────
 /** New uploads go here (server HF_LIBRARY_REPO). */
 const HF_COMMUNITY_REPO_ID = 'prasaduser/webtoepub-library';
-/** Previous dataset — read-only archive, still shown in the library. */
-const HF_COMMUNITY_ARCHIVE_REPO_ID = 'prasadonly/webtoepub-library';
-const HF_COMMUNITY_REPOS = [HF_COMMUNITY_REPO_ID, HF_COMMUNITY_ARCHIVE_REPO_ID];
+/** All old books were migrated here; the old dataset is no longer read. */
+const HF_COMMUNITY_REPOS = [HF_COMMUNITY_REPO_ID];
 
 interface HFTreeEntry { type: string; path: string; size?: number }
 
