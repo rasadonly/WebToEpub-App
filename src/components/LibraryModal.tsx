@@ -134,13 +134,15 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
 
 
   const filtered = useMemo(
-    () =>
-      books.filter(
+    () => {
+      const q = query.toLowerCase().replace(/[^a-z0-9]+/g, '');
+      return books.filter(
         (b) =>
-          !query ||
-          b.title.toLowerCase().includes(query.toLowerCase()) ||
-          b.author.toLowerCase().includes(query.toLowerCase())
-      ),
+          !q ||
+          b.title.toLowerCase().replace(/[^a-z0-9]+/g, '').includes(q) ||
+          b.author.toLowerCase().replace(/[^a-z0-9]+/g, '').includes(q)
+      );
+    },
     [books, query]
   );
   const visibleBooks = filtered.slice(0, visibleCount);
