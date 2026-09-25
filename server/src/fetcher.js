@@ -20,11 +20,8 @@ const DEFAULT_HEADERS = {
 const PROXIES = [
   "", // direct
   "https://loveable-proxy-forwebtoepub.lovable.app/api/proxy?url=",
-  "https://prasadghanwat.alwaysdata.net/proxy?url=",
-  "https://render-proxy-1-181c.onrender.com/proxy?url=",
-  "https://corsproxy.io/?key=ab3170e1&url=",
-  "https://api.allorigins.win/raw?url=",
-  "https://api.cors.lol/?url=",
+  // Dead/hanging proxies removed (403/502/timeouts) so requests fail fast.
+  "https://api.codetabs.com/v1/proxy?quest=",
 ];
 
 const ENCODED_SUFFIXES = ["?url=", "?quest=", "&url="];
