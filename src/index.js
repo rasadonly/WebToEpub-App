@@ -344,13 +344,38 @@ app.post("/api/jobs", async (req, res) => {
   startJob(job, spec);
 });
 
+// Cap heavy conversions so the 512 MB dyno stops blowing its memory quota.
+const MAX_ACTIVE_JOBS = Number(process.env.MAX_ACTIVE_JOBS || 3);
+let activeJobs = 0;
+const jobQueue = [];
+function pumpJobs() {
+  while (activeJobs < MAX_ACTIVE_JOBS && jobQueue.length) {
+    const { job, spec } = jobQueue.shift();
+    if (job.status === "cancelled") continue;
+    activeJobs++;
+    runJob(job, spec)
+      .catch((e) => {
+        job.status = "error";
+        job.error = e.message;
+        job.updatedAt = Date.now();
+        persistJob(job, true);
+      })
+      .finally(() => {
+        activeJobs--;
+        jobSpecs.delete(job.id);
+        if (global.gc) try { global.gc(); } catch { /* ignore */ }
+        pumpJobs();
+      });
+  }
+}
 function startJob(job, spec) {
-  return runJob(job, spec).catch((e) => {
-    job.status = "error";
-    job.error = e.message;
+  jobQueue.push({ job, spec });
+  if (activeJobs >= MAX_ACTIVE_JOBS) {
+    job.phase = `queued (${jobQueue.length} ahead)`;
     job.updatedAt = Date.now();
-    persistJob(job, true);
-  });
+  }
+  pumpJobs();
+  return Promise.resolve();
 }
 
 async function runJob(job, { tocUrl, providedChapters, metadata, options, selector }) {
