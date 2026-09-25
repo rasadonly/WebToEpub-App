@@ -417,17 +417,39 @@ export function pollJob(
   intervalMs = 1500
 ): () => void {
   let stopped = false;
+  let failures = 0;
+  const giveUp = (msg: string) => {
+    stopped = true;
+    clearActiveJobId();
+    try { localStorage.removeItem(`${JOB_KEY}:${id}`); } catch { /* ignore */ }
+    onUpdate({
+      id, status: 'error', phase: 'error', total: 0, completed: 0, failed: 0, title: '',
+      error: msg,
+    } as BackendJob);
+  };
   const tick = async () => {
     if (stopped) return;
     try {
       const job = await backendJobStatus(id);
       if (stopped) return;
+      failures = 0;
       onUpdate(job);
       if (job.status === 'done' || job.status === 'error' || job.status === 'cancelled') return;
-    } catch {
-      /* transient — keep polling */
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/\b404\b|not found/i.test(msg)) {
+        giveUp('Server restarted or job expired. Please click Convert again to retry.');
+        return;
+      }
+      failures++;
+      if (failures >= 20) {
+        giveUp('Lost contact with the server. Please try again in a moment.');
+        return;
+      }
     }
-    if (!stopped) window.setTimeout(tick, intervalMs);
+    // Back off while the server is struggling so we don't flood it.
+    const delay = failures ? Math.min(intervalMs * 2 ** failures, 15_000) : intervalMs;
+    if (!stopped) window.setTimeout(tick, delay);
   };
   tick();
   return () => {

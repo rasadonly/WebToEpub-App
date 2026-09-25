@@ -29,11 +29,9 @@ const DEFAULT_HEADERS: Record<string, string> = {
 // gets tried first — it's faster and more reliable than public proxies.
 export const CORS_PROXY_LIST: Array<{ name: string; url: string }> = [
   { name: "Lovable Proxy", url: "https://loveable-proxy-forwebtoepub.lovable.app/api/proxy?url=" },
-  { name: "Alwaysdata Proxy", url: "https://prasadghanwat.alwaysdata.net/proxy?url=" },
-  { name: "Render Proxy", url: "https://render-proxy-1-181c.onrender.com/proxy?url=" },
-  { name: "corsproxy.io (with key)", url: "https://corsproxy.io/?key=ab3170e1&url=" },
-  { name: "allOrigins (raw)", url: "https://api.allorigins.win/raw?url=" },
-  { name: "cors.lol", url: "https://api.cors.lol/?url=" },
+  // Dead proxies (alwaysdata 403, render 502, corsproxy key 403, allorigins
+  // hangs 15-30s, cors.lol 403) removed so requests fail fast.
+  { name: "codetabs", url: "https://api.codetabs.com/v1/proxy?quest=" },
 ];
 
 export const aiContentSelectors = [
