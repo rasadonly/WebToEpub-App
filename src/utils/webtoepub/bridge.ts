@@ -150,12 +150,8 @@ async function fetchTextWithProxyFallback(url: string, timeoutMs = 15_000): Prom
   }
 
   let lastError: unknown = null;
-  const preferred = [...CORS_PROXY_LIST].sort((a, b) => {
-    const score = (u: string) => (u.includes('corsproxy.io') ? 0 : u.includes('allorigins') ? 1 : 2);
-    return score(a.url) - score(b.url);
-  });
 
-  for (const proxy of preferred) {
+  for (const proxy of CORS_PROXY_LIST) {
     try {
       const response = await withTimeout(buildProxyUrl(proxy.url, url), { cache: 'no-store' }, timeoutMs);
       if (!response.ok) {
@@ -725,8 +721,12 @@ export interface SearchProgress {
   status: string;
 }
 
-const SEARCH_CONCURRENCY = 10;
-const PER_SITE_TIMEOUT_MS = 12000;
+// Limit concurrency so browser connection pool (max ~6-8 per host) isn't saturated.
+// 5 workers × 2 proxies = 10 open connections max at a time — well within limits.
+const SEARCH_CONCURRENCY = 5;
+// Give each site 7 s. Lovable/Heroku usually respond in <3 s; 7 s leaves headroom
+// while failing dead sites fast enough not to stall the queue.
+const PER_SITE_TIMEOUT_MS = 7000;
 
 function promiseTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {

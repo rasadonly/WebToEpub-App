@@ -20,7 +20,7 @@ class SiteSearchEngine {
     static MAX_RESULTS_PER_SITE = 20;
 
     /** Timeout per proxy attempt in ms */
-    static PROXY_TIMEOUT_MS = 5000;
+    static PROXY_TIMEOUT_MS = 4000;
 
     // ─── Site Configurations (cached) ────────────────────────────────────
 

@@ -30,8 +30,8 @@ const DEFAULT_HEADERS: Record<string, string> = {
 export const CORS_PROXY_LIST: Array<{ name: string; url: string }> = [
   { name: "Lovable Proxy", url: "https://loveable-proxy-forwebtoepub.lovable.app/api/proxy?url=" },
   // Dead proxies (alwaysdata 403, render 502, corsproxy key 403, allorigins
-  // hangs 15-30s, cors.lol 403) removed so requests fail fast.
-  { name: "codetabs", url: "https://api.codetabs.com/v1/proxy?quest=" },
+  // hangs 15-30s, cors.lol 403, codetabs 403) all removed — Heroku is prepended
+  // at runtime by getBackendProxies(), Lovable is the static fallback.
 ];
 
 export const aiContentSelectors = [

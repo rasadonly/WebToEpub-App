@@ -767,15 +767,11 @@ let BlockedHostNames = new Set();
 
 // CORS proxy settings (website mode)
 // These can be updated via the UI CORS proxy controls in popup.html
+// Dead proxies removed (corsproxy.io key 403, allOrigins hangs, CORS.SH no-connect,
+// CodeTabs 403, ThingProxy no-connect, cors.lol 403, Render 502, Alwaysdata 403).
+// Heroku proxy is prepended at runtime by bridge.ts (injected as CORS_PROXIES[0]).
+// Lovable proxy remains as the static fallback.
 HttpClient.CORS_PROXIES = [
-    { name: "corsproxy.io (with key)", url: "https://corsproxy.io/?key=ab3170e1&url=" },
-    { name: "allOrigins (raw)", url: "https://api.allorigins.win/raw?url=" },
-    { name: "CORS.SH", url: "https://proxy.cors.sh/" },
-    { name: "CodeTabs", url: "https://api.codetabs.com/v1/proxy?quest=" },
-    { name: "ThingProxy", url: "https://thingproxy.freeboard.io/fetch/" },
-    { name: "cors.lol", url: "https://api.cors.lol/?url=" },
-    { name: "Render Proxy", url: "https://render-proxy-1-181c.onrender.com/proxy?url=" },
-    { name: "Alwaysdata Proxy", url: "https://prasadghanwat.alwaysdata.net/proxy?url=" },
     { name: "Lovable Proxy", url: "https://loveable-proxy-forwebtoepub.lovable.app/api/proxy?url=" }
 ];
 HttpClient.corsProxyUrl = HttpClient.CORS_PROXIES[0].url;
