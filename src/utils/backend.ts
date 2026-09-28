@@ -374,20 +374,22 @@ export async function backendCancelJob(id: string): Promise<void> {
   }
 }
 
-/** Downloads the finished EPUB as a real .epub file (correct MIME + extension). */
+/**
+ * Downloads the finished EPUB as a real .epub file.
+ * Uses a direct link to the server file (server sends epub MIME + attachment
+ * header). No fetch/blob step, so the click stays a real user gesture and
+ * mobile / in-app browsers don't silently block it.
+ */
 export async function backendDownload(job: BackendJob): Promise<void> {
-  const res = await fetch(`${getJobBase(job.id)}/api/jobs/${job.id}/download`);
-  if (!res.ok) throw new Error('EPUB not ready on the server');
-  const raw = await res.blob();
-  const blob = new Blob([raw], { type: 'application/epub+zip' });
-  const href = URL.createObjectURL(blob);
+  const url = `${getJobBase(job.id)}/api/jobs/${job.id}/download`;
   const a = document.createElement('a');
-  a.href = href;
+  a.href = url;
   a.download = job.filename.endsWith('.epub') ? job.filename : `${job.filename}.epub`;
+  a.rel = 'noopener';
+  a.style.display = 'none';
   document.body.appendChild(a);
   a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(href), 10_000);
+  setTimeout(() => a.remove(), 500);
 }
 
 // ----- session persistence (survives closing the page) -----
