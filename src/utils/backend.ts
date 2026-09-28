@@ -382,13 +382,6 @@ export async function backendCancelJob(id: string): Promise<void> {
  */
 export async function backendDownload(job: BackendJob): Promise<void> {
   const url = `${getJobBase(job.id)}/api/jobs/${job.id}/download`;
-  // Quick check that the file still exists (server restarts wipe it).
-  try {
-    const head = await fetch(url, { method: 'HEAD' });
-    if (head.status === 404) throw new Error('EPUB expired on the server — please convert again');
-  } catch (e) {
-    if ((e as Error).message.includes('expired')) throw e;
-  }
   const a = document.createElement('a');
   a.href = url;
   a.download = job.filename.endsWith('.epub') ? job.filename : `${job.filename}.epub`;
