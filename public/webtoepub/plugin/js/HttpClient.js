@@ -767,11 +767,11 @@ let BlockedHostNames = new Set();
 
 // CORS proxy settings (website mode)
 // These can be updated via the UI CORS proxy controls in popup.html
-// Dead proxies removed (corsproxy.io key 403, allOrigins hangs, CORS.SH no-connect,
-// CodeTabs 403, ThingProxy no-connect, cors.lol 403, Render 502, Alwaysdata 403).
 // Heroku proxy is prepended at runtime by bridge.ts (injected as CORS_PROXIES[0]).
-// Lovable proxy remains as the static fallback.
+// CF Worker proxy (self-hosted, 100k req/day free) is static fallback #1 — fast and
+// bypasses CF bot-fight on most sites. Lovable is static fallback #2.
 HttpClient.CORS_PROXIES = [
+    { name: "CF Worker Proxy", url: "https://epub-cors-proxy.telegram-cf-proxy.workers.dev/api/proxy?url=" },
     { name: "Lovable Proxy", url: "https://loveable-proxy-forwebtoepub.lovable.app/api/proxy?url=" }
 ];
 HttpClient.corsProxyUrl = HttpClient.CORS_PROXIES[0].url;

@@ -28,6 +28,8 @@ const DEFAULT_HEADERS: Record<string, string> = {
 // The Heroku backend proxy is prepended at runtime (if backend is enabled) so it
 // gets tried first — it's faster and more reliable than public proxies.
 export const CORS_PROXY_LIST: Array<{ name: string; url: string }> = [
+  // Self-hosted CF Worker (100k req/day free) — fast, bypasses CF bot-fight on many sites.
+  { name: "CF Worker Proxy", url: "https://epub-cors-proxy.telegram-cf-proxy.workers.dev/api/proxy?url=" },
   { name: "Lovable Proxy", url: "https://loveable-proxy-forwebtoepub.lovable.app/api/proxy?url=" },
   // Dead proxies (alwaysdata 403, render 502, corsproxy key 403, allorigins
   // hangs 15-30s, cors.lol 403, codetabs 403) all removed — Heroku is prepended
