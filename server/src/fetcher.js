@@ -17,11 +17,14 @@ const DEFAULT_HEADERS = {
   "Accept-Language": "en-US,en;q=0.9",
 };
 
+// Ordered by measured success/speed: the self-hosted CF Worker opened the most
+// sites (NovelFull, FreeWebNovel, NovelFire, NovGo...) and is fastest.
 const PROXIES = [
   "", // direct
+  "https://epub-cors-proxy.telegram-cf-proxy.workers.dev/api/proxy?url=",
   "https://loveable-proxy-forwebtoepub.lovable.app/api/proxy?url=",
-  // Dead/hanging proxies removed (403/502/timeouts) so requests fail fast.
   "https://api.codetabs.com/v1/proxy?quest=",
+  "https://corsproxy.io/?url=",
 ];
 
 const ENCODED_SUFFIXES = ["?url=", "?quest=", "&url="];

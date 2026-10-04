@@ -80,8 +80,10 @@ function buildProxyUrl(proxyBase: string, targetUrl: string): string {
 }
 
 function getActiveCorsProxies(): Array<(url: string) => string> {
+  // Measured order: CF Worker and Lovable proxy open far more sites, and
+  // faster, than the Heroku proxy, so they go first; Heroku next; the rest last.
   const backends = getBackendProxies();
-  const list = backends.length ? [...backends, ...CORS_PROXY_LIST] : CORS_PROXY_LIST;
+  const list = [...CORS_PROXY_LIST.slice(0, 2), ...backends, ...CORS_PROXY_LIST.slice(2)];
   return list.map((p) => (url: string) => buildProxyUrl(p.url, url));
 }
 
