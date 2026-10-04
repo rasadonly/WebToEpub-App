@@ -1,3 +1,4 @@
+import proxyMap from "./proxyMap.json";
 export interface WorkerResponse {
   results?: string[];
   error?: string;
@@ -79,11 +80,29 @@ function buildProxyUrl(proxyBase: string, targetUrl: string): string {
   return needsEncoding ? proxyBase + encodeURIComponent(targetUrl) : proxyBase + targetUrl;
 }
 
-function getActiveCorsProxies(): Array<(url: string) => string> {
-  // Measured order: CF Worker and Lovable proxy open far more sites, and
-  // faster, than the Heroku proxy, so they go first; Heroku next; the rest last.
+// Map name (from the per-site probe) -> proxy entry name in CORS_PROXY_LIST.
+const PROBE_NAME_TO_LIST: Record<string, string> = {
+  cfworker: "CF Worker Proxy", lovable: "Lovable Proxy", codetabs: "codetabs",
+  corsproxy: "corsproxy.io", corslol: "cors.lol", allorigins: "allorigins",
+  alwaysdata: "alwaysdata", render: "render-proxy",
+};
+
+function getActiveCorsProxies(targetUrl?: string): Array<(url: string) => string> {
+  // Default order: CF Worker and Lovable proxy open the most sites, then Heroku,
+  // then the rest. When the per-site probe knows which helpers work for this
+  // site (fastest first), try those first and keep the others as fallbacks.
   const backends = getBackendProxies();
-  const list = [...CORS_PROXY_LIST.slice(0, 2), ...backends, ...CORS_PROXY_LIST.slice(2)];
+  let list = [...CORS_PROXY_LIST.slice(0, 2), ...backends, ...CORS_PROXY_LIST.slice(2)];
+  try {
+    const host = targetUrl ? new URL(targetUrl).hostname.replace(/^www\./, "") : "";
+    const pref = (proxyMap as Record<string, string[]>)[host];
+    if (pref?.length) {
+      const preferred = pref
+        .map((n) => (n === "heroku" ? backends[0] : list.find((p) => p.name === PROBE_NAME_TO_LIST[n])))
+        .filter((p): p is { name: string; url: string } => Boolean(p));
+      list = [...preferred, ...list.filter((p) => !preferred.includes(p))];
+    }
+  } catch { /* bad URL: keep default order */ }
   return list.map((p) => (url: string) => buildProxyUrl(p.url, url));
 }
 
@@ -116,7 +135,7 @@ async function httpGet(url: string, extra: Record<string, string> = {}): Promise
       (p) => (u: string) => buildProxyUrl(p.url, u)
     );
   };
-  const proxies = isInkitt ? cookieAwareProxies() : getActiveCorsProxies();
+  const proxies = isInkitt ? cookieAwareProxies() : getActiveCorsProxies(url);
   for (const build of proxies) {
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 7_000);

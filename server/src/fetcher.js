@@ -130,9 +130,28 @@ function isCfProtected(host) {
   return CF_PROTECTED.some((re) => re.test(host));
 }
 
+// Per-site probe results: host -> helpers that opened it, fastest first.
+// Regenerate by re-running the probe; unknown hosts use the default order.
+const PROXY_MAP = JSON.parse(
+  fs.readFileSync(new URL("./proxyMap.json", import.meta.url), "utf8")
+);
+const PROBE_URLS = {
+  direct: "",
+  cfworker: "https://epub-cors-proxy.telegram-cf-proxy.workers.dev/api/proxy?url=",
+  lovable: "https://loveable-proxy-forwebtoepub.lovable.app/api/proxy?url=",
+  codetabs: "https://api.codetabs.com/v1/proxy?quest=",
+  corsproxy: "https://corsproxy.io/?url=",
+  corslol: "https://api.cors.lol/?url=",
+  allorigins: "https://api.allorigins.win/raw?url=",
+};
+
 function proxyOrderFor(host) {
-  if (!isCfProtected(host)) return PROXIES;
-  return [...PROXIES.filter(Boolean), ""];
+  const base = isCfProtected(host) ? [...PROXIES.filter(Boolean), ""] : PROXIES;
+  const pref = (PROXY_MAP[host.replace(/^www\./, "")] || [])
+    .map((n) => PROBE_URLS[n])
+    .filter((u) => u !== undefined);
+  if (!pref.length) return base;
+  return [...new Set([...pref, ...base])];
 }
 
 /** True when the HTML we got back is a Cloudflare/bot interstitial, not content. */
