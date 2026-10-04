@@ -17,11 +17,14 @@ const DEFAULT_HEADERS = {
   "Accept-Language": "en-US,en;q=0.9",
 };
 
+// Ordered by measured success/speed: the self-hosted CF Worker opened the most
+// sites (NovelFull, FreeWebNovel, NovelFire, NovGo...) and is fastest.
 const PROXIES = [
   "", // direct
+  "https://epub-cors-proxy.telegram-cf-proxy.workers.dev/api/proxy?url=",
   "https://loveable-proxy-forwebtoepub.lovable.app/api/proxy?url=",
-  // Dead/hanging proxies removed (403/502/timeouts) so requests fail fast.
   "https://api.codetabs.com/v1/proxy?quest=",
+  "https://corsproxy.io/?url=",
 ];
 
 const ENCODED_SUFFIXES = ["?url=", "?quest=", "&url="];
@@ -218,7 +221,10 @@ async function httpGet(url, extra = {}, timeoutMs = 7000) {
       headers: { "content-type": "text/html; charset=utf-8" },
     });
 
-  const lease = await throttle(host);
+  // Pacing only protects the site from *our* IP. When direct access is already
+  // blocked every request goes through proxies, so don't serialize them —
+  // that turned 100-page chapter lists (NovelFull) into 30s+ timeouts.
+  const lease = blockedHosts.has(host) ? { done() {} } : await throttle(host);
   try {
     // Cloudflare-protected or currently-blocked hosts: stealth chain first.
     if (stealthAvailable() && (isCfProtected(host) || blockedHosts.has(host))) {

@@ -773,9 +773,9 @@ let BlockedHostNames = new Set();
 // Only proxies verified working (Oct 2026). Dead ones clogged the browser's
 // connection pool and made search stall after 2-3 sites.
 HttpClient.CORS_PROXIES = [
-    { name: "LinkToEpub Server", url: "https://link-to-epub-37130-dfa858b712fc.herokuapp.com/api/proxy?url=" },
     { name: "CF Worker Proxy", url: "https://epub-cors-proxy.telegram-cf-proxy.workers.dev/api/proxy?url=" },
     { name: "Lovable Proxy", url: "https://loveable-proxy-forwebtoepub.lovable.app/api/proxy?url=" },
+    { name: "LinkToEpub Server", url: "https://link-to-epub-37130-dfa858b712fc.herokuapp.com/api/proxy?url=" },
     { name: "CodeTabs", url: "https://api.codetabs.com/v1/proxy?quest=" },
     { name: "corsproxy.io", url: "https://corsproxy.io/?url=" },
     { name: "CORS.lol", url: "https://api.cors.lol/?url=" },
