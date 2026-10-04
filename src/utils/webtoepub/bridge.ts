@@ -1137,8 +1137,9 @@ export async function libraryGetCommunity(): Promise<LibraryBook[]> {
   // Deduplicate books by title (keeps the newest/largest release per title)
   const seen = new Map<string, LibraryBook>();
   for (const book of books) {
-    const key = book.title.toLowerCase().replace(/[^a-z0-9]+/g, '');
-    if (!key) continue;
+    // Non-Latin titles (e.g. Chinese/Korean) normalize to an empty string;
+    // keep them under their unique path instead of silently dropping them.
+    const key = book.title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '') || book.id;
     if (!seen.has(key)) {
       seen.set(key, book);
     }
