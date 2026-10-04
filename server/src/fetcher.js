@@ -221,7 +221,10 @@ async function httpGet(url, extra = {}, timeoutMs = 7000) {
       headers: { "content-type": "text/html; charset=utf-8" },
     });
 
-  const lease = await throttle(host);
+  // Pacing only protects the site from *our* IP. When direct access is already
+  // blocked every request goes through proxies, so don't serialize them —
+  // that turned 100-page chapter lists (NovelFull) into 30s+ timeouts.
+  const lease = blockedHosts.has(host) ? { done() {} } : await throttle(host);
   try {
     // Cloudflare-protected or currently-blocked hosts: stealth chain first.
     if (stealthAvailable() && (isCfProtected(host) || blockedHosts.has(host))) {
