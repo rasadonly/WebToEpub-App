@@ -31,9 +31,14 @@ export const CORS_PROXY_LIST: Array<{ name: string; url: string }> = [
   // Self-hosted CF Worker (100k req/day free) — fast, bypasses CF bot-fight on many sites.
   { name: "CF Worker Proxy", url: "https://epub-cors-proxy.telegram-cf-proxy.workers.dev/api/proxy?url=" },
   { name: "Lovable Proxy", url: "https://loveable-proxy-forwebtoepub.lovable.app/api/proxy?url=" },
-  // Dead proxies (alwaysdata 403, render 502, corsproxy key 403, allorigins
-  // hangs 15-30s, cors.lol 403, codetabs 403) all removed — Heroku is prepended
-  // at runtime by getBackendProxies(), Lovable is the static fallback.
+  // Public proxies kept as late fallbacks: each works for some sites and not
+  // others. Fast/self-hosted ones stay first so these are only tried after.
+  { name: "codetabs", url: "https://api.codetabs.com/v1/proxy?quest=" },
+  { name: "corsproxy.io", url: "https://corsproxy.io/?url=" },
+  { name: "cors.lol", url: "https://api.cors.lol/?url=" },
+  { name: "allorigins", url: "https://api.allorigins.win/raw?url=" },
+  { name: "alwaysdata", url: "https://prasadghanwat.alwaysdata.net/?url=" },
+  { name: "render-proxy", url: "https://render-proxy-1-181c.onrender.com/?url=" },
 ];
 
 export const aiContentSelectors = [

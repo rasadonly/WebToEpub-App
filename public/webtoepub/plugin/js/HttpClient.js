@@ -774,7 +774,14 @@ let BlockedHostNames = new Set();
 // connection pool and made search stall after 2-3 sites.
 HttpClient.CORS_PROXIES = [
     { name: "LinkToEpub Server", url: "https://link-to-epub-37130-dfa858b712fc.herokuapp.com/api/proxy?url=" },
-    { name: "CodeTabs", url: "https://api.codetabs.com/v1/proxy?quest=" }
+    { name: "CF Worker Proxy", url: "https://epub-cors-proxy.telegram-cf-proxy.workers.dev/api/proxy?url=" },
+    { name: "Lovable Proxy", url: "https://loveable-proxy-forwebtoepub.lovable.app/api/proxy?url=" },
+    { name: "CodeTabs", url: "https://api.codetabs.com/v1/proxy?quest=" },
+    { name: "corsproxy.io", url: "https://corsproxy.io/?url=" },
+    { name: "CORS.lol", url: "https://api.cors.lol/?url=" },
+    { name: "AllOrigins", url: "https://api.allorigins.win/raw?url=" },
+    { name: "Alwaysdata", url: "https://prasadghanwat.alwaysdata.net/?url=" },
+    { name: "Render Proxy", url: "https://render-proxy-1-181c.onrender.com/?url=" }
 ];
 HttpClient.corsProxyUrl = HttpClient.CORS_PROXIES[0].url;
 HttpClient.enableCorsProxy = true;
