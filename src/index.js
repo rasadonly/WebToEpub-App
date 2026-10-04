@@ -293,13 +293,19 @@ app.get("/api/toc", async (req, res) => {
   try {
     const url = String(req.query.url || "");
     if (!url) return res.status(400).json({ error: "url required" });
-    const [chapters, meta] = await Promise.all([
+    // Heroku's router kills requests at 30s with an HTML 503, leaving the
+    // client hanging; answer with JSON before that so it can fall back fast.
+    const timeout = new Promise((_, rej) =>
+      setTimeout(() => rej(Object.assign(new Error("Site took too long to respond"), { code: 504 })), 24_000)
+    );
+    const meta = fetchBookMeta(url).catch(() => ({}));
+    const chapters = await Promise.race([
       fetchChapterLinks(url, String(req.query.selector || "")),
-      fetchBookMeta(url),
+      timeout,
     ]);
-    res.json({ chapters, meta });
+    res.json({ chapters, meta: await Promise.race([meta, new Promise((r) => setTimeout(() => r({}), 3000))]) });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    if (!res.headersSent) res.status(e.code === 504 ? 504 : 500).json({ error: e.message });
   }
 });
 
