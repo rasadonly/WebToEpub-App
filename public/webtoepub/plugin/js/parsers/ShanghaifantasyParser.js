@@ -10,7 +10,7 @@ class ShanghaifantasyParser extends Parser {
     async getChapterUrls(dom) {
         let category = this.extractCategory(dom);
         if (!category) {
-            let novelLink = dom.querySelector("a[href*='/novel/']")?.href;
+            let novelLink = dom?.querySelector?.("a[href*='/novel/']")?.href;
             if (novelLink) {
                 try {
                     let novelDom = (await HttpClient.wrapFetch(novelLink)).responseXML;
@@ -27,8 +27,9 @@ class ShanghaifantasyParser extends Parser {
 
         let allChapters = [];
         let page = 1;
-        while (true) {
-            let tocUrl = `https://shanghaifantasy.com/wp-json/fiction/v1/chapters?category=${category}&order=asc&page=${page}&per_page=100`;
+        const perPage = 50;
+        while (page <= 200) {
+            let tocUrl = `https://shanghaifantasy.com/wp-json/fiction/v1/chapters?category=${category}&order=asc&page=${page}&per_page=${perPage}`;
             try {
                 let res = await HttpClient.fetchJson(tocUrl);
                 let json = res?.json;
@@ -37,9 +38,10 @@ class ShanghaifantasyParser extends Parser {
                 let pageUrls = this.buildChapterUrls(json);
                 allChapters.push(...pageUrls);
 
-                if (json.length < 100) break;
+                if (json.length < perPage) break;
                 page++;
             } catch (err) {
+                console.warn(`[Shanghaifantasy] Failed to fetch page ${page}:`, err);
                 break;
             }
         }
@@ -48,9 +50,39 @@ class ShanghaifantasyParser extends Parser {
     }
 
     extractCategory(dom) {
-        if (!dom || typeof dom.querySelector !== "function") return null;
-        let cat = dom.querySelector("ul#chapterList")?.getAttribute("data-cat");
-        if (cat && cat !== "undefined") return cat;
+        if (!dom) return null;
+
+        // 1. Direct querySelector
+        if (typeof dom.querySelector === "function") {
+            let cat = dom.querySelector("ul#chapterList")?.getAttribute("data-cat") ||
+                      dom.querySelector("[data-cat]")?.getAttribute("data-cat");
+            if (cat && cat !== "undefined") return cat;
+
+            // 2. Inspect inside <template> elements (.content document fragment)
+            let templates = [...(dom.querySelectorAll("template") || [])];
+            for (let t of templates) {
+                if (t.content && typeof t.content.querySelector === "function") {
+                    let tCat = t.content.querySelector("ul#chapterList")?.getAttribute("data-cat") ||
+                               t.content.querySelector("[data-cat]")?.getAttribute("data-cat");
+                    if (tCat && tCat !== "undefined") return tCat;
+                }
+            }
+        }
+
+        // 3. Regex search on full HTML string
+        let htmlText = "";
+        try {
+            if (dom.documentElement) htmlText = dom.documentElement.outerHTML || dom.documentElement.innerHTML || "";
+            else if (dom.body) htmlText = dom.body.innerHTML || "";
+            else if (typeof dom === "string") htmlText = dom;
+        } catch (e) {
+            // ignore
+        }
+
+        let match = htmlText.match(/data-cat=["']?(\d+)["']?/i) ||
+                    htmlText.match(/category=(\d+)/i);
+        if (match && match[1]) return match[1];
+
         return null;
     }
 
