@@ -770,9 +770,11 @@ let BlockedHostNames = new Set();
 // Heroku proxy is prepended at runtime by bridge.ts (injected as CORS_PROXIES[0]).
 // CF Worker proxy (self-hosted, 100k req/day free) is static fallback #1 — fast and
 // bypasses CF bot-fight on most sites. Lovable is static fallback #2.
+// Only proxies verified working (Oct 2026). Dead ones clogged the browser's
+// connection pool and made search stall after 2-3 sites.
 HttpClient.CORS_PROXIES = [
-    { name: "CF Worker Proxy", url: "https://epub-cors-proxy.telegram-cf-proxy.workers.dev/api/proxy?url=" },
-    { name: "Lovable Proxy", url: "https://loveable-proxy-forwebtoepub.lovable.app/api/proxy?url=" }
+    { name: "LinkToEpub Server", url: "https://link-to-epub-37130-dfa858b712fc.herokuapp.com/api/proxy?url=" },
+    { name: "CodeTabs", url: "https://api.codetabs.com/v1/proxy?quest=" }
 ];
 HttpClient.corsProxyUrl = HttpClient.CORS_PROXIES[0].url;
 HttpClient.enableCorsProxy = true;
