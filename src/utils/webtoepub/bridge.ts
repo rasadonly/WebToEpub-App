@@ -1097,7 +1097,20 @@ async function fetchCommunityTree(repoId: string): Promise<HFTreeEntry[]> {
   return Array.isArray(list) ? list : [];
 }
 
-export async function libraryGetCommunity(): Promise<LibraryBook[]> {
+// Listing ~6k files takes several sequential requests; reuse it for 5 minutes
+// so reopening the Library is instant.
+let communityCache: { at: number; books: Promise<LibraryBook[]> } | null = null;
+export function libraryGetCommunity(): Promise<LibraryBook[]> {
+  if (communityCache && Date.now() - communityCache.at < 5 * 60_000) return communityCache.books;
+  const books = loadCommunity().then((b) => {
+    if (!b.length) communityCache = null;
+    return b;
+  }, (e) => { communityCache = null; throw e; });
+  communityCache = { at: Date.now(), books };
+  return books;
+}
+
+async function loadCommunity(): Promise<LibraryBook[]> {
   // Read the new dataset and the old archive together; one failing (e.g. the
   // new one still empty) must not hide the other.
   const results = await Promise.allSettled(HF_COMMUNITY_REPOS.map((r) => fetchCommunityTree(r)));
@@ -1137,8 +1150,9 @@ export async function libraryGetCommunity(): Promise<LibraryBook[]> {
   // Deduplicate books by title (keeps the newest/largest release per title)
   const seen = new Map<string, LibraryBook>();
   for (const book of books) {
-    const key = book.title.toLowerCase().replace(/[^a-z0-9]+/g, '');
-    if (!key) continue;
+    // Non-Latin titles (e.g. Chinese/Korean) normalize to an empty string;
+    // keep them under their unique path instead of silently dropping them.
+    const key = book.title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '') || book.id;
     if (!seen.has(key)) {
       seen.set(key, book);
     }
