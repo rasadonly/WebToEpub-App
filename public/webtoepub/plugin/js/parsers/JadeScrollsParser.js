@@ -32,7 +32,12 @@ class JadeScrollsParser extends Parser {
     }
 
     chacheChapter(json) {
-        json.data.map(a => (this.ChacheChapterContent.set("https://jadescrolls.com/novel/"+this.slug+"/"+a.slug, [a.title, a.content])));
+        if (!json?.data || !Array.isArray(json.data)) return;
+        json.data.forEach(a => {
+            if (a.content) {
+                this.ChacheChapterContent.set("https://jadescrolls.com/novel/"+this.slug+"/"+a.slug, [a.title, a.content]);
+            }
+        });
     }
 
     async loadEpubMetaInfo(dom) {
@@ -46,16 +51,21 @@ class JadeScrollsParser extends Parser {
         this.author = bookinfo.author_name;
         this.description = bookinfo.synopsis;
         this.img = bookinfo.cover_image;
-        this.tags = "";
-        for (let tmp in bookinfo?.genres) {
-            this.tags = this.tags.concat(tmp?.name);
+        this.tags = [];
+        if (Array.isArray(bookinfo?.genres)) {
+            for (let g of bookinfo.genres) {
+                if (g?.name) this.tags.push(g.name);
+            }
         }
-        for (let tmp in bookinfo?.sub_genres) {
-            this.tags = this.tags.concat(tmp?.name);
+        if (Array.isArray(bookinfo?.sub_genres)) {
+            for (let sg of bookinfo.sub_genres) {
+                if (sg?.name) this.tags.push(sg.name);
+            }
         }
         this.novelSlug = novelSlug;
+        this.slug = novelSlug;
         this.id = bookinfo.id;
-        this.chapters_count = bookinfo.chapters_count;
+        this.chapters_count = bookinfo.chapters_count || 10000;
         return;
     }
 

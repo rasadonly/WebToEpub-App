@@ -8,14 +8,50 @@ class ShanghaifantasyParser extends Parser {
     }
 
     async getChapterUrls(dom) {
-        let tocUrl = this.buildTocUrl(dom);
-        let json = (await HttpClient.fetchJson(tocUrl)).json;
-        return this.buildChapterUrls(json);
+        let category = this.extractCategory(dom);
+        if (!category) {
+            let novelLink = dom.querySelector("a[href*='/novel/']")?.href;
+            if (novelLink) {
+                try {
+                    let novelDom = (await HttpClient.wrapFetch(novelLink)).responseXML;
+                    category = this.extractCategory(novelDom);
+                } catch (e) {
+                    // ignore
+                }
+            }
+        }
+
+        if (!category) {
+            return super.getChapterUrls(dom);
+        }
+
+        let allChapters = [];
+        let page = 1;
+        while (true) {
+            let tocUrl = `https://shanghaifantasy.com/wp-json/fiction/v1/chapters?category=${category}&order=asc&page=${page}&per_page=100`;
+            try {
+                let res = await HttpClient.fetchJson(tocUrl);
+                let json = res?.json;
+                if (!Array.isArray(json) || json.length === 0) break;
+
+                let pageUrls = this.buildChapterUrls(json);
+                allChapters.push(...pageUrls);
+
+                if (json.length < 100) break;
+                page++;
+            } catch (err) {
+                break;
+            }
+        }
+
+        return allChapters.length > 0 ? allChapters : super.getChapterUrls(dom);
     }
 
-    buildTocUrl(dom) {
-        let category = dom.querySelector("ul#chapterList")?.getAttribute("data-cat");
-        return `https://shanghaifantasy.com/wp-json/fiction/v1/chapters?category=${category}&order=asc&page=1&per_page=10000`;
+    extractCategory(dom) {
+        if (!dom || typeof dom.querySelector !== "function") return null;
+        let cat = dom.querySelector("ul#chapterList")?.getAttribute("data-cat");
+        if (cat && cat !== "undefined") return cat;
+        return null;
     }
 
     buildChapterUrls(json) {
@@ -27,10 +63,11 @@ class ShanghaifantasyParser extends Parser {
 
     findContent(dom) {
         let content = dom.querySelector("div.contenta");
-        let childCount = content.querySelectorAll("div, p").length;
-        return (childCount <= 3)
-            ? dom.querySelector("body > div.flex")
-            : content;
+        if (content) {
+            let childCount = content.querySelectorAll("div, p").length;
+            if (childCount > 3) return content;
+        }
+        return dom.querySelector("body > div.flex") || dom.querySelector("div.contenta");
     }
 
     extractTitleImpl(dom) {
@@ -38,7 +75,7 @@ class ShanghaifantasyParser extends Parser {
     }
 
     removeUnwantedElementsFromContentElement(element) {
-        util.removeChildElementsMatchingSelector(element, ".patreon1, section, nav, button, template, #comments, footer, .hideme");
+        util.removeChildElementsMatchingSelector(element, ".patreon1, section, nav, button, template, #comments, footer, .hideme, .ai-viewports, .code-block, script, ins");
 
         for (let e of [...element.querySelectorAll("div")]) {
             e.removeAttribute(":style");

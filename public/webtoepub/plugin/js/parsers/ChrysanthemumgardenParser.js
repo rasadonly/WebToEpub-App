@@ -17,6 +17,14 @@ class ChrysanthemumgardenParser extends WordpressBaseParser {
         document.getElementById("removeAuthorNotesRow").hidden = false; 
     }
 
+    findContent(dom) {
+        return dom.querySelector("#novel") ||
+            dom.querySelector("div.novel-content") ||
+            dom.querySelector("#chrys-content") ||
+            WordpressBaseParser.findContentElement(dom) ||
+            dom.querySelector("article");
+    }
+
     async fetchChapter(url) {
         let newDom = (await HttpClient.wrapFetch(url)).responseXML;
         let passwordForm = ChrysanthemumgardenParser.getPasswordForm(newDom);
