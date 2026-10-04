@@ -1,3 +1,4 @@
+import proxyMap from "./proxyMap.json";
 export interface WorkerResponse {
   results?: string[];
   error?: string;
