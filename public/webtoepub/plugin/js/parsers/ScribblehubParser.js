@@ -5,72 +5,78 @@ parserFactory.register("scribblehub.com", () => new ScribblehubParser());
 class ScribblehubParser extends Parser {
     constructor() {
         super();
-        this.minimumThrottle = 5200;
+        this.minimumThrottle = 5000;
     }
 
     async getChapterUrls(dom, chapterUrlsUI) {
-        this.tocURL = dom.baseURI;
-        let baseUrl = dom.baseURI;
-        let nextTocIndex = 1;
-
+        let baseUrl = (dom.baseURI || "").split("?")[0];
         let cntToc = dom.querySelector("span.cnt_toc");
-        let numChapters = cntToc ? parseInt((cntToc.textContent || "0").replace(/\D/g, "")) : NaN;
+        let numChapters = cntToc ? parseInt((cntToc.textContent || "0").replace(/\D/g, "")) : 0;
+        let firstPage = ScribblehubParser.getChapterUrlsFromTocPage(dom);
 
-        let nextTocPageUrl = function(_dom, chapters, lastFetch) {
-            // site has a bug: sometimes it won't return chapters, so
-            // don't loop forever when this happens
-            if (isNaN(numChapters)) {
-                // no count available — stop when page returns nothing
-                return (0 < lastFetch.length) ? `${baseUrl}?toc=${++nextTocIndex}` : null;
+        // 1. Whole chapter list in one request (site's own "show all" call).
+        if (!numChapters || firstPage.length < numChapters) {
+            let all = await this.fetchAllChaptersAjax(dom, baseUrl);
+            if (all.length > firstPage.length) {
+                return all;
             }
-            return ((chapters.length < numChapters) && (0 < lastFetch.length))
-                ? `${baseUrl}?toc=${++nextTocIndex}`
-                : null;
-        };
+        }
 
-        let saveThrottle = this.minimumThrottle;
-        this.minimumThrottle = 500;
-        let chapters = (await this.walkTocPages(
-            dom,
-            ScribblehubParser.getChapterUrlsFromTocPage,
-            nextTocPageUrl,
-            chapterUrlsUI
-        )).reverse();
-        this.minimumThrottle = saveThrottle;
-        return chapters;
+        // 2. Walk ?toc=N pages (15 chapters each). Retry a page that comes back
+        //    empty (bot check / rate limit) instead of stopping early.
+        let chapters = [...firstPage];
+        let seen = new Set(chapters.map(c => c.sourceUrl));
+        let maxPages = numChapters ? Math.ceil(numChapters / 15) + 1 : 300;
+        for (let page = 2; page <= maxPages; page++) {
+            if (numChapters && chapters.length >= numChapters) break;
+            let found = [];
+            for (let attempt = 0; attempt < 3 && found.length === 0; attempt++) {
+                try {
+                    if (attempt > 0) await util.sleep(1500 * attempt);
+                    let pageDom = (await HttpClient.wrapFetch(`${baseUrl}?toc=${page}`)).responseXML;
+                    found = ScribblehubParser.getChapterUrlsFromTocPage(pageDom);
+                } catch (e) {
+                    found = [];
+                }
+            }
+            let fresh = found.filter(c => !seen.has(c.sourceUrl));
+            if (fresh.length === 0) {
+                if (!numChapters) break;
+                continue;
+            }
+            fresh.forEach(c => seen.add(c.sourceUrl));
+            chapters.push(...fresh);
+            chapterUrlsUI?.showTocProgress?.(fresh);
+        }
+        return chapters.reverse();
+    }
+
+    async fetchAllChaptersAjax(dom, baseUrl) {
+        let sid = (baseUrl.match(/\/series\/(\d+)/) || [])[1] ||
+            dom.querySelector("#mypostid")?.getAttribute("value");
+        if (!sid) return [];
+        try {
+            let body = `action=wi_getreleases_pagination&pagenum=-1&mypostid=${sid}`;
+            let xhr = await HttpClient.wrapFetch("https://www.scribblehub.com/wp-admin/admin-ajax.php", {
+                fetchOptions: {
+                    method: "POST",
+                    credentials: "include",
+                    headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
+                    body: body
+                }
+            });
+            let links = ScribblehubParser.getChapterUrlsFromTocPage(xhr.responseXML);
+            let seen = new Set();
+            return links.filter(c => !seen.has(c.sourceUrl) && seen.add(c.sourceUrl)).reverse();
+        } catch (e) {
+            return [];
+        }
     }
 
     static getChapterUrlsFromTocPage(dom) {
         if (!dom || typeof dom.querySelectorAll !== "function") return [];
         return [...dom.querySelectorAll("a.toc_a")]
             .map(a => util.hyperLinkToChapter(a));
-    }
-
-    // Set the Referer header so ScribbleHub doesn't block chapter fetches.
-    async fetchChapter(url) {
-        let rules = [
-            {
-                id: 1,
-                priority: 1,
-                action: {
-                    type: "modifyHeaders",
-                    requestHeaders: [
-                        {
-                            header: "referer",
-                            operation: "set",
-                            value: this.tocURL,
-                        },
-                    ],
-                },
-                condition: {
-                    urlFilter: "*://www.scribblehub.com/*",
-                },
-            },
-        ];
-
-        await HttpClient.setDeclarativeNetRequestRules(rules);
-
-        return (await HttpClient.wrapFetch(url)).responseXML;
     }
 
     findContent(dom) {
@@ -102,19 +108,19 @@ class ScribblehubParser extends Parser {
     extractDescription(dom) {
         return this.extractDescriptionInternal(dom)?.innerText?.trim();
     }
-
-    // Unwrap description from "read more" that may appear on mobile.
+    // unwrap the description from the readmore that you may get on mobile
     extractDescriptionInternal(dom) {
         let desc = dom.querySelector(".wi_fic_desc");
         if (desc != null) {
             desc.querySelectorAll(".dots, .morelink").forEach(e => e.remove());
             desc.querySelectorAll(".testhide").forEach(e => e.replaceWith(...e.childNodes));
         }
+
         return desc;
     }
 
     findChapterTitle(dom) {
-        return dom.querySelector("div.chapter-title")?.textContent ?? "";
+        return dom.querySelector("div.chapter-title").textContent;
     }
 
     findCoverImageUrl(dom) {
@@ -123,7 +129,6 @@ class ScribblehubParser extends Parser {
 
     preprocessRawDom(webPageDom) {
         let content = this.findContent(webPageDom);
-        if (!content) return;
 
         this.tagAuthorNotesBySelector(content, ".wi_authornotes, .wi_news");
 
@@ -133,25 +138,24 @@ class ScribblehubParser extends Parser {
 
             let details = webPageDom.createElement("details");
             let summary = webPageDom.createElement("summary");
-            let spHead = element.querySelector(".sp-head");
-            if (spHead) summary.append(...spHead.childNodes);
+            summary.append(...element.querySelector(".sp-head").childNodes);
             details.append(summary);
-            let spBody = element.querySelector(".sp-body");
-            if (spBody) details.append(...spBody.childNodes);
+            details.append(...element.querySelector(".sp-body").childNodes);
 
             element.replaceWith(details);
         }
 
-        // announcements
+        // anouncements
         for (let element of content.querySelectorAll(".wi_news_title")) {
             element.setAttribute("style", "font-weight: bold");
-            element.querySelector(".fa-exclamation-triangle")?.replaceWith("⚠");
+            element.querySelector(".fa-exclamation-triangle").replaceWith("⚠");
         }
 
-        // author notes avatars
+        // author notes
         for (let element of content.querySelectorAll(".p-avatar-wrap")) {
             element.remove();
         }
+
     }
 
     getInformationEpubItemChildNodes(dom) {
@@ -159,7 +163,7 @@ class ScribblehubParser extends Parser {
             let out = tag.ownerDocument.createElement("a");
             out.setAttribute("href", tag.getAttribute("href"));
             out.innerText = tag.innerText;
-            return index < array.length - 1 ? [out, ", "] : [out];
+            return index < array.length -1 ? [out, ", "] : [out];
         }
 
         let info = [];
