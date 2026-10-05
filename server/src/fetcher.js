@@ -1668,11 +1668,14 @@ async function tocScribbleHub(url) {
   const first = await getText(base);
   const total = parseInt(textOf(parseHtml(first).querySelector("span.cnt_toc")) || "0");
   let items = linksFrom(first, base, "a.toc_a");
-  for (let page = 2; page <= 60; page++) {
+  for (let page = 2; page <= (total ? Math.ceil(total / 15) + 1 : 60); page++) {
     if (total && items.length >= total) break;
-    const html = await tryText(`${base}?toc=${page}`);
-    const more = linksFrom(html, base, "a.toc_a");
-    if (!more.length) break;
+    let more = [];
+    for (let attempt = 0; attempt < 3 && !more.length; attempt++) {
+      if (attempt) await new Promise((r) => setTimeout(r, 1500 * attempt));
+      more = linksFrom(await tryText(`${base}?toc=${page}`), base, "a.toc_a");
+    }
+    if (!more.length) { if (!total) break; continue; }
     items = items.concat(more);
   }
   return dedupeByUrl(items).reverse();

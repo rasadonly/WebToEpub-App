@@ -74,6 +74,7 @@ class ScribblehubParser extends Parser {
     }
 
     static getChapterUrlsFromTocPage(dom) {
+        if (!dom || typeof dom.querySelectorAll !== "function") return [];
         return [...dom.querySelectorAll("a.toc_a")]
             .map(a => util.hyperLinkToChapter(a));
     }
