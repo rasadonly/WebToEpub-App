@@ -2626,6 +2626,38 @@ async function bodyUukanshu(url) {
     '#content, #booktxt, .booktxt, .content');
 }
 
+// --- Shanghai Fantasy: chapter list comes from a WordPress JSON API keyed by data-cat ---
+async function tocShanghaiFantasy(url) {
+  let html = await getText(url);
+  let cat = html.match(/data-cat=["']?(\d+)/i)?.[1];
+  if (!cat) {
+    const novel = html.match(/href=["'](https?:\/\/shanghaifantasy\.com\/novel\/[^"']+)["']/i)?.[1];
+    if (novel) {
+      html = await getText(novel);
+      cat = html.match(/data-cat=["']?(\d+)/i)?.[1];
+    }
+  }
+  if (!cat) throw new Error("Shanghai Fantasy: chapter list id not found");
+  const out = [];
+  for (let page = 1; page <= 100; page++) {
+    const json = await getJson(
+      `https://shanghaifantasy.com/wp-json/fiction/v1/chapters?category=${cat}&order=asc&page=${page}&per_page=100`
+    );
+    if (!Array.isArray(json) || !json.length) break;
+    json
+      .filter((c) => c && c.permalink && !c.locked)
+      .forEach((c) => out.push({ url: c.permalink, title: String(c.title || "").trim() }));
+    if (json.length < 100) break;
+  }
+  return dedupeByUrl(out);
+}
+
+async function bodyShanghaiFantasy(url) {
+  const doc = parseHtml(await getText(url));
+  doc.querySelectorAll(".patreon1, nav, button, template, #comments, footer, .hideme, .ai-viewports, .code-block, script, ins").forEach((e) => e.remove());
+  return extractWithSelector(doc, "div.contenta, body > div.flex, article");
+}
+
 // --- ReadNovelMtl (readnovelmtl.com) ---
 async function tocReadNovelMtl(url) {
   const html = await getText(url);
@@ -2886,6 +2918,7 @@ function siteKey(hostname) {
   if (host.includes("lightnovelpub.") || host.includes("novelpub.")) return "lightnovelpub";
   if (host.includes("creative-novels.com")) return "creativenovels";
   if (host.includes("readnovelmtl.com")) return "readnovelmtl";
+  if (host.includes("shanghaifantasy.com")) return "shanghaifantasy";
   // New sites
   if (host === "wuxiaworld.com" || host.endsWith(".wuxiaworld.com")) return "wuxiaworld";
   if (host.includes("inkitt.com")) return "inkitt";
@@ -3008,6 +3041,8 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         return tocGravityTales(tocUrl);
       case "readnovelmtl":
         return tocReadNovelMtl(tocUrl);
+      case "shanghaifantasy":
+        return tocShanghaiFantasy(tocUrl);
       // New sites
       case "wuxiaworld":
         return tocWuxiaWorld(tocUrl);
@@ -3100,6 +3135,8 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
         return bodyGeneric(chapterUrl, '.chapter__content, article, .entry-content');
       case "readnovelmtl":
         return bodyReadNovelMtl(chapterUrl);
+      case "shanghaifantasy":
+        return bodyShanghaiFantasy(chapterUrl);
       // New sites
       case "wuxiaworld":
         return bodyWuxiaWorld(chapterUrl);
