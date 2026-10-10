@@ -333,6 +333,11 @@ async function getText(url) {
   return (await httpGet(url)).text();
 }
 
+/** Smart fetch with proxy/route fallbacks (used by /api/proxy when blocked). */
+export async function smartGetText(url, timeoutMs = 12000) {
+  return (await httpGet(url, {}, timeoutMs)).text();
+}
+
 async function getJson(url) {
   return (await httpGet(url, { Accept: "application/json" })).json();
 }

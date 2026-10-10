@@ -15,6 +15,7 @@ import {
   supportedDomains,
   lookupSiteConfig,
   stealthGet,
+  smartGetText,
 } from "./fetcher.js";
 import { buildEpub, sanitizeFilename } from "./epub.js";
 import { uploadToLibrary, libraryEnabled } from "./library.js";
@@ -185,10 +186,28 @@ app.get("/api/proxy", async (req, res) => {
     const ct = upstream.headers.get("content-type") || "text/html";
     res.setHeader("Content-Type", ct);
     res.setHeader("Access-Control-Allow-Origin", "*");
+    const buf = Buffer.from(await upstream.arrayBuffer());
+    const blocked = upstream.status === 403 || upstream.status === 429 || upstream.status >= 500 ||
+      /<title>Just a moment|cf-chl|challenge-platform/i.test(buf.subarray(0, 4000).toString());
+    if (blocked) {
+      try {
+        const html = await smartGetText(target);
+        if (html && !/<title>Just a moment/i.test(html.slice(0, 4000))) {
+          res.setHeader("Content-Type", "text/html; charset=utf-8");
+          return res.status(200).send(html);
+        }
+      } catch {}
+    }
     res.status(upstream.status);
-    res.send(Buffer.from(await upstream.arrayBuffer()));
+    res.send(buf);
   } catch (e) {
     clearTimeout(timer);
+    try {
+      const html = await smartGetText(target);
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.status(200).send(html);
+    } catch {}
     res.status(502).json({ error: e.message });
   }
 });
