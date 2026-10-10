@@ -334,8 +334,12 @@ async function getText(url) {
 }
 
 /** Smart fetch with proxy/route fallbacks (used by /api/proxy when blocked). */
-export async function smartGetText(url, timeoutMs = 12000) {
-  return (await httpGet(url, {}, timeoutMs)).text();
+export async function smartGetText(url, timeoutMs = 7000, deadlineMs = 17000) {
+  let t;
+  const deadline = new Promise((_, rej) => { t = setTimeout(() => rej(new Error("deadline")), deadlineMs); });
+  try {
+    return await Promise.race([httpGet(url, {}, timeoutMs).then((r) => r.text()), deadline]);
+  } finally { clearTimeout(t); }
 }
 
 async function getJson(url) {
