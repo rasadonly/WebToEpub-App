@@ -158,7 +158,7 @@ app.get("/api/proxy", async (req, res) => {
     return res.status(400).json({ error: "invalid url" });
   }
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 25000);
+  const timer = setTimeout(() => ctrl.abort(), 10000);
   try {
     const upstream = await fetch(target, {
       headers: {
