@@ -11,6 +11,7 @@ import { SUPPORTED_SITES, getSiteConfig, extractDomain } from '@/utils/siteConfi
 import { NovelSite, EpubMetadata } from '@/types';
 import { BookOpen, Globe, Settings, Hash, Type, List, Search, Sparkles, ArrowRight, ExternalLink, X, BookOpenCheck, MoreVertical, Library as LibraryIcon, BookMarked, Download, MessagesSquare, Wand2 } from 'lucide-react';
 import { engineSearch, cancelSearch, engineLoadMetadata, EngineSearchResult } from '@/utils/webtoepub/bridge';
+import LibrarySuggestion from './LibrarySuggestion';
 import { LiveStats } from '@/components/LiveStats';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 
@@ -565,6 +566,8 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
             )}
 
             {/* No results */}
+            <LibrarySuggestion query={isUrlLike(cleanUrl(tocUrl)) ? metadata.title : lastQuery} />
+
             {!isSearching && lastQuery && searchResults.length === 0 && (
               <Card className="mt-4 p-4 text-center text-sm text-muted-foreground border border-border">
                 No results for “{lastQuery}”. Try a shorter title, or paste the novel's TOC URL directly.
