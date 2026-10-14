@@ -146,6 +146,8 @@ app.get("/api/sites/lookup", (req, res) => {
 // This endpoint forwards the raw response so the browser's WebToEpub engine
 // (with all 386 parsers) can process the HTML/JSON locally.
 // Replaces the need for third-party public CORS proxies.
+// Few slow backup fetches at once, so one blocked site never stalls a search.
+let proxyFallbacks = 0;
 app.get("/api/proxy", async (req, res) => {
   const target = String(req.query.url || "");
   if (!target) return res.status(400).json({ error: "url required" });
@@ -158,7 +160,7 @@ app.get("/api/proxy", async (req, res) => {
     return res.status(400).json({ error: "invalid url" });
   }
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 10000);
+  const timer = setTimeout(() => ctrl.abort(), 8000);
   try {
     const upstream = await fetch(target, {
       headers: {
@@ -189,25 +191,28 @@ app.get("/api/proxy", async (req, res) => {
     const buf = Buffer.from(await upstream.arrayBuffer());
     const blocked = upstream.status === 403 || upstream.status === 429 || upstream.status >= 500 ||
       /<title>Just a moment|cf-chl|challenge-platform/i.test(buf.subarray(0, 4000).toString());
-    if (blocked) {
+    if (blocked && proxyFallbacks < 6) {
+      proxyFallbacks++;
       try {
-        const html = await smartGetText(target);
+        const html = await smartGetText(target, 5000, 7000);
         if (html && !/<title>Just a moment/i.test(html.slice(0, 4000))) {
           res.setHeader("Content-Type", "text/html; charset=utf-8");
           return res.status(200).send(html);
         }
-      } catch {}
+      } catch {} finally { proxyFallbacks--; }
     }
     res.status(upstream.status);
     res.send(buf);
   } catch (e) {
     clearTimeout(timer);
-    try {
-      const html = await smartGetText(target);
+    if (proxyFallbacks < 6) try {
+      proxyFallbacks++;
+      const html = await smartGetText(target, 5000, 7000);
+      proxyFallbacks--;
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       return res.status(200).send(html);
-    } catch {}
+    } catch { proxyFallbacks--; }
     res.status(502).json({ error: e.message });
   }
 });
