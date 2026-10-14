@@ -212,7 +212,12 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
       // Instant slug-based guess, then the real title once the engine answers.
       const slugTitle = extractTitleFromUrl(url);
       if (slugTitle) mergeAuto({ title: slugTitle });
-      void analyse(url, true);
+      void analyse(url, true).then(() => {
+        // Book details are in — start loading chapters automatically (once per link).
+        if (autoStartedUrlRef.current === url || analysedUrlRef.current !== url) return;
+        autoStartedUrlRef.current = url;
+        window.setTimeout(() => submitRef.current(), 50);
+      });
     }, 600);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -389,6 +394,12 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
       setContentSelector(site.contentSelector);
     }
   };
+
+  // Always points at the latest submit (fresh metadata) for the auto-start.
+  const submitRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    submitRef.current = () => handleSubmit({ preventDefault() {} } as React.FormEvent);
+  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
