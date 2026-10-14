@@ -46,8 +46,12 @@ export default function ChapterManager({
   const isNearBottom = (el: HTMLDivElement) =>
     el.scrollHeight - el.scrollTop - el.clientHeight < 80;
 
+  // Only draw the rows in view; thousands of rows at once freeze the page.
+  const ROW_H = 57;
+  const [scrollTop, setScrollTop] = useState(0);
   const handleListScroll = () => {
     const el = listRef.current;
+    if (el) setScrollTop(el.scrollTop);
     if (!el || !isStreaming) return;
     shouldFollowStreamRef.current = isNearBottom(el);
   };
@@ -257,12 +261,19 @@ export default function ChapterManager({
         onScroll={handleListScroll}
         className="max-h-[420px] overflow-y-auto rounded-lg border border-border/60 divide-y divide-border/40"
       >
-        {chapters.map((c, idx) => {
+        {(() => {
+          const first = Math.max(0, Math.floor(scrollTop / ROW_H) - 15);
+          const last = Math.min(chapters.length, first + Math.ceil(420 / ROW_H) + 30);
+          return (<>
+        <div style={{ height: first * ROW_H }} />
+        {chapters.slice(first, last).map((c, i) => {
+          const idx = first + i;
           const isSelected = selected.has(c.id);
           return (
             <div
               key={c.id}
-              className={`flex items-center gap-2 px-3 py-2 text-sm transition-colors animate-in fade-in slide-in-from-bottom-1 duration-200 ${
+              style={{ height: ROW_H }}
+              className={`flex items-center gap-2 px-3 text-sm transition-colors box-border ${
                 isSelected ? 'bg-background' : 'bg-muted/30 opacity-60'
               }`}
             >
@@ -315,6 +326,9 @@ export default function ChapterManager({
             </div>
           );
         })}
+        <div style={{ height: (chapters.length - last) * ROW_H }} />
+          </>);
+        })()}
       </div>
     </Card>
   );
