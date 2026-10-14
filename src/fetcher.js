@@ -2639,6 +2639,44 @@ async function bodyUukanshu(url) {
 }
 
 // --- Shanghai Fantasy: chapter list comes from a WordPress JSON API keyed by data-cat ---
+async function tocAlicesw(url) {
+  let html = await getText(url);
+  let doc = parseHtml(html);
+  if (!doc.querySelector(".mulu_list")) {
+    const id = url.match(/\/novel\/(\d+)/)?.[1] || html.match(/\/other\/chapters\/id\/(\d+)/)?.[1];
+    if (!id) throw new Error("AliceSW: book id not found");
+    doc = parseHtml(await getText(`https://www.alicesw.com/other/chapters/id/${id}.html`));
+  }
+  const out = [...doc.querySelectorAll(".mulu_list a[href]")].map((a) => ({
+    url: new URL(a.getAttribute("href"), "https://www.alicesw.com/").href,
+    title: a.textContent.trim(),
+  }));
+  return dedupeByUrl(out);
+}
+
+async function tocMatchaNovels(url) {
+  const base = url.match(/^(https?:\/\/[^/]+\/novela\/[^/?#]+)/i)?.[1];
+  if (!base) throw new Error("MatchaNovels: open the novel page, not a chapter");
+  const html = (await getText(base)).replace(/\\"/g, '"');
+  const i = html.indexOf('"capitulos":[');
+  const out = [];
+  if (i >= 0) {
+    const re = /\["(\d+)","[^"]*",(true|false),(null|"[^"]*")/g;
+    re.lastIndex = i;
+    const seg = html.slice(i, i + 400000);
+    for (const m of seg.matchAll(/\["(\d+)","[^"]*",(true|false),(null|"(?:[^"\\]|\\.)*")/g)) {
+      if (m[2] === "true") continue; // VIP / locked
+      const name = m[3] === "null" ? "" : m[3].slice(1, -1);
+      out.push({ url: `${base}/capitulo/${m[1]}`, title: name ? `Capítulo ${m[1]} - ${name}` : `Capítulo ${m[1]}` });
+    }
+  }
+  if (!out.length) {
+    for (const m of html.matchAll(/href="(\/novela\/[^"]+\/capitulo\/(\d+))"/g))
+      out.push({ url: new URL(m[1], base).href, title: `Capítulo ${m[2]}` });
+  }
+  return dedupeByUrl(out).sort((a, b) => Number(a.url.split("/").pop()) - Number(b.url.split("/").pop()));
+}
+
 async function tocShanghaiFantasy(url) {
   let html = await getText(url);
   let cat = html.match(/data-cat=["']?(\d+)/i)?.[1];
@@ -2931,6 +2969,8 @@ function siteKey(hostname) {
   if (host.includes("creative-novels.com")) return "creativenovels";
   if (host.includes("readnovelmtl.com")) return "readnovelmtl";
   if (host.includes("shanghaifantasy.com")) return "shanghaifantasy";
+  if (host.includes("alicesw.")) return "alicesw";
+  if (host.includes("matchanovels.com")) return "matchanovels";
   // New sites
   if (host === "wuxiaworld.com" || host.endsWith(".wuxiaworld.com")) return "wuxiaworld";
   if (host.includes("inkitt.com")) return "inkitt";
@@ -3055,6 +3095,10 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         return tocReadNovelMtl(tocUrl);
       case "shanghaifantasy":
         return tocShanghaiFantasy(tocUrl);
+      case "alicesw":
+        return tocAlicesw(tocUrl);
+      case "matchanovels":
+        return tocMatchaNovels(tocUrl);
       // New sites
       case "wuxiaworld":
         return tocWuxiaWorld(tocUrl);
@@ -3149,6 +3193,10 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
         return bodyReadNovelMtl(chapterUrl);
       case "shanghaifantasy":
         return bodyShanghaiFantasy(chapterUrl);
+      case "alicesw":
+        return bodyGeneric(chapterUrl, ".read-content, .j_readContent");
+      case "matchanovels":
+        return bodyGeneric(chapterUrl, ".mn-lector");
       // New sites
       case "wuxiaworld":
         return bodyWuxiaWorld(chapterUrl);
