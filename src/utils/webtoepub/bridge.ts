@@ -186,8 +186,15 @@ function base64ToBlob(base64: string, mimeType: string): Blob {
 
 async function ensureIframe(): Promise<EngineWindow> {
   if (!readyPromise) {
-  readyPromise = new Promise<EngineWindow>((resolve, reject) => {
+  readyPromise = new Promise<EngineWindow>((resolve, rejectRaw) => {
     const el = document.createElement('iframe');
+    // A failed load must not stick: drop it so the next try starts fresh.
+    const reject = (err: Error) => {
+      readyPromise = null;
+      iframe = null;
+      try { el.remove(); } catch { /* ignore */ }
+      rejectRaw(err);
+    };
     el.src = import.meta.env.BASE_URL + 'webtoepub/plugin/popup.html?wte=1';
     el.setAttribute('aria-hidden', 'true');
     el.style.position = 'fixed';
@@ -199,8 +206,8 @@ async function ensureIframe(): Promise<EngineWindow> {
     el.style.pointerEvents = 'none';
 
     const failTimer = window.setTimeout(() => {
-      reject(new Error('WebToEpub engine failed to load within 30s'));
-    }, 30_000);
+      reject(new Error('The converter is still loading on a slow connection. Please try again.'));
+    }, 90_000);
 
     el.addEventListener('load', () => {
       // Give the deferred scripts time to run and register parsers.
@@ -242,7 +249,7 @@ async function ensureIframe(): Promise<EngineWindow> {
           resolve(win);
           return;
         }
-        if (Date.now() - started > 25_000) {
+        if (Date.now() - started > 80_000) {
           window.clearTimeout(failTimer);
           reject(new Error('Engine globals never appeared'));
           return;
