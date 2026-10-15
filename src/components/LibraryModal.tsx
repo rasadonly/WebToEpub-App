@@ -52,6 +52,8 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
   const [megaUrl, setMegaUrl] = useState(DEFAULT_MEGA_URL);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_BOOKS);
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
   const scrollRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
@@ -69,7 +71,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
     setVisibleCount(INITIAL_VISIBLE_BOOKS);
     try {
       let list: LibraryBook[] = [];
-      if (which === 'community') list = await libraryGetCommunity((fresh) => setBooks(fresh));
+      if (which === 'community') list = await libraryGetCommunity((fresh) => { if (tabRef.current === 'community') setBooks(fresh); });
       else if (which === 'my-downloads') list = await libraryGetMyDownloads();
       else if (which === 'telegram') list = await libraryGetTelegram();
       else if (which === 'archive') list = await libraryGetArchive();
