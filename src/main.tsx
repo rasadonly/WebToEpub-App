@@ -99,3 +99,8 @@ if (typeof window !== 'undefined') {
 }
 
 createRoot(document.getElementById("root")!).render(<App />);
+
+// Warm the Community Library list in the background so the tab opens instantly.
+window.setTimeout(() => {
+  import('./utils/webtoepub/bridge').then((m) => m.prefetchCommunityLibrary()).catch(() => {});
+}, 2500);
