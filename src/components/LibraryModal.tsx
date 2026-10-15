@@ -69,7 +69,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
     setVisibleCount(INITIAL_VISIBLE_BOOKS);
     try {
       let list: LibraryBook[] = [];
-      if (which === 'community') list = await libraryGetCommunity();
+      if (which === 'community') list = await libraryGetCommunity((fresh) => setBooks(fresh));
       else if (which === 'my-downloads') list = await libraryGetMyDownloads();
       else if (which === 'telegram') list = await libraryGetTelegram();
       else if (which === 'archive') list = await libraryGetArchive();

@@ -1134,12 +1134,12 @@ function refreshCommunity(): Promise<LibraryBook[]> {
 }
 
 /** Instant from saved copy (refreshes in background); otherwise fetches. */
-export function libraryGetCommunity(): Promise<LibraryBook[]> {
+export function libraryGetCommunity(onUpdate?: (books: LibraryBook[]) => void): Promise<LibraryBook[]> {
   if (communityCache && Date.now() - communityCache.at < COMMUNITY_FRESH_MS) return communityCache.books;
   const saved = readPersisted();
   if (saved) {
-    if (Date.now() - saved.at >= COMMUNITY_FRESH_MS) refreshCommunity().catch(() => {});
-    else communityCache = { at: saved.at, books: Promise.resolve(saved.books) };
+    // Show the saved list now; fetch the latest and push new books/count to the UI.
+    refreshCommunity().then((b) => { if (onUpdate && b.length) onUpdate(b); }).catch(() => {});
     return Promise.resolve(saved.books);
   }
   return refreshCommunity();
