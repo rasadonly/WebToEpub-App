@@ -1107,14 +1107,47 @@ async function fetchCommunityTree(repoId: string): Promise<HFTreeEntry[]> {
 // Listing ~6k files takes several sequential requests; reuse it for 5 minutes
 // so reopening the Library is instant.
 let communityCache: { at: number; books: Promise<LibraryBook[]> } | null = null;
-export function libraryGetCommunity(): Promise<LibraryBook[]> {
-  if (communityCache && Date.now() - communityCache.at < 5 * 60_000) return communityCache.books;
+const COMMUNITY_LS_KEY = 'community_library_v2';
+const COMMUNITY_FRESH_MS = 5 * 60_000;
+const COMMUNITY_STALE_MS = 7 * 24 * 3600_000;
+
+function readPersisted(): { at: number; books: LibraryBook[] } | null {
+  try {
+    const raw = localStorage.getItem(COMMUNITY_LS_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (d && Array.isArray(d.books) && d.books.length && Date.now() - d.at < COMMUNITY_STALE_MS) return d;
+  } catch { /* ignore */ }
+  return null;
+}
+
+function refreshCommunity(): Promise<LibraryBook[]> {
   const books = loadCommunity().then((b) => {
     if (!b.length) communityCache = null;
+    else {
+      try { localStorage.setItem(COMMUNITY_LS_KEY, JSON.stringify({ at: Date.now(), books: b })); } catch { /* quota */ }
+    }
     return b;
   }, (e) => { communityCache = null; throw e; });
   communityCache = { at: Date.now(), books };
   return books;
+}
+
+/** Instant from saved copy (refreshes in background); otherwise fetches. */
+export function libraryGetCommunity(): Promise<LibraryBook[]> {
+  if (communityCache && Date.now() - communityCache.at < COMMUNITY_FRESH_MS) return communityCache.books;
+  const saved = readPersisted();
+  if (saved) {
+    if (Date.now() - saved.at >= COMMUNITY_FRESH_MS) refreshCommunity().catch(() => {});
+    else communityCache = { at: saved.at, books: Promise.resolve(saved.books) };
+    return Promise.resolve(saved.books);
+  }
+  return refreshCommunity();
+}
+
+/** Warm the cache while the user is idle so the Library tab opens instantly. */
+export function prefetchCommunityLibrary(): void {
+  libraryGetCommunity().catch(() => {});
 }
 
 async function loadCommunity(): Promise<LibraryBook[]> {
