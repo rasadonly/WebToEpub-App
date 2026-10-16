@@ -201,28 +201,6 @@ class SiteSearchEngine {
                 }
             },
             {
-                name: "Archive of Our Own",
-                hostname: "archiveofourown.org",
-                searchUrl: (q) => `https://archiveofourown.org/works/search?work_search%5Bquery%5D=${encodeURIComponent(q)}`,
-                parseResults: (dom) => {
-                    let results = [];
-                    let items = dom.querySelectorAll("li.work");
-                    for (let item of items) {
-                        let a = item.querySelector(".heading a:first-child");
-                        if (a && a.href) {
-                            let fandomEl = item.querySelector(".fandoms");
-                            results.push({
-                                title: a.textContent.trim(),
-                                url: SiteSearchEngine.resolveUrl("https://archiveofourown.org", a.getAttribute("href")),
-                                snippet: fandomEl ? fandomEl.textContent.trim() : "",
-                                source: "AO3"
-                            });
-                        }
-                    }
-                    return results;
-                }
-            },
-            {
                 name: "WuxiaWorld",
                 hostname: "wuxiaworld.com",
                 searchUrl: (q) => `https://www.wuxiaworld.com/api/novels/search?query=${encodeURIComponent(q)}`,
