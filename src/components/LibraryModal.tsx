@@ -381,7 +381,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
 
         {/* Loading skeletons */}
         {loading && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+          <div className="flex flex-col gap-2 sm:gap-3 max-w-3xl mx-auto">
             {Array.from({ length: 18 }).map((_, i) => <SkeletonCard key={i} />)}
           </div>
         )}
@@ -414,7 +414,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
         {/* Grid */}
         {!loading && !error && filtered.length > 0 && (
           <>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+            <div className="flex flex-col gap-2 sm:gap-3 max-w-3xl mx-auto">
               {visibleBooks.map((book) => (
                 <BookCard key={book.id} book={book} onDownload={handleDownload} />
               ))}
