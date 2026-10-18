@@ -254,11 +254,14 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
         book.source === 'mega'
           ? await libraryDownloadMega(book.handle)
           : await libraryDownloadHF(book.handle, onProgress);
+      const url = URL.createObjectURL(new Blob([blob], { type: 'application/epub+zip' }));
       const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
+      a.href = url;
       a.download = `${book.title}.epub`;
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(a.href);
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
       toast({ title: '✓ Downloaded', description: `${book.title}.epub` });
     } catch (e) {
       toast({ variant: 'destructive', title: 'Download failed', description: (e as Error).message });
