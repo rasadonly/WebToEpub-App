@@ -1154,7 +1154,7 @@ async function fetchCommunityTreeSequentialFallback(HF_TREE_BASE: string): Promi
 // Listing ~6k files takes several sequential requests; reuse it for 5 minutes
 // so reopening the Library is instant.
 let communityCache: { at: number; books: Promise<LibraryBook[]> } | null = null;
-const COMMUNITY_LS_KEY = 'community_library_v3';
+const COMMUNITY_LS_KEY = 'community_library_v4';
 const COMMUNITY_FRESH_MS = 5 * 60_000;
 const COMMUNITY_STALE_MS = 7 * 24 * 3600_000;
 
@@ -1164,11 +1164,8 @@ function readPersisted(): { at: number; books: LibraryBook[] } | null {
     if (!raw) return null;
     const d = JSON.parse(raw);
     if (d && Array.isArray(d.f) && d.f.length && Date.now() - d.at < COMMUNITY_STALE_MS) {
-      const books: LibraryBook[] = d.f.map(([repoId, path, size, title, uploadedAt]: [string, string, number | null, string, string | null]) => ({
-        id: `${repoId}:${path}`, title, author: '', description: '', size: size ?? undefined,
-        uploadedAt: uploadedAt || undefined, handle: { epubPath: path, repoId }, source: 'hf' as const,
-      }));
-      return { at: d.at, books };
+      const list = (d.f as [string, number | null][]).map(([p, size]) => ({ type: 'file', path: p, size: size ?? undefined, repoId: d.repo || HF_COMMUNITY_REPO_ID }));
+      return { at: d.at, books: buildCommunityBooks(list) };
     }
   } catch { /* ignore */ }
   return null;
@@ -1183,8 +1180,9 @@ function refreshCommunity(): Promise<LibraryBook[]> {
       communityCache = null;
       return prev.books;
     } else {
-      try { const f = b.map((x) => { const h = x.handle as { epubPath: string; repoId: string }; return [h.repoId, h.epubPath, x.size ?? null, x.title, x.uploadedAt || null]; });
-        localStorage.setItem(COMMUNITY_LS_KEY, JSON.stringify({ at: Date.now(), f })); } catch { /* quota */ }
+      try { // Paths + sizes only (~2 MB for 30k books) so it fits browser storage.
+        const f = b.map((x) => [(x.handle as { epubPath: string }).epubPath, x.size ?? null]);
+        localStorage.setItem(COMMUNITY_LS_KEY, JSON.stringify({ at: Date.now(), repo: HF_COMMUNITY_REPO_ID, f })); } catch { /* quota */ }
     }
     return b;
   }, (e) => { communityCache = null; throw e; });
@@ -1230,9 +1228,11 @@ async function loadCommunity(): Promise<LibraryBook[]> {
       for (const e of res.value) list.push({ ...e, repoId: HF_COMMUNITY_REPOS[i] });
     }
   });
+  return buildCommunityBooks(list);
+}
+
+function buildCommunityBooks(list: (HFTreeEntry & { repoId: string })[]): LibraryBook[] {
   if (list.length === 0) return [];
-
-
   // Remove files smaller than 100 KB (102,400 bytes)
   const valid = list.filter(
     (item) =>
