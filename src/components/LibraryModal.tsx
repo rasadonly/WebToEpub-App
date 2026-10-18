@@ -50,13 +50,13 @@ function titleToHue(title: string) {
 /* ── Skeleton card placeholder ─────────────────────────────── */
 function SkeletonCard() {
   return (
-    <div className="rounded-xl overflow-hidden bg-muted/50 animate-pulse border border-border">
-      <div className="aspect-[2/3] bg-muted" />
-      <div className="p-3 space-y-2">
-        <div className="h-3 bg-muted rounded w-4/5" />
-        <div className="h-3 bg-muted rounded w-1/2" />
-        <div className="h-8 bg-muted rounded-lg mt-3" />
+    <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/40 animate-pulse border border-border">
+      <div className="w-12 h-[4.5rem] sm:w-14 sm:h-20 rounded-md bg-muted shrink-0" />
+      <div className="flex-1 space-y-2">
+        <div className="h-3 bg-muted rounded w-3/5" />
+        <div className="h-3 bg-muted rounded w-1/4" />
       </div>
+      <div className="h-8 w-20 bg-muted rounded-md shrink-0" />
     </div>
   );
 }
@@ -90,10 +90,10 @@ function BookCard({ book, onDownload }: BookCardProps) {
   };
 
   return (
-    <div className="group rounded-xl overflow-hidden bg-card border border-border flex flex-col hover:border-primary/40 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
-      {/* Cover */}
+    <div className="group flex items-center gap-3 sm:gap-4 p-2.5 sm:p-3 rounded-xl bg-card border border-border hover:border-primary/40 hover:bg-muted/30 transition-colors">
+      {/* Thumbnail */}
       <div
-        className="aspect-[2/3] relative overflow-hidden"
+        className="w-12 h-[4.5rem] sm:w-14 sm:h-20 shrink-0 rounded-md relative overflow-hidden shadow-sm"
         style={{ background: `linear-gradient(160deg, hsl(${hue}deg 45% 30%), hsl(${hueEnd}deg 50% 14%))` }}
       >
         {book.coverUrl && !imgFailed ? (
@@ -106,78 +106,56 @@ function BookCard({ book, onDownload }: BookCardProps) {
           />
         ) : (
           <>
-            {/* spine */}
-            <div className="absolute inset-y-0 left-0 w-2 bg-background/25" />
-            <div className="absolute inset-y-0 left-2 w-px bg-primary-foreground/15" />
-            {/* big initial watermark */}
+            <div className="absolute inset-y-0 left-0 w-1 bg-background/25" />
             <span
               aria-hidden="true"
-              className="absolute -right-2 -bottom-6 font-serif font-bold leading-none text-primary-foreground/10 select-none"
-              style={{ fontSize: '9rem' }}
+              className="absolute inset-0 flex items-center justify-center font-serif font-bold text-2xl text-primary-foreground/80 select-none"
             >
               {(book.title.trim()[0] || '?').toUpperCase()}
             </span>
-            <div className="relative z-10 h-full pl-5 pr-3 py-4 flex flex-col text-primary-foreground">
-              <div className="h-px w-8 bg-primary-foreground/50 mb-3" />
-              <span
-                className="font-serif font-bold leading-snug line-clamp-5 break-words"
-                style={{ fontSize: book.title.length > 40 ? '0.8rem' : '0.95rem' }}
-              >
-                {book.title}
-              </span>
-              <div className="mt-auto space-y-1">
-                {book.author && (
-                  <span className="block text-[10px] italic opacity-75 line-clamp-1">{book.author}</span>
-                )}
-                <span className="block text-[9px] font-mono uppercase tracking-[0.2em] opacity-50">EPUB</span>
-              </div>
-            </div>
           </>
         )}
       </div>
 
-      {/* Info + Button */}
-      <div className="p-3 flex-1 flex flex-col gap-1">
-        <h3 className="font-semibold text-xs sm:text-sm leading-tight line-clamp-2" title={book.title}>
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <h3 className="font-serif font-semibold text-sm sm:text-base leading-snug line-clamp-2" title={book.title}>
           {book.title}
         </h3>
-        {book.author && (
-          <p className="text-[10px] text-muted-foreground line-clamp-1">{book.author}</p>
-        )}
-        {book.size !== undefined && (
-          <p className="text-[10px] text-muted-foreground/70">{formatSize(book.size)}</p>
-        )}
-
-        <div className="mt-auto pt-2 space-y-1.5">
-          <Button
-            size="sm"
-            onClick={handleClick}
-            disabled={state === 'loading'}
-            className={cn(
-              'w-full text-[11px] font-semibold transition-all',
-              state === 'done' && 'bg-green-600 hover:bg-green-600 text-white',
-            )}
-            variant={state === 'done' ? 'default' : state === 'loading' ? 'outline' : 'default'}
-          >
-            {state === 'loading' && progress > 0 && (
-              <span className="tabular-nums mr-1 text-[10px]">{progress}%</span>
-            )}
-            {state === 'done' && <CheckCircle2 className="w-3 h-3 mr-1" />}
-            {state === 'idle' && <Download className="w-3 h-3 mr-1" />}
-            {state === 'loading' ? (progress > 0 ? 'Downloading' : 'Connecting…') : state === 'done' ? 'Downloaded!' : 'EPUB'}
-          </Button>
-
-          {/* Progress bar */}
-          {state === 'loading' && (
-            <div className="w-full h-1 rounded-full bg-muted overflow-hidden">
-              <div
-                className="h-full rounded-full bg-primary transition-all duration-300 ease-out"
-                style={{ width: `${Math.max(progress, 3)}%` }}
-              />
-            </div>
-          )}
+        <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground min-w-0">
+          {book.author && <span className="truncate">{book.author}</span>}
+          {book.author && book.size !== undefined && <span aria-hidden="true">·</span>}
+          {book.size !== undefined && <span className="shrink-0 tabular-nums">{formatSize(book.size)}</span>}
+          <span className="shrink-0 font-mono uppercase tracking-wider text-[9px] opacity-60">EPUB</span>
         </div>
+        {state === 'loading' && (
+          <div className="mt-2 w-full h-1 rounded-full bg-muted overflow-hidden">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-300 ease-out"
+              style={{ width: `${Math.max(progress, 3)}%` }}
+            />
+          </div>
+        )}
       </div>
+
+      {/* Button */}
+      <Button
+        size="sm"
+        onClick={handleClick}
+        disabled={state === 'loading'}
+        aria-label={`Download ${book.title}`}
+        className={cn(
+          'shrink-0 text-[11px] font-semibold min-w-[5.5rem]',
+          state === 'done' && 'bg-green-600 hover:bg-green-600 text-white',
+        )}
+        variant={state === 'loading' ? 'outline' : 'default'}
+      >
+        {state === 'loading' && progress > 0 && <span className="tabular-nums">{progress}%</span>}
+        {state === 'loading' && progress === 0 && <RefreshCw className="w-3 h-3 animate-spin" />}
+        {state === 'done' && <CheckCircle2 className="w-3 h-3 mr-1" />}
+        {state === 'idle' && <Download className="w-3 h-3 mr-1" />}
+        {state === 'done' ? 'Done' : state === 'idle' ? 'EPUB' : ''}
+      </Button>
     </div>
   );
 }
