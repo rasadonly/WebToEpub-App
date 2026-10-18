@@ -70,6 +70,7 @@ interface BookCardProps {
 function BookCard({ book, onDownload }: BookCardProps) {
   const [state, setState] = useState<'idle' | 'loading' | 'done'>('idle');
   const [progress, setProgress] = useState(0);
+  const [imgFailed, setImgFailed] = useState(false);
   const hue = titleToHue(book.title);
   const hueEnd = (hue + 40) % 360;
 
@@ -92,19 +93,46 @@ function BookCard({ book, onDownload }: BookCardProps) {
     <div className="group rounded-xl overflow-hidden bg-card border border-border flex flex-col hover:border-primary/40 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
       {/* Cover */}
       <div
-        className="aspect-[2/3] relative flex items-end overflow-hidden"
-        style={{ background: `linear-gradient(145deg, hsl(${hue}deg 55% 32%), hsl(${hueEnd}deg 50% 18%))` }}
+        className="aspect-[2/3] relative overflow-hidden"
+        style={{ background: `linear-gradient(160deg, hsl(${hue}deg 45% 30%), hsl(${hueEnd}deg 50% 14%))` }}
       >
-        {book.coverUrl ? (
-          <img src={book.coverUrl} alt={book.title} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+        {book.coverUrl && !imgFailed ? (
+          <img
+            src={book.coverUrl}
+            alt={book.title}
+            className="absolute inset-0 w-full h-full object-cover"
+            loading="lazy"
+            onError={() => setImgFailed(true)}
+          />
         ) : (
-          <div className="relative z-10 p-3 w-full flex flex-col items-center gap-2 text-center text-primary-foreground">
-            <BookOpen className="w-7 h-7 opacity-60" />
-            <span className="text-[10px] font-mono uppercase tracking-widest opacity-50">EPUB</span>
-            <span className="text-[11px] font-semibold opacity-85 line-clamp-3 leading-tight">
-              {book.title}
+          <>
+            {/* spine */}
+            <div className="absolute inset-y-0 left-0 w-2 bg-background/25" />
+            <div className="absolute inset-y-0 left-2 w-px bg-primary-foreground/15" />
+            {/* big initial watermark */}
+            <span
+              aria-hidden="true"
+              className="absolute -right-2 -bottom-6 font-serif font-bold leading-none text-primary-foreground/10 select-none"
+              style={{ fontSize: '9rem' }}
+            >
+              {(book.title.trim()[0] || '?').toUpperCase()}
             </span>
-          </div>
+            <div className="relative z-10 h-full pl-5 pr-3 py-4 flex flex-col text-primary-foreground">
+              <div className="h-px w-8 bg-primary-foreground/50 mb-3" />
+              <span
+                className="font-serif font-bold leading-snug line-clamp-5 break-words"
+                style={{ fontSize: book.title.length > 40 ? '0.8rem' : '0.95rem' }}
+              >
+                {book.title}
+              </span>
+              <div className="mt-auto space-y-1">
+                {book.author && (
+                  <span className="block text-[10px] italic opacity-75 line-clamp-1">{book.author}</span>
+                )}
+                <span className="block text-[9px] font-mono uppercase tracking-[0.2em] opacity-50">EPUB</span>
+              </div>
+            </div>
+          </>
         )}
       </div>
 
