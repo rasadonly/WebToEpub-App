@@ -46,17 +46,21 @@ export default function LibrarySuggestion({ query }: Props) {
     const q = query.trim();
     if (norm(q).length < 3) { setMatches([]); return; }
     let alive = true;
+    const score = (books: LibraryBook[]) => books
+      .map((b) => ({ b, s: matchScore(b.title, q) }))
+      .filter((x) => x.s >= 0.75)
+      .sort((x, y) => y.s - x.s || (y.b.size || 0) - (x.b.size || 0))
+      .slice(0, 3)
+      .map((x) => x.b);
+
     const t = window.setTimeout(() => {
-      libraryGetCommunity()
+      libraryGetCommunity((updated) => {
+        // Background refresh finished — update suggestions if still relevant.
+        if (alive) setMatches(score(updated));
+      })
         .then((books) => {
           if (!alive) return;
-          const scored = books
-            .map((b) => ({ b, s: matchScore(b.title, q) }))
-            .filter((x) => x.s >= 0.75)
-            .sort((x, y) => y.s - x.s || (y.b.size || 0) - (x.b.size || 0))
-            .slice(0, 3)
-            .map((x) => x.b);
-          setMatches(scored);
+          setMatches(score(books));
         })
         .catch(() => alive && setMatches([]));
     }, 400);

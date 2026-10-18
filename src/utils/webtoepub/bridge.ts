@@ -1127,7 +1127,7 @@ async function fetchTreePaged(startUrl: string): Promise<HFTreeEntry[]> {
   return out;
 }
 
-/** Lists each date folder in parallel (~1s) instead of ~14 sequential pages. */
+/** Lists each date folder in parallel instead of ~14 sequential pages. */
 async function fetchCommunityTreeParallel(repoId: string): Promise<HFTreeEntry[]> {
   const root = `https://huggingface.co/api/datasets/${repoId}/tree/main/books`;
   const top = await fetchTreePaged(`${root}?limit=1000`);
@@ -1141,7 +1141,8 @@ async function fetchCommunityTreeParallel(repoId: string): Promise<HFTreeEntry[]
       files.push(...(await fetchTreePaged(`https://huggingface.co/api/datasets/${repoId}/tree/main/${enc}?recursive=true&limit=1000`)));
     }
   };
-  await Promise.all(Array.from({ length: Math.min(4, dirs.length) }, worker));
+  // Use 6 workers (up from 4) to saturate the HF API faster.
+  await Promise.all(Array.from({ length: Math.min(6, dirs.length) }, worker));
   return files;
 }
 
@@ -1208,26 +1209,49 @@ export function prefetchCommunityLibrary(): void {
 }
 
 async function loadCommunity(): Promise<LibraryBook[]> {
-  // Read the new dataset and the old archive together; one failing (e.g. the
-  // new one still empty) must not hide the other.
   const list: (HFTreeEntry & { repoId: string })[] = [];
-  // Fast path: the server keeps the whole list ready (one compressed request).
-  try {
-    const base = getBackendUrl();
-    if (base) {
-      const r = await withTimeout(`${base}/api/library`, { cache: 'no-store' }, 20_000);
-      if (r.ok) {
-        const d = (await r.json()) as { repo: string; f: [string, number | null][] };
-        if (Array.isArray(d?.f)) for (const [p, size] of d.f) list.push({ type: 'file', path: p, size: size ?? undefined, repoId: d.repo || HF_COMMUNITY_REPO_ID });
+
+  // Race the backend index (/api/library) against a direct HF tree fetch.
+  // Whichever responds first wins; the other is ignored. This means a cold
+  // Heroku dyno (20 s wake-up) no longer blocks the UI — HF direct kicks in
+  // after ~2-4 s if the backend is slow.
+  const base = getBackendUrl();
+  const backendPromise: Promise<(HFTreeEntry & { repoId: string })[]> = base
+    ? withTimeout(`${base}/api/library`, { cache: 'no-store' }, 6_000)
+        .then(async (r) => {
+          if (!r.ok) throw new Error(`${r.status}`);
+          const d = (await r.json()) as { repo: string; f: [string, number | null][] };
+          if (!Array.isArray(d?.f) || !d.f.length) throw new Error('empty');
+          return d.f.map(([p, size]) => ({
+            type: 'file' as const,
+            path: p,
+            size: size ?? undefined,
+            repoId: d.repo || HF_COMMUNITY_REPO_ID,
+          }));
+        })
+    : Promise.reject(new Error('no backend'));
+
+  const hfPromise: Promise<(HFTreeEntry & { repoId: string })[]> = Promise.allSettled(
+    HF_COMMUNITY_REPOS.map((r) => fetchCommunityTree(r))
+  ).then((results) => {
+    const out: (HFTreeEntry & { repoId: string })[] = [];
+    results.forEach((res, i) => {
+      if (res.status === 'fulfilled' && Array.isArray(res.value)) {
+        for (const e of res.value) out.push({ ...e, repoId: HF_COMMUNITY_REPOS[i] });
       }
-    }
-  } catch { /* fall back to reading the dataset directly */ }
-  const results = list.length ? [] : await Promise.allSettled(HF_COMMUNITY_REPOS.map((r) => fetchCommunityTree(r)));
-  results.forEach((res, i) => {
-    if (res.status === 'fulfilled' && Array.isArray(res.value)) {
-      for (const e of res.value) list.push({ ...e, repoId: HF_COMMUNITY_REPOS[i] });
-    }
+    });
+    if (!out.length) throw new Error('empty hf listing');
+    return out;
   });
+
+  // Use whichever source responds first with a non-empty list.
+  try {
+    const entries = await Promise.any([backendPromise, hfPromise]);
+    list.push(...entries);
+  } catch {
+    // Both failed — last resort: sequential fallback already tried inside fetchCommunityTree.
+  }
+
   return buildCommunityBooks(list);
 }
 
