@@ -1110,7 +1110,11 @@ async function fetchTreePaged(startUrl: string): Promise<HFTreeEntry[]> {
   let url: string | null = startUrl;
   let pages = 0;
   while (url && pages < 50) {
-    const response = await withTimeout(url, { cache: 'no-store' }, 20_000);
+    let response = await withTimeout(url, { cache: 'no-store' }, 20_000);
+    for (let attempt = 1; response.status === 429 && attempt <= 3; attempt++) {
+      await new Promise((r) => setTimeout(r, 1500 * attempt));
+      response = await withTimeout(url, { cache: 'no-store' }, 20_000);
+    }
     if (!response.ok) throw new Error(`HF ${response.status}`);
     const page = (await response.json()) as HFTreeEntry[];
     if (!Array.isArray(page)) break;
@@ -1136,7 +1140,7 @@ async function fetchCommunityTreeParallel(repoId: string): Promise<HFTreeEntry[]
       files.push(...(await fetchTreePaged(`https://huggingface.co/api/datasets/${repoId}/tree/main/${enc}?recursive=true&limit=1000`)));
     }
   };
-  await Promise.all(Array.from({ length: Math.min(12, dirs.length) }, worker));
+  await Promise.all(Array.from({ length: Math.min(4, dirs.length) }, worker));
   return files;
 }
 
@@ -1171,8 +1175,13 @@ function readPersisted(): { at: number; books: LibraryBook[] } | null {
 
 function refreshCommunity(): Promise<LibraryBook[]> {
   const books = loadCommunity().then((b) => {
+    const prev = readPersisted();
     if (!b.length) communityCache = null;
-    else {
+    else if (prev && b.length < prev.books.length * 0.9) {
+      // Likely a partial listing (rate limit); keep the fuller saved list.
+      communityCache = null;
+      return prev.books;
+    } else {
       try { const f = b.map((x) => { const h = x.handle as { epubPath: string; repoId: string }; return [h.repoId, h.epubPath, x.size ?? null, x.title, x.uploadedAt || null]; });
         localStorage.setItem(COMMUNITY_LS_KEY, JSON.stringify({ at: Date.now(), f })); } catch { /* quota */ }
     }
