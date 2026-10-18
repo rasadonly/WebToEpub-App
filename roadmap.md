@@ -1,0 +1,3 @@
+- [x] Fix EPUB downloads failing for non-English book titles.
+- [x] Run download regression tests and deploy the fix to Heroku.
+- [x] Verify a fresh sample conversion and download through the app.

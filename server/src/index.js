@@ -19,6 +19,7 @@ import {
 } from "./fetcher.js";
 import { buildEpub, sanitizeFilename } from "./epub.js";
 import { uploadToLibrary, libraryEnabled } from "./library.js";
+import { sendEpub } from "./download.js";
 
 
 const app = express();
@@ -587,9 +588,7 @@ app.get("/api/jobs/:id/download", (req, res) => {
   if (!job || job.status !== "done" || !job.file) {
     return res.status(404).json({ error: "epub not ready" });
   }
-  res.setHeader("Content-Type", "application/epub+zip");
-  res.setHeader("Content-Disposition", `attachment; filename="${job.filename}"`);
-  fs.createReadStream(job.file).pipe(res);
+  sendEpub(res, job.file, job.filename);
 });
 
 restoreJobs();
