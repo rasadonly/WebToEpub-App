@@ -1296,13 +1296,59 @@ function buildCommunityBooks(list: (HFTreeEntry & { repoId: string })[]): Librar
 }
 
 
-export async function libraryDownloadHF(handle: unknown): Promise<Blob> {
+export async function libraryDownloadHF(
+  handle: unknown,
+  onProgress?: (pct: number) => void
+): Promise<Blob> {
   const { epubPath, repoId } = handle as { epubPath: string; repoId: string };
   const url = makeHfFileUrl(repoId || HF_OLD_REPO_ID, epubPath);
-  const response = await withTimeout(url, { cache: 'no-store' }, 25_000);
+
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 60_000);
+  let response: Response;
+  try {
+    response = await fetch(url, { cache: 'no-store', signal: controller.signal });
+  } finally {
+    window.clearTimeout(timer);
+  }
   if (!response.ok) throw new Error(`Failed to download book: ${response.status}`);
-  if (!epubPath.toLowerCase().endsWith('.txt')) return await response.blob();
-  return base64ToBlob(await response.text(), 'application/epub+zip');
+
+  // base64-encoded txt files — no streaming needed
+  if (epubPath.toLowerCase().endsWith('.txt')) {
+    return base64ToBlob(await response.text(), 'application/epub+zip');
+  }
+
+  // Stream with progress reporting
+  const contentLength = response.headers.get('content-length');
+  const total = contentLength ? parseInt(contentLength, 10) : 0;
+
+  if (!total || !response.body || !onProgress) {
+    // No Content-Length or no progress handler — just return blob directly
+    return await response.blob();
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+
+  onProgress(0);
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) {
+      chunks.push(value);
+      received += value.length;
+      onProgress(Math.min(Math.round((received / total) * 100), 99));
+    }
+  }
+  onProgress(100);
+
+  // Concatenate all chunks into a single Blob
+  const totalLen = chunks.reduce((s, c) => s + c.length, 0);
+  const merged = new Uint8Array(totalLen);
+  let offset = 0;
+  for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.length; }
+  return new Blob([merged], { type: 'application/epub+zip' });
 }
 
 // ── Archive.org ────────────────────────────────────────────

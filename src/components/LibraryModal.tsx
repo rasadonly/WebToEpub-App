@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { X, Send, Cloud, Archive, Loader2, Download, Search, BookOpen, CheckCircle2, RefreshCw, HardDriveDownload } from 'lucide-react';
+import { X, Send, Cloud, Archive, Download, Search, BookOpen, CheckCircle2, RefreshCw, HardDriveDownload } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -77,22 +77,26 @@ function SkeletonCard() {
 
 interface BookCardProps {
   book: LibraryBook;
-  onDownload: (book: LibraryBook) => Promise<void>;
+  onDownload: (book: LibraryBook, onProgress: (pct: number) => void) => Promise<void>;
 }
 
 function BookCard({ book, onDownload }: BookCardProps) {
   const [state, setState] = useState<'idle' | 'loading' | 'done'>('idle');
+  const [progress, setProgress] = useState<number>(0);
   const grad = bookGradient(book.title);
 
   const handleClick = async () => {
     if (state !== 'idle') return;
     setState('loading');
+    setProgress(0);
     try {
-      await onDownload(book);
+      await onDownload(book, (pct) => setProgress(pct));
+      setProgress(100);
       setState('done');
-      setTimeout(() => setState('idle'), 2500);
+      setTimeout(() => { setState('idle'); setProgress(0); }, 2500);
     } catch {
       setState('idle');
+      setProgress(0);
     }
   };
 
@@ -136,24 +140,37 @@ function BookCard({ book, onDownload }: BookCardProps) {
           <p className="text-[10px] text-white/30">{formatSize(book.size)}</p>
         )}
 
-        {/* Download button */}
-        <button
-          onClick={handleClick}
-          disabled={state === 'loading'}
-          className={cn(
-            'mt-auto w-full flex items-center justify-center gap-1.5 rounded-lg py-2 text-[11px] font-semibold transition-all duration-200',
-            state === 'done'
-              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-              : state === 'loading'
-              ? 'bg-white/10 text-white/50 cursor-not-allowed border border-white/10'
-              : 'bg-indigo-500 hover:bg-indigo-400 text-white border border-indigo-400/20 hover:shadow-lg hover:shadow-indigo-500/20 active:scale-95'
+        {/* Download button + progress bar */}
+        <div className="mt-auto space-y-1.5">
+          <button
+            onClick={handleClick}
+            disabled={state === 'loading'}
+            className={cn(
+              'w-full flex items-center justify-center gap-1.5 rounded-lg py-2 text-[11px] font-semibold transition-all duration-200',
+              state === 'done'
+                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                : state === 'loading'
+                ? 'bg-indigo-900/50 text-indigo-300 cursor-not-allowed border border-indigo-500/20'
+                : 'bg-indigo-500 hover:bg-indigo-400 text-white border border-indigo-400/20 hover:shadow-lg hover:shadow-indigo-500/20 active:scale-95'
+            )}
+          >
+            {state === 'loading' && (
+              <span className="text-[10px] tabular-nums">{progress < 1 ? '…' : `${progress}%`}</span>
+            )}
+            {state === 'done' && <CheckCircle2 className="w-3 h-3" />}
+            {state === 'idle' && <Download className="w-3 h-3" />}
+            {state === 'loading' ? 'Downloading' : state === 'done' ? 'Downloaded!' : 'Download EPUB'}
+          </button>
+          {/* Progress bar */}
+          {state === 'loading' && (
+            <div className="w-full h-1 rounded-full bg-white/[0.06] overflow-hidden">
+              <div
+                className="h-full rounded-full bg-indigo-500 transition-all duration-300 ease-out"
+                style={{ width: `${Math.max(progress, 2)}%` }}
+              />
+            </div>
           )}
-        >
-          {state === 'loading' && <Loader2 className="w-3 h-3 animate-spin" />}
-          {state === 'done' && <CheckCircle2 className="w-3 h-3" />}
-          {state === 'idle' && <Download className="w-3 h-3" />}
-          {state === 'loading' ? 'Downloading…' : state === 'done' ? 'Downloaded!' : 'Download EPUB'}
-        </button>
+        </div>
       </div>
     </div>
   );
@@ -219,7 +236,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
     setVisibleCount(INITIAL_VISIBLE);
   }, [query, tab]);
 
-  const handleDownload = async (book: LibraryBook) => {
+  const handleDownload = async (book: LibraryBook, onProgress: (pct: number) => void) => {
     if (book.source === 'archive') {
       const { url } = book.handle as { url: string };
       window.open(url, '_blank', 'noopener,noreferrer');
@@ -230,7 +247,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
       const blob =
         book.source === 'mega'
           ? await libraryDownloadMega(book.handle)
-          : await libraryDownloadHF(book.handle);
+          : await libraryDownloadHF(book.handle, onProgress);
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = `${book.title}.epub`;
