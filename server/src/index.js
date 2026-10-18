@@ -20,6 +20,7 @@ import {
 import { buildEpub, sanitizeFilename } from "./epub.js";
 import { uploadToLibrary, libraryEnabled } from "./library.js";
 import { sendEpub } from "./download.js";
+import { getLibraryIndex, startLibraryIndex } from "./libraryIndex.js";
 
 
 const app = express();
@@ -91,6 +92,17 @@ app.get("/health", (_req, res) => res.json({ ok: true, jobs: jobs.size, uptime: 
 // ---- Live stats (active jobs + active users) -------------------------------
 const visitors = new Map(); // visitorId -> lastSeen ms
 const VISITOR_TTL_MS = 90 * 1000;
+
+app.get("/api/library", async (req, res) => {
+  try {
+    const idx = await getLibraryIndex();
+    if (!idx) return res.status(503).json({ error: "library list not ready" });
+    res.set("Cache-Control", "public, max-age=60");
+    res.json(idx);
+  } catch (e) {
+    res.status(503).json({ error: String(e?.message || e) });
+  }
+});
 
 app.get("/api/stats", (req, res) => {
   const now = Date.now();
@@ -594,3 +606,4 @@ app.get("/api/jobs/:id/download", (req, res) => {
 restoreJobs();
 
 app.listen(PORT, () => console.log(`link-to-epub server listening on ${PORT}`));
+startLibraryIndex();
