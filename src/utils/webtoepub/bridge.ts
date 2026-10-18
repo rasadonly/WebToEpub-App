@@ -1,4 +1,5 @@
 import { CORS_PROXY_LIST } from '../localWorker';
+import { getBackendUrl } from '@/utils/backend';
 import { getDownHosts } from '../siteHealth';
 import { getRecentDownloads } from '@/utils/recentDownloads';
 
@@ -1211,8 +1212,19 @@ export function prefetchCommunityLibrary(): void {
 async function loadCommunity(): Promise<LibraryBook[]> {
   // Read the new dataset and the old archive together; one failing (e.g. the
   // new one still empty) must not hide the other.
-  const results = await Promise.allSettled(HF_COMMUNITY_REPOS.map((r) => fetchCommunityTree(r)));
   const list: (HFTreeEntry & { repoId: string })[] = [];
+  // Fast path: the server keeps the whole list ready (one compressed request).
+  try {
+    const base = getBackendUrl();
+    if (base) {
+      const r = await withTimeout(`${base}/api/library`, { cache: 'no-store' }, 20_000);
+      if (r.ok) {
+        const d = (await r.json()) as { repo: string; f: [string, number | null][] };
+        if (Array.isArray(d?.f)) for (const [p, size] of d.f) list.push({ type: 'file', path: p, size: size ?? undefined, repoId: d.repo || HF_COMMUNITY_REPO_ID });
+      }
+    }
+  } catch { /* fall back to reading the dataset directly */ }
+  const results = list.length ? [] : await Promise.allSettled(HF_COMMUNITY_REPOS.map((r) => fetchCommunityTree(r)));
   results.forEach((res, i) => {
     if (res.status === 'fulfilled' && Array.isArray(res.value)) {
       for (const e of res.value) list.push({ ...e, repoId: HF_COMMUNITY_REPOS[i] });
