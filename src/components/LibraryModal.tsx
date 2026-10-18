@@ -67,7 +67,7 @@ interface BookCardProps {
   onDownload: (book: LibraryBook, onProgress: (pct: number) => void) => Promise<void>;
 }
 
-function BookCard({ book, onDownload }: BookCardProps) {
+  const BookCard = memo(function BookCard({ book, onDownload }: BookCardProps) {
   const [state, setState] = useState<'idle' | 'loading' | 'done'>('idle');
   const [progress, setProgress] = useState(0);
   const [imgFailed, setImgFailed] = useState(false);
