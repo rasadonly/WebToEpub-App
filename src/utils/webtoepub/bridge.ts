@@ -1246,7 +1246,15 @@ async function loadCommunity(): Promise<LibraryBook[]> {
 
   // Use whichever source responds first with a non-empty list.
   try {
-    const entries = await Promise.any([backendPromise, hfPromise]);
+    const sources = [backendPromise, hfPromise];
+    const entries = await new Promise<Awaited<typeof backendPromise>>((resolve, reject) => {
+      let failed = 0;
+      for (const p of sources) {
+        Promise.resolve(p).then(resolve as (v: unknown) => void, (e) => {
+          if (++failed === sources.length) reject(e);
+        });
+      }
+    });
     list.push(...entries);
   } catch {
     // Both failed — last resort: sequential fallback already tried inside fetchCommunityTree.
