@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Send, Cloud, Archive, Download, Search, BookOpen, CheckCircle2, RefreshCw, HardDriveDownload } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -23,13 +25,14 @@ type Tab = 'community' | 'my-downloads' | 'telegram' | 'mega' | 'archive';
 const DEFAULT_MEGA_URL = 'https://mega.nz/folder/Ci4ETASB#KIFVuPI99P1Ytg0dxmtYlw';
 const INITIAL_VISIBLE = 80;
 const LOAD_MORE = 80;
+const BG_BATCH = 200;
 
-const TABS: { id: Tab; label: string; icon: typeof Send; desc: string }[] = [
-  { id: 'community', label: 'Community', icon: BookOpen, desc: 'Shared by the community' },
-  { id: 'my-downloads', label: 'My Books', icon: HardDriveDownload, desc: 'Your saved conversions' },
-  { id: 'telegram', label: 'Telegram', icon: Send, desc: 'From Telegram channel' },
-  { id: 'mega', label: 'Mega', icon: Cloud, desc: 'Mega cloud folder' },
-  { id: 'archive', label: 'Archive.org', icon: Archive, desc: 'Internet Archive' },
+const TABS: { id: Tab; label: string; icon: typeof Send }[] = [
+  { id: 'community', label: 'Community', icon: BookOpen },
+  { id: 'my-downloads', label: 'My Books', icon: HardDriveDownload },
+  { id: 'telegram', label: 'Telegram', icon: Send },
+  { id: 'mega', label: 'Mega', icon: Cloud },
+  { id: 'archive', label: 'Archive.org', icon: Archive },
 ];
 
 function formatSize(bytes?: number) {
@@ -38,43 +41,27 @@ function formatSize(bytes?: number) {
   return mb < 1 ? `${(bytes / 1024).toFixed(0)} KB` : `${mb.toFixed(1)} MB`;
 }
 
-// Generate a stable, rich gradient for a book cover based on its title.
-function bookGradient(title: string): { from: string; to: string; text: string } {
+function titleToHue(title: string) {
   let hash = 0;
-  for (let i = 0; i < title.length; i++) {
-    hash = Math.imul(31, hash) + title.charCodeAt(i) | 0;
-  }
-  const abs = Math.abs(hash);
-  const palettes: Array<{ from: string; to: string; text: string }> = [
-    { from: '#1a1a2e', to: '#16213e', text: '#7ec8e3' },
-    { from: '#2d1b69', to: '#11998e', text: '#f0fff4' },
-    { from: '#360033', to: '#0b8793', text: '#ffe6fa' },
-    { from: '#1f4037', to: '#99f2c8', text: '#1f4037' },
-    { from: '#3a1c71', to: '#d76d77', text: '#fff0f3' },
-    { from: '#141e30', to: '#243b55', text: '#b8d4f0' },
-    { from: '#4e342e', to: '#d7722c', text: '#fff3e0' },
-    { from: '#004d40', to: '#1de9b6', text: '#e0f2f1' },
-    { from: '#1a237e', to: '#7c4dff', text: '#e8eaf6' },
-    { from: '#37003c', to: '#c2185b', text: '#fce4ec' },
-    { from: '#263238', to: '#37474f', text: '#b0bec5' },
-    { from: '#0d1117', to: '#161b22', text: '#58a6ff' },
-  ];
-  return palettes[abs % palettes.length];
+  for (let i = 0; i < title.length; i++) hash = Math.imul(31, hash) + title.charCodeAt(i) | 0;
+  return Math.abs(hash) % 360;
 }
 
+/* ── Skeleton card placeholder ─────────────────────────────── */
 function SkeletonCard() {
   return (
-    <div className="rounded-2xl overflow-hidden bg-white/5 animate-pulse">
-      <div className="aspect-[2/3] bg-white/10" />
+    <div className="rounded-xl overflow-hidden bg-muted/50 animate-pulse border border-border">
+      <div className="aspect-[2/3] bg-muted" />
       <div className="p-3 space-y-2">
-        <div className="h-3 bg-white/10 rounded w-3/4" />
-        <div className="h-3 bg-white/10 rounded w-1/2" />
-        <div className="h-8 bg-white/10 rounded-lg mt-3" />
+        <div className="h-3 bg-muted rounded w-4/5" />
+        <div className="h-3 bg-muted rounded w-1/2" />
+        <div className="h-8 bg-muted rounded-lg mt-3" />
       </div>
     </div>
   );
 }
 
+/* ── Book card with download progress ──────────────────────── */
 interface BookCardProps {
   book: LibraryBook;
   onDownload: (book: LibraryBook, onProgress: (pct: number) => void) => Promise<void>;
@@ -82,8 +69,9 @@ interface BookCardProps {
 
 function BookCard({ book, onDownload }: BookCardProps) {
   const [state, setState] = useState<'idle' | 'loading' | 'done'>('idle');
-  const [progress, setProgress] = useState<number>(0);
-  const grad = bookGradient(book.title);
+  const [progress, setProgress] = useState(0);
+  const hue = titleToHue(book.title);
+  const hueEnd = (hue + 40) % 360;
 
   const handleClick = async () => {
     if (state !== 'idle') return;
@@ -101,72 +89,62 @@ function BookCard({ book, onDownload }: BookCardProps) {
   };
 
   return (
-    <div className="group rounded-2xl overflow-hidden bg-white/[0.04] border border-white/10 flex flex-col hover:border-white/25 hover:bg-white/[0.07] transition-all duration-200 hover:shadow-xl hover:shadow-black/40 hover:-translate-y-0.5">
+    <div className="group rounded-xl overflow-hidden bg-card border border-border flex flex-col hover:border-primary/40 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5">
       {/* Cover */}
       <div
         className="aspect-[2/3] relative flex items-end overflow-hidden"
-        style={{ background: `linear-gradient(160deg, ${grad.from}, ${grad.to})` }}
+        style={{ background: `linear-gradient(145deg, hsl(${hue}deg 55% 32%), hsl(${hueEnd}deg 50% 18%))` }}
       >
         {book.coverUrl ? (
           <img src={book.coverUrl} alt={book.title} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
         ) : (
-          <>
-            {/* Subtle texture lines */}
-            <div className="absolute inset-0 opacity-10"
-              style={{ backgroundImage: 'repeating-linear-gradient(0deg,transparent,transparent 18px,rgba(255,255,255,.08) 18px,rgba(255,255,255,.08) 19px)' }} />
-            {/* Spine shimmer */}
-            <div className="absolute left-0 top-0 bottom-0 w-4"
-              style={{ background: 'linear-gradient(90deg,rgba(255,255,255,.12),transparent)' }} />
-            {/* Title on cover */}
-            <div className="relative z-10 p-3 w-full">
-              <p className="text-[10px] font-mono tracking-[0.2em] uppercase opacity-50 mb-1" style={{ color: grad.text }}>EPUB</p>
-              <p className="text-[11px] font-semibold leading-tight line-clamp-4" style={{ color: grad.text }}>
-                {book.title}
-              </p>
-            </div>
-          </>
+          <div className="relative z-10 p-3 w-full flex flex-col items-center gap-2 text-center text-primary-foreground">
+            <BookOpen className="w-7 h-7 opacity-60" />
+            <span className="text-[10px] font-mono uppercase tracking-widest opacity-50">EPUB</span>
+            <span className="text-[11px] font-semibold opacity-85 line-clamp-3 leading-tight">
+              {book.title}
+            </span>
+          </div>
         )}
       </div>
 
-      {/* Info */}
-      <div className="p-3 flex flex-col gap-1 flex-1">
-        <h3 className="text-[12px] font-semibold leading-snug line-clamp-2 text-white/90" title={book.title}>
+      {/* Info + Button */}
+      <div className="p-3 flex-1 flex flex-col gap-1">
+        <h3 className="font-semibold text-xs sm:text-sm leading-tight line-clamp-2" title={book.title}>
           {book.title}
         </h3>
         {book.author && (
-          <p className="text-[10px] text-white/40 line-clamp-1">{book.author}</p>
+          <p className="text-[10px] text-muted-foreground line-clamp-1">{book.author}</p>
         )}
         {book.size !== undefined && (
-          <p className="text-[10px] text-white/30">{formatSize(book.size)}</p>
+          <p className="text-[10px] text-muted-foreground/70">{formatSize(book.size)}</p>
         )}
 
-        {/* Download button + progress bar */}
-        <div className="mt-auto space-y-1.5">
-          <button
+        <div className="mt-auto pt-2 space-y-1.5">
+          <Button
+            size="sm"
             onClick={handleClick}
             disabled={state === 'loading'}
             className={cn(
-              'w-full flex items-center justify-center gap-1.5 rounded-lg py-2 text-[11px] font-semibold transition-all duration-200',
-              state === 'done'
-                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                : state === 'loading'
-                ? 'bg-indigo-900/50 text-indigo-300 cursor-not-allowed border border-indigo-500/20'
-                : 'bg-indigo-500 hover:bg-indigo-400 text-white border border-indigo-400/20 hover:shadow-lg hover:shadow-indigo-500/20 active:scale-95'
+              'w-full text-[11px] font-semibold transition-all',
+              state === 'done' && 'bg-green-600 hover:bg-green-600 text-white',
             )}
+            variant={state === 'done' ? 'default' : state === 'loading' ? 'outline' : 'default'}
           >
-            {state === 'loading' && (
-              <span className="text-[10px] tabular-nums">{progress < 1 ? '…' : `${progress}%`}</span>
+            {state === 'loading' && progress > 0 && (
+              <span className="tabular-nums mr-1 text-[10px]">{progress}%</span>
             )}
-            {state === 'done' && <CheckCircle2 className="w-3 h-3" />}
-            {state === 'idle' && <Download className="w-3 h-3" />}
-            {state === 'loading' ? 'Downloading' : state === 'done' ? 'Downloaded!' : 'Download EPUB'}
-          </button>
+            {state === 'done' && <CheckCircle2 className="w-3 h-3 mr-1" />}
+            {state === 'idle' && <Download className="w-3 h-3 mr-1" />}
+            {state === 'loading' ? (progress > 0 ? 'Downloading' : 'Connecting…') : state === 'done' ? 'Downloaded!' : 'EPUB'}
+          </Button>
+
           {/* Progress bar */}
           {state === 'loading' && (
-            <div className="w-full h-1 rounded-full bg-white/[0.06] overflow-hidden">
+            <div className="w-full h-1 rounded-full bg-muted overflow-hidden">
               <div
-                className="h-full rounded-full bg-indigo-500 transition-all duration-300 ease-out"
-                style={{ width: `${Math.max(progress, 2)}%` }}
+                className="h-full rounded-full bg-primary transition-all duration-300 ease-out"
+                style={{ width: `${Math.max(progress, 3)}%` }}
               />
             </div>
           )}
@@ -176,6 +154,7 @@ function BookCard({ book, onDownload }: BookCardProps) {
   );
 }
 
+/* ── Main Library Modal ───────────────────────────────────── */
 export function LibraryModal({ open, onClose }: LibraryModalProps) {
   const { toast } = useToast();
   const [tab, setTab] = useState<Tab>('community');
@@ -198,7 +177,6 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
-  // Focus search when modal opens
   useEffect(() => {
     if (open) setTimeout(() => searchRef.current?.focus(), 200);
   }, [open]);
@@ -272,7 +250,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
 
   const visibleBooks = filtered.slice(0, visibleCount);
 
-  // Infinite scroll
+  // Infinite scroll via IntersectionObserver
   useEffect(() => {
     if (!open || loading) return;
     const sentinel = sentinelRef.current;
@@ -290,75 +268,69 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
     return () => observer.disconnect();
   }, [open, loading, tab, visibleCount, filtered.length]);
 
-  if (!open) return null;
+  // Background progressive loading: once the first batch is shown,
+  // incrementally bump visible count so all cards render without user scrolling.
+  useEffect(() => {
+    if (loading || visibleCount >= filtered.length || filtered.length <= INITIAL_VISIBLE) return;
+    const timer = setTimeout(() => {
+      setVisibleCount((c) => Math.min(c + BG_BATCH, filtered.length));
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [loading, visibleCount, filtered.length]);
 
-  const activeTab = TABS.find((t) => t.id === tab)!;
+  if (!open) return null;
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex flex-col"
-      style={{
-        background: 'linear-gradient(135deg, #0d0d1a 0%, #0a0a14 60%, #10091a 100%)',
-        paddingTop: 'env(safe-area-inset-top)',
-        paddingBottom: 'env(safe-area-inset-bottom)',
-      }}
+      className="fixed inset-0 z-[100] bg-background flex flex-col"
+      style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
       {/* ── Header ── */}
-      <div className="flex items-center gap-3 px-4 sm:px-6 py-4 border-b border-white/[0.08]">
-        <div className="flex items-center gap-2.5 flex-1 min-w-0">
-          <div className="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center shrink-0 border border-indigo-500/30">
-            <BookOpen className="w-4 h-4 text-indigo-400" />
+      <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 border-b border-border bg-card">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+            <BookOpen className="w-4 h-4 text-primary" />
           </div>
           <div className="min-w-0">
-            <h2 className="text-sm font-bold text-white leading-none">Community Library</h2>
-            <p className="text-[10px] text-white/40 mt-0.5">{activeTab.desc}</p>
+            <h2 className="font-display text-sm sm:text-base font-bold tracking-tight truncate">Community Library</h2>
+            <p className="text-[10px] text-muted-foreground">{filtered.length.toLocaleString()} books</p>
           </div>
         </div>
 
-        {/* Search */}
-        <div className="relative hidden sm:flex items-center w-56 lg:w-72">
-          <Search className="absolute left-3 w-3.5 h-3.5 text-white/30 pointer-events-none" />
-          <input
+        {/* Desktop search */}
+        <div className="relative hidden sm:block flex-1 max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+          <Input
             ref={searchRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search titles…"
-            className="w-full pl-9 pr-4 py-2 rounded-xl text-xs bg-white/[0.06] border border-white/10 text-white placeholder:text-white/25 focus:outline-none focus:border-indigo-500/50 focus:bg-white/[0.08] transition-all"
+            className="pl-9 h-9 text-xs"
           />
         </div>
 
-        {/* Refresh */}
-        <button
-          onClick={() => load(tab)}
-          disabled={loading}
-          className="w-8 h-8 rounded-lg bg-white/[0.05] border border-white/10 flex items-center justify-center text-white/40 hover:text-white/80 hover:bg-white/10 transition-all disabled:opacity-30"
-          title="Refresh"
-        >
-          <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
-        </button>
-
-        {/* Close */}
-        <button
-          onClick={onClose}
-          className="w-8 h-8 rounded-lg bg-white/[0.05] border border-white/10 flex items-center justify-center text-white/40 hover:text-white/80 hover:bg-white/10 transition-all"
-          aria-label="Close"
-        >
-          <X className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-1.5">
+          <Button variant="ghost" size="icon" onClick={() => load(tab)} disabled={loading} title="Refresh" className="h-8 w-8">
+            <RefreshCw className={cn('w-4 h-4', loading && 'animate-spin')} />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close" className="h-8 w-8">
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
       </div>
 
       {/* ── Tabs ── */}
-      <div className="flex gap-1 px-4 sm:px-6 pt-3 pb-0 overflow-x-auto no-scrollbar">
+      <div className="flex gap-1 px-3 sm:px-5 pt-2 border-b border-border overflow-x-auto no-scrollbar bg-card/50">
         {TABS.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             type="button"
-            onClick={() => { setTab(id as Tab); setQuery(''); }}
+            onClick={() => { setTab(id); setQuery(''); }}
             className={cn(
-              'flex items-center gap-1.5 px-3.5 py-2 rounded-t-xl text-[11px] font-semibold whitespace-nowrap transition-all duration-200 border-b-2 shrink-0',
+              'flex items-center gap-1.5 px-3 py-2 text-[11px] sm:text-xs font-semibold rounded-t-lg transition-all whitespace-nowrap shrink-0 border-b-2',
               tab === id
-                ? 'bg-white/[0.07] text-white border-b-indigo-500 border-l border-r border-t border-white/10'
-                : 'text-white/35 hover:text-white/60 border-b-transparent hover:bg-white/[0.04]'
+                ? 'text-primary border-b-primary bg-primary/5'
+                : 'text-muted-foreground hover:text-foreground border-b-transparent hover:bg-muted/50'
             )}
           >
             <Icon className="w-3.5 h-3.5" />
@@ -366,39 +338,34 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
           </button>
         ))}
       </div>
-      <div className="h-px bg-white/[0.08] mx-4 sm:mx-6" />
-
-      {/* ── Mega URL input ── */}
-      {tab === 'mega' && (
-        <div className="flex gap-2 px-4 sm:px-6 py-3 border-b border-white/[0.06]">
-          <input
-            value={megaUrl}
-            onChange={(e) => setMegaUrl(e.target.value)}
-            placeholder="Mega folder URL…"
-            className="flex-1 px-4 py-2 rounded-xl text-xs bg-white/[0.06] border border-white/10 text-white placeholder:text-white/25 focus:outline-none focus:border-indigo-500/50 transition-all"
-          />
-          <button
-            onClick={() => load('mega')}
-            disabled={loading}
-            className="px-4 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white text-xs font-semibold transition-all disabled:opacity-50"
-          >
-            Load
-          </button>
-        </div>
-      )}
 
       {/* Mobile search */}
-      <div className="flex sm:hidden px-4 py-2 border-b border-white/[0.06]">
+      <div className="flex sm:hidden px-3 py-2 border-b border-border">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30" />
-          <input
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search titles…"
-            className="w-full pl-9 pr-4 py-2 rounded-xl text-xs bg-white/[0.06] border border-white/10 text-white placeholder:text-white/25 focus:outline-none focus:border-indigo-500/50 transition-all"
+            className="pl-9 h-9 text-xs"
           />
         </div>
       </div>
+
+      {/* Mega URL input */}
+      {tab === 'mega' && (
+        <div className="flex gap-2 px-4 sm:px-6 py-3 border-b border-border">
+          <Input
+            value={megaUrl}
+            onChange={(e) => setMegaUrl(e.target.value)}
+            placeholder="Mega folder URL…"
+            className="flex-1 h-9 text-xs"
+          />
+          <Button size="sm" onClick={() => load('mega')} disabled={loading}>
+            Load
+          </Button>
+        </div>
+      )}
 
       {/* ── Body ── */}
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-4">
@@ -413,26 +380,23 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
         {/* Error */}
         {!loading && error && (
           <div className="flex flex-col items-center gap-3 py-20 text-center">
-            <div className="w-12 h-12 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
-              <X className="w-5 h-5 text-red-400" />
+            <div className="w-12 h-12 rounded-xl bg-destructive/10 border border-destructive/20 flex items-center justify-center">
+              <X className="w-5 h-5 text-destructive" />
             </div>
-            <p className="text-sm text-white/60 max-w-sm">{error}</p>
-            <button
-              onClick={() => load(tab)}
-              className="mt-2 px-4 py-2 rounded-xl bg-white/[0.07] border border-white/10 text-xs text-white/70 hover:text-white hover:bg-white/10 transition-all"
-            >
+            <p className="text-sm text-muted-foreground max-w-sm">{error}</p>
+            <Button variant="outline" size="sm" onClick={() => load(tab)}>
               Try again
-            </button>
+            </Button>
           </div>
         )}
 
         {/* Empty */}
         {!loading && !error && filtered.length === 0 && (
           <div className="flex flex-col items-center gap-3 py-20 text-center">
-            <div className="w-12 h-12 rounded-2xl bg-white/[0.05] border border-white/10 flex items-center justify-center">
-              <BookOpen className="w-5 h-5 text-white/30" />
+            <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center">
+              <BookOpen className="w-5 h-5 text-muted-foreground" />
             </div>
-            <p className="text-sm text-white/40">
+            <p className="text-sm text-muted-foreground">
               {query ? `No results for "${query}"` : 'No books found'}
             </p>
           </div>
@@ -441,9 +405,6 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
         {/* Grid */}
         {!loading && !error && filtered.length > 0 && (
           <>
-            <p className="text-[10px] text-white/25 mb-3 font-mono">
-              {filtered.length.toLocaleString()} books{query && ` matching "${query}"`}
-            </p>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
               {visibleBooks.map((book) => (
                 <BookCard key={book.id} book={book} onDownload={handleDownload} />
@@ -453,21 +414,21 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
             {visibleCount < filtered.length && (
               <>
                 <div ref={sentinelRef} className="h-px w-full" aria-hidden="true" />
-                <div className="flex items-center justify-center gap-3 pt-8 pb-2">
-                  <button
-                    type="button"
+                <div className="flex items-center justify-center gap-3 pt-6 pb-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => setVisibleCount((c) => Math.min(c + LOAD_MORE, filtered.length))}
-                    className="px-5 py-2.5 rounded-xl bg-white/[0.06] border border-white/10 text-xs text-white/60 hover:text-white hover:bg-white/10 transition-all"
                   >
                     Load more
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setVisibleCount(filtered.length)}
-                    className="px-5 py-2.5 rounded-xl text-xs text-white/30 hover:text-white/60 transition-all"
                   >
                     Show all ({filtered.length.toLocaleString()})
-                  </button>
+                  </Button>
                 </div>
               </>
             )}

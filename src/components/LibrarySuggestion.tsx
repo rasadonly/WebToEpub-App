@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Download, Loader2, X, CheckCircle2, Sparkles } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { LibraryBook, libraryGetCommunity, libraryDownloadHF } from '@/utils/webtoepub/bridge';
 
@@ -79,62 +81,51 @@ export default function LibrarySuggestion({ query }: Props) {
   };
 
   return (
-    <div className="mt-4 rounded-2xl overflow-hidden border border-indigo-500/25 bg-indigo-950/30 backdrop-blur-sm animate-in fade-in slide-in-from-top-2 duration-200">
+    <Card className="mt-4 p-4 border border-primary/30 bg-primary/5 rounded-2xl animate-in fade-in slide-in-from-top-2 duration-200">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
+      <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-          <span className="text-xs font-semibold text-white/80">Already in the Community Library</span>
+          <Sparkles className="w-3.5 h-3.5 text-primary" />
+          <span className="text-xs font-semibold text-foreground">Already in the Community Library</span>
         </div>
         <button
           type="button"
           onClick={() => setDismissed(query)}
           aria-label="Dismiss"
-          className="w-6 h-6 rounded-md flex items-center justify-center text-white/30 hover:text-white/70 hover:bg-white/10 transition-all"
+          className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-all"
         >
           <X className="w-3.5 h-3.5" />
         </button>
       </div>
 
       {/* Books */}
-      <div className="p-3 flex flex-col gap-2">
+      <div className="flex flex-col gap-2">
         {matches.map((b) => {
           const state = downloading[b.id];
           return (
-            <div key={b.id} className="flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.04] border border-white/[0.06] hover:border-white/[0.12] transition-all">
-              {/* Tiny color block */}
-              <div
-                className="w-8 h-10 rounded-md shrink-0 flex items-center justify-center"
-                style={{ background: 'linear-gradient(145deg,#3730a3,#6366f1)' }}
-              >
-                <span className="text-[8px] font-bold text-white/70 tracking-wider">EPUB</span>
-              </div>
+            <div key={b.id} className="flex items-center gap-3 p-2.5 rounded-xl bg-background border border-border hover:border-primary/30 transition-all">
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-white/85 truncate">{b.title}</p>
-                {b.size ? <p className="text-[10px] text-white/30 mt-0.5">{(b.size / 1_048_576).toFixed(1)} MB</p> : null}
+                <p className="text-xs font-semibold text-foreground truncate">{b.title}</p>
+                {b.size ? <p className="text-[10px] text-muted-foreground mt-0.5">{(b.size / 1_048_576).toFixed(1)} MB</p> : null}
               </div>
-              <button
+              <Button
                 type="button"
+                size="sm"
                 onClick={() => download(b)}
                 disabled={!!state}
-                className={
-                  state === 'done'
-                    ? 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 text-[11px] font-semibold'
-                    : state === 'loading'
-                    ? 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.05] border border-white/10 text-white/40 text-[11px] font-semibold cursor-not-allowed'
-                    : 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-[11px] font-semibold transition-all active:scale-95 hover:shadow-lg hover:shadow-indigo-500/20'
-                }
+                variant={state === 'done' ? 'outline' : 'default'}
+                className={state === 'done' ? 'text-green-600 border-green-600/30' : ''}
               >
-                {state === 'loading' && <Loader2 className="w-3 h-3 animate-spin" />}
-                {state === 'done' && <CheckCircle2 className="w-3 h-3" />}
-                {!state && <Download className="w-3 h-3" />}
+                {state === 'loading' && <Loader2 className="w-3 h-3 animate-spin mr-1" />}
+                {state === 'done' && <CheckCircle2 className="w-3 h-3 mr-1" />}
+                {!state && <Download className="w-3 h-3 mr-1" />}
                 {state === 'loading' ? 'Downloading' : state === 'done' ? 'Done!' : 'Download'}
-              </button>
+              </Button>
             </div>
           );
         })}
       </div>
-      <p className="px-4 pb-3 text-[10px] text-white/25">Not the right book? Dismiss — your search keeps going.</p>
-    </div>
+      <p className="mt-2 text-[10px] text-muted-foreground">Not the right book? Dismiss — your search keeps going.</p>
+    </Card>
   );
 }
