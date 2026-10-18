@@ -7,7 +7,8 @@
     "node": "20.x"
   },
   "scripts": {
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "test:download": "node --test test_download.js"
   },
   "dependencies": {
     "compression": "^1.7.4",
