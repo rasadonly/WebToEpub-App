@@ -1074,6 +1074,10 @@ const treeBase = (repoId: string) =>
 
 /** HF's tree API pages at 1000 entries; follow the `Link: rel="next"` cursor. */
 async function fetchCommunityTree(repoId: string): Promise<HFTreeEntry[]> {
+  try {
+    const fast = await fetchCommunityTreeParallel(repoId);
+    if (fast.length) return fast;
+  } catch { /* fall back to sequential listing */ }
   const HF_TREE_BASE = treeBase(repoId);
   const all: HFTreeEntry[] = [];
   let url: string | null = HF_TREE_BASE;
@@ -1098,7 +1102,49 @@ async function fetchCommunityTree(repoId: string): Promise<HFTreeEntry[]> {
   }
 
   if (all.length > 0) return all;
+  return fetchCommunityTreeSequentialFallback(HF_TREE_BASE);
+}
 
+async function fetchTreePaged(startUrl: string): Promise<HFTreeEntry[]> {
+  const out: HFTreeEntry[] = [];
+  let url: string | null = startUrl;
+  let pages = 0;
+  while (url && pages < 50) {
+    let response = await withTimeout(url, { cache: 'no-store' }, 20_000);
+    for (let attempt = 1; response.status === 429 && attempt <= 3; attempt++) {
+      await new Promise((r) => setTimeout(r, 1500 * attempt));
+      response = await withTimeout(url, { cache: 'no-store' }, 20_000);
+    }
+    if (!response.ok) throw new Error(`HF ${response.status}`);
+    const page = (await response.json()) as HFTreeEntry[];
+    if (!Array.isArray(page)) break;
+    out.push(...page);
+    pages++;
+    const next = (response.headers.get('link') || '').match(/<([^>]+)>;\s*rel="next"/);
+    url = next && page.length > 0 ? next[1] : null;
+  }
+  return out;
+}
+
+/** Lists each date folder in parallel (~1s) instead of ~14 sequential pages. */
+async function fetchCommunityTreeParallel(repoId: string): Promise<HFTreeEntry[]> {
+  const root = `https://huggingface.co/api/datasets/${repoId}/tree/main/books`;
+  const top = await fetchTreePaged(`${root}?limit=1000`);
+  const dirs = top.filter((e) => e.type === 'directory').map((e) => e.path);
+  const files = top.filter((e) => e.type === 'file');
+  const queue = [...dirs];
+  const worker = async () => {
+    while (queue.length) {
+      const dir = queue.shift()!;
+      const enc = dir.split('/').map(encodeURIComponent).join('/');
+      files.push(...(await fetchTreePaged(`https://huggingface.co/api/datasets/${repoId}/tree/main/${enc}?recursive=true&limit=1000`)));
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(4, dirs.length) }, worker));
+  return files;
+}
+
+async function fetchCommunityTreeSequentialFallback(HF_TREE_BASE: string): Promise<HFTreeEntry[]> {
   // Fallback: proxied single page (no headers available through proxies).
   const list = await fetchJsonWithProxyFallback<HFTreeEntry[]>(HF_TREE_BASE, 15_000);
   return Array.isArray(list) ? list : [];
@@ -1107,7 +1153,7 @@ async function fetchCommunityTree(repoId: string): Promise<HFTreeEntry[]> {
 // Listing ~6k files takes several sequential requests; reuse it for 5 minutes
 // so reopening the Library is instant.
 let communityCache: { at: number; books: Promise<LibraryBook[]> } | null = null;
-const COMMUNITY_LS_KEY = 'community_library_v2';
+const COMMUNITY_LS_KEY = 'community_library_v3';
 const COMMUNITY_FRESH_MS = 5 * 60_000;
 const COMMUNITY_STALE_MS = 7 * 24 * 3600_000;
 
@@ -1116,16 +1162,28 @@ function readPersisted(): { at: number; books: LibraryBook[] } | null {
     const raw = localStorage.getItem(COMMUNITY_LS_KEY);
     if (!raw) return null;
     const d = JSON.parse(raw);
-    if (d && Array.isArray(d.books) && d.books.length && Date.now() - d.at < COMMUNITY_STALE_MS) return d;
+    if (d && Array.isArray(d.f) && d.f.length && Date.now() - d.at < COMMUNITY_STALE_MS) {
+      const books: LibraryBook[] = d.f.map(([repoId, path, size, title, uploadedAt]: [string, string, number | null, string, string | null]) => ({
+        id: `${repoId}:${path}`, title, author: '', description: '', size: size ?? undefined,
+        uploadedAt: uploadedAt || undefined, handle: { epubPath: path, repoId }, source: 'hf' as const,
+      }));
+      return { at: d.at, books };
+    }
   } catch { /* ignore */ }
   return null;
 }
 
 function refreshCommunity(): Promise<LibraryBook[]> {
   const books = loadCommunity().then((b) => {
+    const prev = readPersisted();
     if (!b.length) communityCache = null;
-    else {
-      try { localStorage.setItem(COMMUNITY_LS_KEY, JSON.stringify({ at: Date.now(), books: b })); } catch { /* quota */ }
+    else if (prev && b.length < prev.books.length * 0.9) {
+      // Likely a partial listing (rate limit); keep the fuller saved list.
+      communityCache = null;
+      return prev.books;
+    } else {
+      try { const f = b.map((x) => { const h = x.handle as { epubPath: string; repoId: string }; return [h.repoId, h.epubPath, x.size ?? null, x.title, x.uploadedAt || null]; });
+        localStorage.setItem(COMMUNITY_LS_KEY, JSON.stringify({ at: Date.now(), f })); } catch { /* quota */ }
     }
     return b;
   }, (e) => { communityCache = null; throw e; });
