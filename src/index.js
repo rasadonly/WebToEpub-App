@@ -400,6 +400,8 @@ app.post("/api/jobs", async (req, res) => {
 // Cap heavy conversions so the 512 MB dyno stops blowing its memory quota.
 const MAX_ACTIVE_JOBS = Number(process.env.MAX_ACTIVE_JOBS || 3);
 let activeJobs = 0;
+const JOB_IDLE_MS = Number(process.env.JOB_IDLE_MS || 5 * 60 * 1000);
+const JOB_MAX_MS = Number(process.env.JOB_MAX_MS || 60 * 60 * 1000);
 const jobQueue = [];
 function pumpJobs() {
   while (activeJobs < MAX_ACTIVE_JOBS && jobQueue.length) {
