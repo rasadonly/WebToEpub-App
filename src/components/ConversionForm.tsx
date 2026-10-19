@@ -79,6 +79,8 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
     end: 999,
     useAll: true
   });
+  // Raw text of the range boxes so backspace can empty them while typing.
+  const [rangeText, setRangeText] = useState({ start: '1', end: '999' });
   const [fontFamily, setFontFamily] = useState('Georgia');
   const [includeIndex, setIncludeIndex] = useState(false);
   const [editableUrls, setEditableUrls] = useState(false);
@@ -446,147 +448,10 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
   const hasUrl = trimmed.length > 0 && isUrlLike(trimmed);
   const hasQuery = trimmed.length > 0 && !isUrlLike(trimmed);
 
-  return (
-    <div className="w-full max-w-5xl mx-auto">
-      <Suspense fallback={null}>
-        {liveReaderOpen && (
-          <LiveReaderModal
-            open={liveReaderOpen}
-            url={liveReaderUrl}
-            onClose={() => setLiveReaderOpen(false)}
-          />
-        )}
-      </Suspense>
-      <form onSubmit={handleSubmit} className="space-y-10">
-        {/* Search-engine style hero */}
-        <div className="flex flex-col items-center justify-center gap-5 sm:gap-8 pt-4 sm:pt-10">
-          {/* Wordmark */}
-          <div className="text-center space-y-2 sm:space-y-3 px-2">
-            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary/60 px-3 py-1 text-[11px] sm:text-xs text-muted-foreground">
-              <Sparkles className="w-3.5 h-3.5 text-primary" />
-              Web novels, beautifully bound
-            </div>
-            <h1 className="font-display text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight leading-none">
-              <span className="text-foreground">Link</span>
-              <span className="text-primary">To</span>
-              <span className="text-foreground">Epub</span>
-              <span className="text-primary">.</span>
-            </h1>
-            <p className="text-muted-foreground text-sm max-w-lg mx-auto leading-relaxed">
-              Paste a TOC or chapter URL to convert, or type a novel name to search.
-            </p>
-          </div>
-
-          {/* Search Bar - Compact Google-style pill */}
-          <div className="w-full max-w-2xl sm:max-w-3xl px-2 sm:px-4">
-            <div className="group relative flex items-center rounded-full bg-card border-2 border-border/80 shadow-md transition-all duration-300 focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 hover:border-primary/40 hover:shadow-lg">
-              <Search className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground absolute left-4 sm:left-5 pointer-events-none transition-colors group-focus-within:text-primary" />
-              <Input
-                id="toc-url"
-                type="text"
-                inputMode="search"
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
-                spellCheck={false}
-                value={tocUrl}
-                onChange={(e) => setTocUrl(e.target.value)}
-                placeholder="Paste TOC URL or search a novel…"
-                className="h-11 sm:h-13 pl-11 sm:pl-13 pr-24 sm:pr-28 text-sm sm:text-base rounded-full border-0 bg-transparent shadow-none focus-visible:ring-0 text-foreground placeholder:text-muted-foreground/70"
-              />
-              <Button
-                type="submit"
-                disabled={isConverting || isSearching || trimmed.length === 0}
-                className="absolute right-1.5 h-8 sm:h-10 rounded-full px-4 sm:px-5 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs sm:text-sm gap-1.5 shadow-sm transition-all"
-              >
-                {isConverting || isSearching ? (
-                  <>
-                    <div className="w-3.5 h-3.5 border-2 border-primary-foreground/40 border-t-primary-foreground rounded-full animate-spin" />
-                    <span className="hidden md:inline">{isSearching ? 'Searching' : 'Working'}</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="hidden sm:inline">{hasQuery ? 'Search' : 'Fetch'}</span>
-                    {hasQuery ? <Search className="w-3.5 h-3.5" /> : <ArrowRight className="w-3.5 h-3.5" />}
-                  </>
-                )}
-              </Button>
-            </div>
-            <div className="mt-2.5 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 text-xs text-muted-foreground">
-              {hasUrl && (
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => openLiveReader(trimmed)}
-                    className="inline-flex items-center gap-1 text-primary hover:text-primary/80 transition-colors font-medium hover:underline"
-                  >
-                    <BookOpenCheck className="w-3.5 h-3.5" /> Read live instead
-                  </button>
-                  <span className="text-muted-foreground/30">|</span>
-                  <a
-                    href={trimmed}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-primary hover:text-primary/80 transition-colors font-medium hover:underline"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" /> Visit site
-                  </a>
-                </div>
-              )}
-            </div>
-
-            {/* How to use */}
-            {!isSearching && searchResults.length === 0 && !isConverting && (
-              <div className="mt-6 grid gap-3 sm:grid-cols-3 text-left">
-                {[
-                  { n: '1', t: 'Paste or search', d: 'Drop a table-of-contents or chapter link, or type a novel name to search supported sites.' },
-                  { n: '2', t: 'Pick chapters', d: 'Review the detected title and author, then select a range, reorder or remove chapters.' },
-                  { n: '3', t: 'Get your EPUB', d: 'Convert and download a clean EPUB, or open it in the built-in reader.' },
-                ].map((s) => (
-                  <div
-                    key={s.n}
-                    className="rounded-xl border border-border/80 bg-card/60 p-3.5 shadow-2xs hover:border-primary/40 hover:shadow-xs transition-all duration-200 group"
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[11px] font-bold text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
-                        {s.n}
-                      </span>
-                      <span className="text-xs font-bold text-foreground">{s.t}</span>
-                    </div>
-                    <p className="text-[11px] leading-relaxed text-muted-foreground">{s.d}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Recent searches */}
-            {!isSearching && searchResults.length === 0 && recentSearches.length > 0 && (
-              <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70 mr-1">Recent</span>
-                {recentSearches.map((q) => (
-                  <button
-                    key={q}
-                    type="button"
-                    onClick={() => { setTocUrl(q); runSearch(q); }}
-                    className="rounded-full bg-secondary border border-border/50 px-2.5 py-0.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-secondary/80 transition-all"
-                  >
-                    {q}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* No results */}
-            <LibrarySuggestion query={isUrlLike(cleanUrl(tocUrl)) ? metadata.title : lastQuery} />
-
-            {!isSearching && lastQuery && searchResults.length === 0 && (
-              <Card className="mt-4 p-4 text-center text-sm text-muted-foreground border border-border">
-                No results for “{lastQuery}”. Try a shorter title, or paste the novel's TOC URL directly.
-              </Card>
-            )}
-
-            {/* Modern Search Engine Results UI (Google / DuckDuckGo layout) */}
-            {(searchResults.length > 0 || isSearching) && (
+  // Memoised so typing in the box (each keystroke / backspace) does not re-render every result.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const resultsBlock = useMemo(() => (
+(searchResults.length > 0 || isSearching) && (
               <Card className="mt-5 p-4 sm:p-5 bg-card border border-border/80 shadow-lg rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300">
                 <div className="pb-3 mb-3 border-b border-border/60 space-y-2.5">
                   <div className="flex items-center justify-between gap-3">
@@ -748,7 +613,150 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                   )}
                 </div>
               </Card>
+            )
+  ), [searchResults, filteredResults, isSearching, searchStatus, searchProgress, sourceFilter, sourceCounts, lastQuery, metadata, isConverting, hasFetchedChapters]);
+
+  return (
+    <div className="w-full max-w-5xl mx-auto">
+      <Suspense fallback={null}>
+        {liveReaderOpen && (
+          <LiveReaderModal
+            open={liveReaderOpen}
+            url={liveReaderUrl}
+            onClose={() => setLiveReaderOpen(false)}
+          />
+        )}
+      </Suspense>
+      <form onSubmit={handleSubmit} className="space-y-10">
+        {/* Search-engine style hero */}
+        <div className="flex flex-col items-center justify-center gap-5 sm:gap-8 pt-4 sm:pt-10">
+          {/* Wordmark */}
+          <div className="text-center space-y-2 sm:space-y-3 px-2">
+            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary/60 px-3 py-1 text-[11px] sm:text-xs text-muted-foreground">
+              <Sparkles className="w-3.5 h-3.5 text-primary" />
+              Web novels, beautifully bound
+            </div>
+            <h1 className="font-display text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight leading-none">
+              <span className="text-foreground">Link</span>
+              <span className="text-primary">To</span>
+              <span className="text-foreground">Epub</span>
+              <span className="text-primary">.</span>
+            </h1>
+            <p className="text-muted-foreground text-sm max-w-lg mx-auto leading-relaxed">
+              Paste a TOC or chapter URL to convert, or type a novel name to search.
+            </p>
+          </div>
+
+          {/* Search Bar - Compact Google-style pill */}
+          <div className="w-full max-w-2xl sm:max-w-3xl px-2 sm:px-4">
+            <div className="group relative flex items-center rounded-full bg-card border-2 border-border/80 shadow-md transition-all duration-300 focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 hover:border-primary/40 hover:shadow-lg">
+              <Search className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground absolute left-4 sm:left-5 pointer-events-none transition-colors group-focus-within:text-primary" />
+              <Input
+                id="toc-url"
+                type="text"
+                inputMode="search"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                value={tocUrl}
+                onChange={(e) => setTocUrl(e.target.value)}
+                placeholder="Paste TOC URL or search a novel…"
+                className="h-11 sm:h-13 pl-11 sm:pl-13 pr-24 sm:pr-28 text-sm sm:text-base rounded-full border-0 bg-transparent shadow-none focus-visible:ring-0 text-foreground placeholder:text-muted-foreground/70"
+              />
+              <Button
+                type="submit"
+                disabled={isConverting || isSearching || trimmed.length === 0}
+                className="absolute right-1.5 h-8 sm:h-10 rounded-full px-4 sm:px-5 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs sm:text-sm gap-1.5 shadow-sm transition-all"
+              >
+                {isConverting || isSearching ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-primary-foreground/40 border-t-primary-foreground rounded-full animate-spin" />
+                    <span className="hidden md:inline">{isSearching ? 'Searching' : 'Working'}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="hidden sm:inline">{hasQuery ? 'Search' : 'Fetch'}</span>
+                    {hasQuery ? <Search className="w-3.5 h-3.5" /> : <ArrowRight className="w-3.5 h-3.5" />}
+                  </>
+                )}
+              </Button>
+            </div>
+            <div className="mt-2.5 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 text-xs text-muted-foreground">
+              {hasUrl && (
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => openLiveReader(trimmed)}
+                    className="inline-flex items-center gap-1 text-primary hover:text-primary/80 transition-colors font-medium hover:underline"
+                  >
+                    <BookOpenCheck className="w-3.5 h-3.5" /> Read live instead
+                  </button>
+                  <span className="text-muted-foreground/30">|</span>
+                  <a
+                    href={trimmed}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-primary hover:text-primary/80 transition-colors font-medium hover:underline"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" /> Visit site
+                  </a>
+                </div>
+              )}
+            </div>
+
+            {/* How to use */}
+            {!isSearching && searchResults.length === 0 && !isConverting && (
+              <div className="mt-6 grid gap-3 sm:grid-cols-3 text-left">
+                {[
+                  { n: '1', t: 'Paste or search', d: 'Drop a table-of-contents or chapter link, or type a novel name to search supported sites.' },
+                  { n: '2', t: 'Pick chapters', d: 'Review the detected title and author, then select a range, reorder or remove chapters.' },
+                  { n: '3', t: 'Get your EPUB', d: 'Convert and download a clean EPUB, or open it in the built-in reader.' },
+                ].map((s) => (
+                  <div
+                    key={s.n}
+                    className="rounded-xl border border-border/80 bg-card/60 p-3.5 shadow-2xs hover:border-primary/40 hover:shadow-xs transition-all duration-200 group"
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[11px] font-bold text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                        {s.n}
+                      </span>
+                      <span className="text-xs font-bold text-foreground">{s.t}</span>
+                    </div>
+                    <p className="text-[11px] leading-relaxed text-muted-foreground">{s.d}</p>
+                  </div>
+                ))}
+              </div>
             )}
+
+            {/* Recent searches */}
+            {!isSearching && searchResults.length === 0 && recentSearches.length > 0 && (
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70 mr-1">Recent</span>
+                {recentSearches.map((q) => (
+                  <button
+                    key={q}
+                    type="button"
+                    onClick={() => { setTocUrl(q); runSearch(q); }}
+                    className="rounded-full bg-secondary border border-border/50 px-2.5 py-0.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-secondary/80 transition-all"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* No results */}
+            <LibrarySuggestion query={isUrlLike(cleanUrl(tocUrl)) ? metadata.title : lastQuery} />
+
+            {!isSearching && lastQuery && searchResults.length === 0 && (
+              <Card className="mt-4 p-4 text-center text-sm text-muted-foreground border border-border">
+                No results for “{lastQuery}”. Try a shorter title, or paste the novel's TOC URL directly.
+              </Card>
+            )}
+
+            {/* Modern Search Engine Results UI (Google / DuckDuckGo layout) */}
+            {resultsBlock}
           </div>
 
 
@@ -866,8 +874,14 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                           id="start-chapter"
                           type="number"
                           min="1"
-                          value={chapterRange.start}
-                          onChange={(e) => setChapterRange(prev => ({ ...prev, start: parseInt(e.target.value) || 1 }))}
+                          value={rangeText.start}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setRangeText(p => ({ ...p, start: v }));
+                            const n = parseInt(v);
+                            if (n > 0) setChapterRange(prev => ({ ...prev, start: n }));
+                          }}
+                          onBlur={() => setRangeText(p => ({ ...p, start: String(chapterRange.start) }))}
                         />
                       </div>
                       <div className="space-y-2">
@@ -876,8 +890,14 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                           id="end-chapter"
                           type="number"
                           min="1"
-                          value={chapterRange.end}
-                          onChange={(e) => setChapterRange(prev => ({ ...prev, end: parseInt(e.target.value) || 999 }))}
+                          value={rangeText.end}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setRangeText(p => ({ ...p, end: v }));
+                            const n = parseInt(v);
+                            if (n > 0) setChapterRange(prev => ({ ...prev, end: n }));
+                          }}
+                          onBlur={() => setRangeText(p => ({ ...p, end: String(chapterRange.end) }))}
                         />
                       </div>
                     </div>
