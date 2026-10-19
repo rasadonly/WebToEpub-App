@@ -400,25 +400,48 @@ app.post("/api/jobs", async (req, res) => {
 // Cap heavy conversions so the 512 MB dyno stops blowing its memory quota.
 const MAX_ACTIVE_JOBS = Number(process.env.MAX_ACTIVE_JOBS || 3);
 let activeJobs = 0;
+const JOB_IDLE_MS = Number(process.env.JOB_IDLE_MS || 5 * 60 * 1000);
+const JOB_MAX_MS = Number(process.env.JOB_MAX_MS || 60 * 60 * 1000);
 const jobQueue = [];
 function pumpJobs() {
   while (activeJobs < MAX_ACTIVE_JOBS && jobQueue.length) {
     const { job, spec } = jobQueue.shift();
     if (job.status === "cancelled") continue;
     activeJobs++;
+    // Free the slot even if a fetch hangs forever, or when a job sits idle.
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      clearInterval(watchdog);
+      activeJobs--;
+      jobSpecs.delete(job.id);
+      if (global.gc) try { global.gc(); } catch { /* ignore */ }
+      pumpJobs();
+    };
+    const startedAt = Date.now();
+    const watchdog = setInterval(() => {
+      const idle = Date.now() - (job.updatedAt || startedAt);
+      const total = Date.now() - startedAt;
+      if (job.status === "cancelled" || idle > JOB_IDLE_MS || total > JOB_MAX_MS) {
+        if (job.status !== "done" && job.status !== "cancelled") {
+          job.status = "error";
+          job.error = idle > JOB_IDLE_MS ? "Stalled: no progress for too long" : "Took too long";
+          job.updatedAt = Date.now();
+          persistJob(job, true);
+        }
+        release();
+      }
+    }, 15000);
     runJob(job, spec)
       .catch((e) => {
+        if (released) return;
         job.status = "error";
         job.error = e.message;
         job.updatedAt = Date.now();
         persistJob(job, true);
       })
-      .finally(() => {
-        activeJobs--;
-        jobSpecs.delete(job.id);
-        if (global.gc) try { global.gc(); } catch { /* ignore */ }
-        pumpJobs();
-      });
+      .finally(release);
   }
 }
 function startJob(job, spec) {

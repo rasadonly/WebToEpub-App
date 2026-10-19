@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { X, Send, Cloud, Archive, Download, Search, BookOpen, CheckCircle2, RefreshCw, HardDriveDownload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -158,7 +158,7 @@ interface BookCardProps {
       </Button>
     </div>
   );
-}
+});
 
 /* ── Main Library Modal ───────────────────────────────────── */
 export function LibraryModal({ open, onClose }: LibraryModalProps) {
