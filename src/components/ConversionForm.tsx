@@ -872,8 +872,14 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                           id="start-chapter"
                           type="number"
                           min="1"
-                          value={chapterRange.start}
-                          onChange={(e) => setChapterRange(prev => ({ ...prev, start: parseInt(e.target.value) || 1 }))}
+                          value={rangeText.start}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setRangeText(p => ({ ...p, start: v }));
+                            const n = parseInt(v);
+                            if (n > 0) setChapterRange(prev => ({ ...prev, start: n }));
+                          }}
+                          onBlur={() => setRangeText(p => ({ ...p, start: String(chapterRange.start) }))}
                         />
                       </div>
                       <div className="space-y-2">
@@ -882,8 +888,14 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                           id="end-chapter"
                           type="number"
                           min="1"
-                          value={chapterRange.end}
-                          onChange={(e) => setChapterRange(prev => ({ ...prev, end: parseInt(e.target.value) || 999 }))}
+                          value={rangeText.end}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setRangeText(p => ({ ...p, end: v }));
+                            const n = parseInt(v);
+                            if (n > 0) setChapterRange(prev => ({ ...prev, end: n }));
+                          }}
+                          onBlur={() => setRangeText(p => ({ ...p, end: String(chapterRange.end) }))}
                         />
                       </div>
                     </div>
