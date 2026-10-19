@@ -79,6 +79,8 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
     end: 999,
     useAll: true
   });
+  // Raw text of the range boxes so backspace can empty them while typing.
+  const [rangeText, setRangeText] = useState({ start: '1', end: '999' });
   const [fontFamily, setFontFamily] = useState('Georgia');
   const [includeIndex, setIncludeIndex] = useState(false);
   const [editableUrls, setEditableUrls] = useState(false);
