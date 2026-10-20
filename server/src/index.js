@@ -17,7 +17,8 @@ import {
   stealthGet,
   smartGetText,
 } from "./fetcher.js";
-import { buildEpub, sanitizeFilename } from "./epub.js";
+import { buildEpub, sanitizeFilename, writeChapterFile } from "./epub.js";
+import { createWorkPool, DEFAULT_MAX_ACTIVE_JOBS } from "./workPool.js";
 import { uploadToLibrary, libraryEnabled } from "./library.js";
 import { sendEpub } from "./download.js";
 import { getLibraryIndex, startLibraryIndex } from "./libraryIndex.js";
@@ -38,6 +39,9 @@ app.use((err, _req, res, next) => {
 
 const PORT = process.env.PORT || 3000;
 const CONCURRENCY = Number(process.env.FETCH_CONCURRENCY || 10);
+const chapterPool = createWorkPool(Number(process.env.GLOBAL_FETCH_CONCURRENCY || 40));
+const packingPool = createWorkPool(1);
+const uploadPool = createWorkPool(1);
 const JOB_TTL_MS = Number(process.env.JOB_TTL_MS || 6 * 60 * 60 * 1000); // 6h
 const OUT_DIR = path.join(os.tmpdir(), "link-to-epub");
 fs.mkdirSync(OUT_DIR, { recursive: true });
@@ -87,7 +91,7 @@ function cleanup() {
 }
 setInterval(cleanup, 10 * 60 * 1000).unref();
 
-app.get("/health", (_req, res) => res.json({ ok: true, jobs: jobs.size, uptime: process.uptime() }));
+app.get("/health", (_req, res) => res.json({ ok: true, jobs: jobs.size, uptime: process.uptime(), runningJobs: activeJobs, queuedJobs: jobQueue.length, maxActiveJobs: MAX_ACTIVE_JOBS, chapterFetches: chapterPool.active }));
 
 // ---- Live stats (active jobs + active users) -------------------------------
 const visitors = new Map(); // visitorId -> lastSeen ms
@@ -397,8 +401,8 @@ app.post("/api/jobs", async (req, res) => {
   startJob(job, spec);
 });
 
-// Cap heavy conversions so the 512 MB dyno stops blowing its memory quota.
-const MAX_ACTIVE_JOBS = Number(process.env.MAX_ACTIVE_JOBS || 3);
+// Keep 40 jobs moving; shared fetch/packing pools bound the expensive work.
+const MAX_ACTIVE_JOBS = Number(process.env.MAX_ACTIVE_JOBS || DEFAULT_MAX_ACTIVE_JOBS);
 let activeJobs = 0;
 const JOB_IDLE_MS = Number(process.env.JOB_IDLE_MS || 5 * 60 * 1000);
 const JOB_MAX_MS = Number(process.env.JOB_MAX_MS || 60 * 60 * 1000);
@@ -424,6 +428,7 @@ function pumpJobs() {
       const idle = Date.now() - (job.updatedAt || startedAt);
       const total = Date.now() - startedAt;
       if (job.status === "cancelled" || idle > JOB_IDLE_MS || total > JOB_MAX_MS) {
+        job.stopped = true;
         if (job.status !== "done" && job.status !== "cancelled") {
           job.status = "error";
           job.error = idle > JOB_IDLE_MS ? "Stalled: no progress for too long" : "Took too long";
@@ -454,7 +459,18 @@ function startJob(job, spec) {
   return Promise.resolve();
 }
 
-async function runJob(job, { tocUrl, providedChapters, metadata, options, selector }) {
+async function runJob(job, spec) {
+  const chapterDir = path.join(OUT_DIR, `${job.id}-chapters`);
+  await fs.promises.mkdir(chapterDir, { recursive: true });
+  try {
+    await convertJob(job, spec, chapterDir);
+  } finally {
+    await fs.promises.rm(chapterDir, { recursive: true, force: true });
+  }
+}
+
+async function convertJob(job, { tocUrl, providedChapters, metadata, options, selector }, chapterDir) {
+  const stopped = () => job.cancelled || job.stopped;
   const touch = () => {
     job.updatedAt = Date.now();
     persistJob(job);
@@ -470,7 +486,7 @@ async function runJob(job, { tocUrl, providedChapters, metadata, options, select
       )
     : await fetchChapterLinks(tocUrl, selector);
 
-  if (job.cancelled) return finishCancelled(job);
+  if (stopped()) return job.cancelled ? finishCancelled(job) : undefined;
 
   const range = options.chapterRange;
   if (range && !range.useAll) {
@@ -490,13 +506,22 @@ async function runJob(job, { tocUrl, providedChapters, metadata, options, select
 
   const results = await mapPool(list, poolSize, async (c, i) => {
 
-    if (job.cancelled) return null;
+    if (stopped()) return null;
     try {
-      const content = await fetchChapterContent(c.url, selector);
+      const file = path.join(chapterDir, `${i}.xhtml`);
+      const saved = await chapterPool.run(async () => {
+        if (stopped()) return false;
+        const content = await fetchChapterContent(c.url, selector);
+        if (stopped()) return false;
+        await writeChapterFile(file, { title: c.title || `Chapter ${i + 1}`, content });
+        return true;
+      });
+      if (!saved || stopped()) return null;
       job.completed++;
       touch();
-      return { title: c.title || `Chapter ${i + 1}`, content };
+      return { title: c.title || `Chapter ${i + 1}`, file };
     } catch {
+      if (stopped()) return null;
       job.failed++;
       job.completed++;
       touch();
@@ -504,7 +529,7 @@ async function runJob(job, { tocUrl, providedChapters, metadata, options, select
     }
   });
 
-  if (job.cancelled) return finishCancelled(job);
+  if (stopped()) return job.cancelled ? finishCancelled(job) : undefined;
 
   const chapters = results.filter(Boolean);
   if (!chapters.length) throw new Error("All chapters failed to download");
@@ -512,12 +537,19 @@ async function runJob(job, { tocUrl, providedChapters, metadata, options, select
   job.phase = "Packing EPUB";
   touch();
 
-  const buffer = await buildEpub(chapters, metadata, options);
   const file = path.join(OUT_DIR, `${job.id}.epub`);
-  await fs.promises.writeFile(file, buffer);
+  await packingPool.run(async () => {
+    if (stopped()) return;
+    touch();
+    await buildEpub(chapters, metadata, options, file);
+  });
+  if (stopped()) {
+    await fs.promises.unlink(file).catch(() => {});
+    return job.cancelled ? finishCancelled(job) : undefined;
+  }
 
   job.file = file;
-  job.size = buffer.length;
+  job.size = (await fs.promises.stat(file)).size;
 
   // Best-effort copy to the shared Hugging Face library (never fails the job).
   // Done before flipping to "done" so the client's poll sees the link.
@@ -526,11 +558,17 @@ async function runJob(job, { tocUrl, providedChapters, metadata, options, select
     job.libraryStatus = "uploading";
     touch();
     try {
-      const up = await uploadToLibrary(buffer, job.filename, {
-        title: metadata.title,
-        author: metadata.author,
-        source: tocUrl,
+      const up = await uploadPool.run(async () => {
+        if (stopped()) return null;
+        touch();
+        const buffer = await fs.promises.readFile(file);
+        return uploadToLibrary(buffer, job.filename, {
+          title: metadata.title,
+          author: metadata.author,
+          source: tocUrl,
+        });
       });
+      if (!up || stopped()) return job.cancelled ? finishCancelled(job) : undefined;
       job.libraryUrl = up.url;
       job.libraryPageUrl = up.pageUrl;
       job.libraryStatus = "saved";
@@ -541,6 +579,7 @@ async function runJob(job, { tocUrl, providedChapters, metadata, options, select
     }
   }
 
+  if (stopped()) return job.cancelled ? finishCancelled(job) : undefined;
   job.status = "done";
   job.phase = "Ready to download";
   job.updatedAt = Date.now();
@@ -592,6 +631,7 @@ function restoreJobs() {
       job.failed = 0;
       job.file = null;
       job.cancelled = false;
+      job.stopped = false;
       job.error = null;
       job.updatedAt = Date.now();
       jobs.set(job.id, job);
