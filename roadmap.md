@@ -1,5 +1,5 @@
 - [x] Fix EPUB downloads failing for non-English book titles.
 - [x] Run download regression tests and deploy the fix to Heroku.
 - [x] Verify a fresh sample conversion and download through the app.
-- [ ] Enable 40 parallel conversions with bounded memory and chapter fetching.
-- [ ] Test scheduling, EPUB output, and deploy and verify live capacity.
+- [x] Enable 40 parallel conversions with bounded memory and chapter fetching.
+- [x] Test scheduling, EPUB output, and deploy and verify live capacity.
