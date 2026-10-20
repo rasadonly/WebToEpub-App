@@ -2,6 +2,8 @@
 // in structure (same CSS, same OPF/NCX), but returns a Buffer instead of downloading.
 import JSZip from "jszip";
 import { parseHTML } from "linkedom";
+import fs from "node:fs";
+import { pipeline } from "node:stream/promises";
 
 function escapeXml(text = "") {
   return String(text)
@@ -131,7 +133,7 @@ function chapterXhtml(chapter) {
 </html>`;
 }
 
-export async function buildEpub(chapters, metadata, options = {}) {
+export async function buildEpub(chapters, metadata, options = {}, outputFile) {
   const zip = new JSZip();
   const id = uuid();
 
@@ -200,11 +202,24 @@ ${chapters
   );
 
   oebps.file("style.css", css(options.fontFamily));
-  chapters.forEach((c, i) => oebps.file(`${ids[i]}.xhtml`, chapterXhtml(c)));
+  chapters.forEach((c, i) => oebps.file(`${ids[i]}.xhtml`, c.file ? fs.createReadStream(c.file) : chapterXhtml(c)));
+
+  if (outputFile) {
+    await pipeline(zip.generateNodeStream({
+      streamFiles: true,
+      compression: "DEFLATE",
+      compressionOptions: { level: 6 },
+    }), fs.createWriteStream(outputFile));
+    return;
+  }
 
   return zip.generateAsync({
     type: "nodebuffer",
     compression: "DEFLATE",
     compressionOptions: { level: 6 },
   });
+}
+
+export async function writeChapterFile(file, chapter) {
+  await fs.promises.writeFile(file, chapterXhtml(chapter));
 }
