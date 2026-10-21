@@ -1,5 +1,6 @@
 """Run with python3 src/components/LibraryModal.search.test.py against the preview."""
 import asyncio
+from pathlib import Path
 from playwright.async_api import async_playwright
 
 
@@ -22,6 +23,12 @@ async def main():
         library = search.locator("xpath=ancestor::div[contains(@class, 'fixed')][1]")
         titles = await library.get_by_role("heading", level=3).all_text_contents()
         assert titles and all("shadowslave" in "".join(t.lower().split()) for t in titles), "Enter must show matching books"
+        await search.fill("Lord of Mysteries")
+        await library.get_by_role("button", name="Search", exact=True).filter(visible=True).click()
+        await page.wait_for_timeout(300)
+        titles = await library.get_by_role("heading", level=3).all_text_contents()
+        assert titles and all("lordofmysteries" in "".join(t.lower().split()) for t in titles), "Search button must show matching books"
+        assert page.url == initial_url and await search.is_visible(), "Search button must keep the Library open without navigation"
         await search.fill("")
         await search.press("Enter")
         await search.fill("zzzzmissinglibrarybook123456789")
@@ -36,8 +43,19 @@ async def main():
         await search.press("Enter")
         await page.get_by_role("button", name="Download", exact=False).first.wait_for()
         assert await counter.inner_text() == original_count, "Empty Enter restores the library"
-        await page.screenshot(path="/tmp/browser/library-enter/verified.png")
-        print("PASS: typing and backspace wait for Enter; Enter filters and empty Enter restores books")
+        screenshots = Path("/tmp/browser/library-search-button")
+        screenshots.mkdir(parents=True, exist_ok=True)
+        await page.screenshot(path=str(screenshots / "desktop.png"))
+        await page.set_viewport_size({"width": 390, "height": 844})
+        search = page.get_by_placeholder("Search titles…").filter(visible=True).last
+        await search.fill("Shadow Slave")
+        await library.get_by_role("button", name="Search", exact=True).filter(visible=True).click()
+        await page.wait_for_timeout(300)
+        titles = await library.get_by_role("heading", level=3).all_text_contents()
+        assert titles and all("shadowslave" in "".join(t.lower().split()) for t in titles), "Mobile Search button must show matching books"
+        assert page.url == initial_url and await search.is_visible(), "Mobile Search must keep the Library open"
+        await page.screenshot(path=str(screenshots / "mobile.png"))
+        print("PASS: Search buttons filter on desktop and mobile; Enter works; typing and backspace do not filter or navigate")
         await browser.close()
 
 
