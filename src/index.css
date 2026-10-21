@@ -11,6 +11,17 @@ All colors MUST be HSL.
     --background: 0 0% 100%;
     --foreground: 0 0% 6%;
 
+    --reader-light-background: 0 0% 100%;
+    --reader-light-foreground: 0 0% 7%;
+    --reader-light-link: 0 67% 47%;
+    --reader-dark-background: 0 0% 6%;
+    --reader-dark-foreground: 0 0% 90%;
+    --reader-dark-link: 0 100% 73%;
+    --reader-sepia-background: 43 56% 90%;
+    --reader-sepia-foreground: 35 33% 17%;
+    --reader-sepia-link: 16 64% 33%;
+    --reader-highlight: 0 84% 60%;
+
     --card: 0 0% 100%;
     --card-foreground: 0 0% 6%;
 
@@ -150,6 +161,10 @@ All colors MUST be HSL.
       hsl(var(--library-cover-hue-end) 50% 18%)
     );
   }
+
+  .epub-reader-viewer[data-reader-theme="light"] { background: hsl(var(--reader-light-background)); }
+  .epub-reader-viewer[data-reader-theme="dark"] { background: hsl(var(--reader-dark-background)); }
+  .epub-reader-viewer[data-reader-theme="sepia"] { background: hsl(var(--reader-sepia-background)); }
 
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

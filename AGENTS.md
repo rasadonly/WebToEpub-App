@@ -5,3 +5,4 @@
 - NovGo metadata analysis and chapter loading share a short-lived, bounded server TOC result in the frontend; this avoids loading the browser parser and downloading the TOC twice while retaining its fallback.
 - Library search uses browser-managed draft inputs synchronized through refs, separate from the submitted filter; typing must not redraw book lists. Keep download callbacks stable and expand book rows on demand, not with background timers.
 - Render the Library overlay in a document-body portal and stop search submit propagation; its forms must never nest inside or submit the converter form.
+- Apply EPUB reader colors through one updatable chapter stylesheet sourced from global reader tokens; content hooks read the current theme from a ref so newly loaded chapters cannot restore stale colors, and embedded publisher colors cannot hide text.
