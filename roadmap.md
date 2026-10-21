@@ -3,3 +3,4 @@
 - [x] Verify a fresh sample conversion and download through the app.
 - [x] Enable 40 parallel conversions with bounded memory and chapter fetching.
 - [x] Test scheduling, EPUB output, and deploy and verify live capacity.
+- [ ] Measure and improve NovGo URL loading and verify a sample EPUB download.
