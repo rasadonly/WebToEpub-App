@@ -12,6 +12,7 @@ import { NovelSite, EpubMetadata } from '@/types';
 import { BookOpen, Globe, Settings, Hash, Type, List, Search, Sparkles, ArrowRight, ExternalLink, X, BookOpenCheck, MoreVertical, Library as LibraryIcon, BookMarked, Download, MessagesSquare, Wand2 } from 'lucide-react';
 import { engineSearch, cancelSearch, engineLoadMetadata, EngineSearchResult } from '@/utils/webtoepub/bridge';
 import LibrarySuggestion from './LibrarySuggestion';
+import { backendToc, isBackendEnabled } from '@/utils/backend';
 import { LiveStats } from '@/components/LiveStats';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 
@@ -171,7 +172,25 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
     }
     setIsAnalysing(true);
     try {
-      const info = await engineLoadMetadata(url);
+      // NovGo's analysis already fetches its entire TOC. Reuse the server
+      // result for the following chapter fetch instead of loading both engines.
+      let info;
+      if (isBackendEnabled() && /(^|\.)novgo\.(net|com|org)$/i.test(new URL(url).hostname)) {
+        try {
+          const result = await backendToc(url, tocSelector);
+          if (!result.chapters.length) throw new Error('No NovGo chapters found');
+          info = {
+            ...result.meta,
+            title: result.meta.title || extractTitleFromUrl(url),
+            coverUrl: result.meta.coverUrl || result.meta.cover || '',
+          };
+        } catch {
+          info = await engineLoadMetadata(url);
+        }
+      } else {
+        info = await engineLoadMetadata(url);
+      }
+      if (silent && analysedUrlRef.current !== url) return;
       mergeAuto({
         title: info.title || '',
         author: info.author && info.author !== '<unknown>' ? info.author : '',
