@@ -24,38 +24,15 @@ import {
   Minimize2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { applyReaderDocumentTheme, type ReaderTheme } from '@/utils/epubReaderTheme';
 
 interface EpubReaderModalProps {
   open: boolean;
   onClose: () => void;
 }
 
-type Theme = 'light' | 'dark' | 'sepia';
+type Theme = ReaderTheme;
 type ViewMode = 'single' | 'double' | 'scroll';
-
-const THEME_BG: Record<Theme, string> = {
-  light: '#ffffff',
-  dark: '#0f0f0f',
-  sepia: '#f4ecd8',
-};
-
-const THEMES: Record<Theme, Record<string, Record<string, string>>> = {
-  light: {
-    html: { background: '#ffffff' },
-    body: { background: '#ffffff', color: '#111111' },
-    a: { color: '#c62828' },
-  },
-  dark: {
-    html: { background: '#0f0f0f' },
-    body: { background: '#0f0f0f', color: '#e6e6e6' },
-    a: { color: '#ff7676' },
-  },
-  sepia: {
-    html: { background: '#f4ecd8' },
-    body: { background: '#f4ecd8', color: '#3b2f1e' },
-    a: { color: '#8a3b1e' },
-  },
-};
 
 const FONTS = [
   { id: 'serif', label: 'Serif', css: 'Georgia, "Times New Roman", serif' },
@@ -123,6 +100,8 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
   const [currentLabel, setCurrentLabel] = useState('');
 
   const [theme, setTheme] = useState<Theme>('dark');
+  const themeRef = useRef(theme);
+  themeRef.current = theme;
   const [fontSize, setFontSize] = useState(110); // %
   const [fontFamily, setFontFamily] = useState('serif');
   const [viewMode, setViewMode] = useState<ViewMode>('scroll');
@@ -227,22 +206,16 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
 
   const applyTheme = useCallback(
     (r: Rendition, name: Theme, size: number, family: string) => {
-      r.themes.register(name, THEMES[name]);
-      r.themes.select(name);
       r.themes.fontSize(`${size}%`);
       const familyCss = FONTS.find((f) => f.id === family)?.css || FONTS[0].css;
       r.themes.override('font-family', familyCss, true);
       // Repaint live: overwrite any already-rendered iframe backgrounds so
       // toggling dark mode doesn't leave white gaps between chapters.
-      const bg = THEME_BG[name];
       try {
         const contentsList: any[] = (r as any).getContents?.() || [];
         contentsList.forEach((c) => {
           try {
-            if (c?.document?.documentElement) c.document.documentElement.style.background = bg;
-            if (c?.document?.body) c.document.body.style.background = bg;
-            const iframe = c?.window?.frameElement as HTMLIFrameElement | null;
-            if (iframe) iframe.style.background = bg;
+            if (c?.document) applyReaderDocumentTheme(c.document, name);
           } catch { /* noop */ }
         });
       } catch { /* noop */ }
@@ -278,29 +251,7 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
       rendition.hooks.content.register((contents: any) => {
         try {
           const doc: Document = contents.document;
-          // Force theme background on html/body immediately to prevent
-          // white flashes between chapter iframes in continuous scroll mode.
-          const bg = THEME_BG[theme];
-          if (doc.documentElement) doc.documentElement.style.background = bg;
-          if (doc.body) doc.body.style.background = bg;
-          try {
-            const iframe = contents.window?.frameElement as HTMLIFrameElement | null;
-            if (iframe) iframe.style.background = bg;
-          } catch { /* noop */ }
-          if (doc.getElementById('tts-highlight-style')) return;
-          const style = doc.createElement('style');
-          style.id = 'tts-highlight-style';
-          style.textContent = `
-            html, body { background: ${bg} !important; }
-            .tts-current {
-              background: rgba(239, 68, 68, 0.16) !important;
-              box-shadow: -4px 0 0 rgba(239, 68, 68, 0.8) !important;
-              padding-left: 8px !important;
-              border-radius: 3px;
-              transition: background 0.25s ease;
-            }
-          `;
-          doc.head.appendChild(style);
+          applyReaderDocumentTheme(doc, themeRef.current);
           // Alt-click / double-click a paragraph to jump TTS to it.
           // Use a single click so mobile works; ignore clicks on links.
           const onDocClick = (ev: Event) => {
@@ -901,7 +852,7 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
 
         <div className="flex-1 relative">
           {/* Viewer is always mounted so epub.js has a container even before a book is opened */}
-          <div ref={viewerRef} className="absolute inset-0" style={{ background: THEME_BG[theme] }} />
+          <div ref={viewerRef} className="epub-reader-viewer absolute inset-0" data-reader-theme={theme} />
 
           {bookLoaded && immersive && (
             <button
