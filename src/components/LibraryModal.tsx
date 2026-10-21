@@ -307,16 +307,19 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
         </div>
 
         {/* Desktop search */}
-        <form className="relative hidden sm:block flex-1 max-w-xs" onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); setQuery(searchText.current.trim()); }}>
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+        <form className="hidden sm:flex items-center gap-2 flex-1 min-w-0 max-w-sm" onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); setQuery(searchText.current.trim()); }}>
           <Input
             ref={searchRef}
             defaultValue={searchText.current}
             onChange={(e) => updateSearchDraft(e.target.value)}
             enterKeyHint="search"
             placeholder="Search titles…"
-            className="pl-9 h-9 text-xs"
+            className="min-w-0 h-9 text-xs"
           />
+          <Button type="submit" size="sm" className="h-9 shrink-0">
+            <Search className="w-3.5 h-3.5 mr-1.5" />
+            Search
+          </Button>
         </form>
 
         <div className="flex items-center gap-1.5">
@@ -351,16 +354,19 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
 
       {/* Mobile search */}
       <div className="flex sm:hidden px-3 py-2 border-b border-border">
-        <form className="relative flex-1" onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); setQuery(searchText.current.trim()); }}>
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+        <form className="flex items-center gap-2 flex-1 min-w-0" onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); setQuery(searchText.current.trim()); }}>
           <Input
             ref={mobileSearchRef}
             defaultValue={searchText.current}
             onChange={(e) => updateSearchDraft(e.target.value)}
             enterKeyHint="search"
             placeholder="Search titles…"
-            className="pl-9 h-9 text-xs"
+            className="min-w-0 h-9 text-xs"
           />
+          <Button type="submit" size="sm" className="h-9 shrink-0">
+            <Search className="w-3.5 h-3.5 mr-1.5" />
+            Search
+          </Button>
         </form>
       </div>
 
