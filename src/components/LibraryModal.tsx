@@ -167,6 +167,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
   const [loading, setLoading] = useState(false);
   const [books, setBooks] = useState<LibraryBook[]>([]);
   const [query, setQuery] = useState('');
+  const [searchText, setSearchText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [megaUrl, setMegaUrl] = useState(DEFAULT_MEGA_URL);
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
@@ -307,16 +308,17 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
         </div>
 
         {/* Desktop search */}
-        <div className="relative hidden sm:block flex-1 max-w-xs">
+        <form className="relative hidden sm:block flex-1 max-w-xs" onSubmit={(e) => { e.preventDefault(); setQuery(searchText.trim()); }}>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
           <Input
             ref={searchRef}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            enterKeyHint="search"
             placeholder="Search titles…"
             className="pl-9 h-9 text-xs"
           />
-        </div>
+        </form>
 
         <div className="flex items-center gap-1.5">
           <Button variant="ghost" size="icon" onClick={() => load(tab)} disabled={loading} title="Refresh" className="h-8 w-8">
@@ -334,7 +336,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
           <button
             key={id}
             type="button"
-            onClick={() => { setTab(id); setQuery(''); }}
+            onClick={() => { setTab(id); setQuery(''); setSearchText(''); }}
             className={cn(
               'flex items-center gap-1.5 px-3 py-2 text-[11px] sm:text-xs font-semibold rounded-t-lg transition-all whitespace-nowrap shrink-0 border-b-2',
               tab === id
@@ -350,15 +352,16 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
 
       {/* Mobile search */}
       <div className="flex sm:hidden px-3 py-2 border-b border-border">
-        <div className="relative flex-1">
+        <form className="relative flex-1" onSubmit={(e) => { e.preventDefault(); setQuery(searchText.trim()); }}>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
           <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            enterKeyHint="search"
             placeholder="Search titles…"
             className="pl-9 h-9 text-xs"
           />
-        </div>
+        </form>
       </div>
 
       {/* Mega URL input */}
