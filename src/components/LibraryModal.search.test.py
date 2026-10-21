@@ -19,7 +19,8 @@ async def main():
         await page.wait_for_timeout(300)
         assert page.url == initial_url, "Enter must not navigate to the homepage"
         assert await search.is_visible(), "Enter must keep the Library open"
-        titles = await page.get_by_role("heading", level=3).filter(visible=True).all_text_contents()
+        library = search.locator("xpath=ancestor::div[contains(@class, 'fixed')][1]")
+        titles = await library.get_by_role("heading", level=3).all_text_contents()
         assert titles and all("shadowslave" in "".join(t.lower().split()) for t in titles), "Enter must show matching books"
         await search.fill("")
         await search.press("Enter")
