@@ -10,14 +10,24 @@ async def main():
         await page.goto("http://localhost:8080")
         await page.get_by_role("button", name="Library", exact=True).click()
         await page.get_by_role("button", name="Download", exact=False).first.wait_for(timeout=120_000)
-        counter = page.get_by_role("heading", name="Community Library", exact=True).filter(visible=True).first.locator("..").locator("p")
+        counter = page.get_by_role("heading", name="Community Library", exact=True).filter(visible=True).last.locator("..").locator("p")
         original_count = await counter.inner_text()
-        search = page.get_by_placeholder("Search titles…").filter(visible=True).first
+        search = page.get_by_placeholder("Search titles…").filter(visible=True).last
+        initial_url = page.url
+        await search.fill("Shadow Slave")
+        await search.press("Enter")
+        await page.wait_for_timeout(300)
+        assert page.url == initial_url, "Enter must not navigate to the homepage"
+        assert await search.is_visible(), "Enter must keep the Library open"
+        titles = await page.get_by_role("heading", level=3).filter(visible=True).all_text_contents()
+        assert titles and all("shadowslave" in "".join(t.lower().split()) for t in titles), "Enter must show matching books"
+        await search.fill("")
+        await search.press("Enter")
         await search.fill("zzzzmissinglibrarybook123456789")
         await page.wait_for_timeout(300)
         assert await counter.inner_text() == original_count, "Typing must not filter the library"
         await search.press("Enter")
-        await page.get_by_text('No results for "zzzzmissinglibrarybook123456789"', exact=True).filter(visible=True).first.wait_for()
+        await page.get_by_text('No results for "zzzzmissinglibrarybook123456789"', exact=True).filter(visible=True).last.wait_for()
         await search.press("Backspace")
         assert await counter.inner_text() == "0 books", "Backspace must not change submitted results"
         await search.fill("")
