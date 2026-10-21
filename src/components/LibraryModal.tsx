@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Send, Cloud, Archive, Download, Search, BookOpen, CheckCircle2, RefreshCw, HardDriveDownload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -288,7 +289,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-[100] bg-background flex flex-col"
       style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
@@ -306,7 +307,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
         </div>
 
         {/* Desktop search */}
-        <form className="relative hidden sm:block flex-1 max-w-xs" onSubmit={(e) => { e.preventDefault(); setQuery(searchText.current.trim()); }}>
+        <form className="relative hidden sm:block flex-1 max-w-xs" onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); setQuery(searchText.current.trim()); }}>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
           <Input
             ref={searchRef}
@@ -350,7 +351,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
 
       {/* Mobile search */}
       <div className="flex sm:hidden px-3 py-2 border-b border-border">
-        <form className="relative flex-1" onSubmit={(e) => { e.preventDefault(); setQuery(searchText.current.trim()); }}>
+        <form className="relative flex-1" onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); setQuery(searchText.current.trim()); }}>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
           <Input
             ref={mobileSearchRef}
@@ -446,6 +447,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
