@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { X, Send, Cloud, Archive, Download, Search, BookOpen, CheckCircle2, RefreshCw, HardDriveDownload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,7 +25,6 @@ type Tab = 'community' | 'my-downloads' | 'telegram' | 'mega' | 'archive';
 const DEFAULT_MEGA_URL = 'https://mega.nz/folder/Ci4ETASB#KIFVuPI99P1Ytg0dxmtYlw';
 const INITIAL_VISIBLE = 80;
 const LOAD_MORE = 80;
-const BG_BATCH = 200;
 
 const TABS: { id: Tab; label: string; icon: typeof Send }[] = [
   { id: 'community', label: 'Community', icon: BookOpen },
@@ -167,7 +166,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
   const [loading, setLoading] = useState(false);
   const [books, setBooks] = useState<LibraryBook[]>([]);
   const [query, setQuery] = useState('');
-  const [searchText, setSearchText] = useState('');
+  const searchText = useRef('');
   const [error, setError] = useState<string | null>(null);
   const [megaUrl, setMegaUrl] = useState(DEFAULT_MEGA_URL);
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
@@ -176,6 +175,15 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const mobileSearchRef = useRef<HTMLInputElement>(null);
+
+  // Let the browser paint draft text immediately, without redrawing the library.
+  const updateSearchDraft = (value: string) => {
+    searchText.current = value;
+    for (const input of [searchRef.current, mobileSearchRef.current]) {
+      if (input && input.value !== value) input.value = value;
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -221,7 +229,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
     setVisibleCount(INITIAL_VISIBLE);
   }, [query, tab]);
 
-  const handleDownload = async (book: LibraryBook, onProgress: (pct: number) => void) => {
+  const handleDownload = useCallback(async (book: LibraryBook, onProgress: (pct: number) => void) => {
     if (book.source === 'archive') {
       const { url } = book.handle as { url: string };
       window.open(url, '_blank', 'noopener,noreferrer');
@@ -246,7 +254,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
       toast({ variant: 'destructive', title: 'Download failed', description: (e as Error).message });
       throw e;
     }
-  };
+  }, [toast]);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase().replace(/[^a-z0-9]+/g, '');
@@ -278,16 +286,6 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
     return () => observer.disconnect();
   }, [open, loading, tab, visibleCount, filtered.length]);
 
-  // Background progressive loading: once the first batch is shown,
-  // incrementally bump visible count so all cards render without user scrolling.
-  useEffect(() => {
-    if (loading || visibleCount >= filtered.length || filtered.length <= INITIAL_VISIBLE) return;
-    const timer = setTimeout(() => {
-      setVisibleCount((c) => Math.min(c + BG_BATCH, filtered.length));
-    }, 800);
-    return () => clearTimeout(timer);
-  }, [loading, visibleCount, filtered.length]);
-
   if (!open) return null;
 
   return (
@@ -308,12 +306,12 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
         </div>
 
         {/* Desktop search */}
-        <form className="relative hidden sm:block flex-1 max-w-xs" onSubmit={(e) => { e.preventDefault(); setQuery(searchText.trim()); }}>
+        <form className="relative hidden sm:block flex-1 max-w-xs" onSubmit={(e) => { e.preventDefault(); setQuery(searchText.current.trim()); }}>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
           <Input
             ref={searchRef}
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
+            defaultValue={searchText.current}
+            onChange={(e) => updateSearchDraft(e.target.value)}
             enterKeyHint="search"
             placeholder="Search titles…"
             className="pl-9 h-9 text-xs"
@@ -336,7 +334,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
           <button
             key={id}
             type="button"
-            onClick={() => { setTab(id); setQuery(''); setSearchText(''); }}
+            onClick={() => { setTab(id); setQuery(''); updateSearchDraft(''); }}
             className={cn(
               'flex items-center gap-1.5 px-3 py-2 text-[11px] sm:text-xs font-semibold rounded-t-lg transition-all whitespace-nowrap shrink-0 border-b-2',
               tab === id
@@ -352,11 +350,12 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
 
       {/* Mobile search */}
       <div className="flex sm:hidden px-3 py-2 border-b border-border">
-        <form className="relative flex-1" onSubmit={(e) => { e.preventDefault(); setQuery(searchText.trim()); }}>
+        <form className="relative flex-1" onSubmit={(e) => { e.preventDefault(); setQuery(searchText.current.trim()); }}>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
           <Input
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
+            ref={mobileSearchRef}
+            defaultValue={searchText.current}
+            onChange={(e) => updateSearchDraft(e.target.value)}
             enterKeyHint="search"
             placeholder="Search titles…"
             className="pl-9 h-9 text-xs"
