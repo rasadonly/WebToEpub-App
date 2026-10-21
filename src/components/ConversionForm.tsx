@@ -177,7 +177,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
       let info;
       if (isBackendEnabled() && /(^|\.)novgo\.(net|com|org)$/i.test(new URL(url).hostname)) {
         try {
-          const result = await backendToc(url, tocSelector);
+          const result = await backendToc(url, getSiteConfig(url)?.tocSelector || tocSelector);
           if (!result.chapters.length) throw new Error('No NovGo chapters found');
           info = {
             ...result.meta,
