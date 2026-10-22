@@ -4,4 +4,4 @@
 - [x] Enable 40 parallel conversions with bounded memory and chapter fetching.
 - [x] Test scheduling, EPUB output, and deploy and verify live capacity.
 - [x] Measure and improve NovGo URL loading and verify a sample EPUB download.
-- [x] Fix and verify Library typing delays while preserving Enter-only search.
+- [x] Fix and verify Library typing delays while preserving Enter-only search.- [x] Stop EPUB reader read-aloud when the reader closes.
