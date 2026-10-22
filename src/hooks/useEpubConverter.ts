@@ -133,7 +133,16 @@ export function useEpubConverter() {
 
         /** Called each time a batch of chapter links arrives — updates UI live. */
         const onBatch = (batch: ChapterLink[] | EngineChapter[]) => {
-          const newItems: ChapterItem[] = batch.map((c, i) => ({
+          // Skip links already in the list so a retry/fallback never duplicates
+          // or restarts the chapter list mid-way.
+          const seen = new Set(liveChaptersRef.current.map(c => c.url));
+          const unique = (batch as ChapterLink[]).filter(c => {
+            if (!c?.url || seen.has(c.url)) return false;
+            seen.add(c.url);
+            return true;
+          });
+          if (unique.length === 0) return;
+          const newItems: ChapterItem[] = unique.map((c, i) => ({
             id: `${liveChaptersRef.current.length + i}-${c.url}`,
             url: c.url,
             title: c.title || `Chapter ${liveChaptersRef.current.length + i + 1}`,
@@ -162,12 +171,18 @@ export function useEpubConverter() {
             const { chapters } = await backendToc(data.tocUrl, data.tocSelector, (items) => {
               if (items.length > 0) onBatch(items as ChapterLink[]);
             });
-            if (chapters?.length) {
+            if (chapters?.length || liveChaptersRef.current.length) {
               usedFastPath = true;
-              addLog(`Server returned ${chapters.length} chapters`);
+              addLog(`Server returned ${liveChaptersRef.current.length} chapters`);
             }
           } catch (e) {
-            addLog(`Server TOC fetch failed (${(e as Error).message}), falling back…`);
+            if (liveChaptersRef.current.length > 0) {
+              // Keep what already arrived instead of re-fetching from zero.
+              usedFastPath = true;
+              addLog(`Server stream ended early (${(e as Error).message}); keeping ${liveChaptersRef.current.length} chapters`);
+            } else {
+              addLog(`Server TOC fetch failed (${(e as Error).message}), falling back…`);
+            }
           }
         }
 
