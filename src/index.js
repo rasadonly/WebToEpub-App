@@ -38,7 +38,7 @@ app.use((err, _req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3000;
-const CONCURRENCY = Number(process.env.FETCH_CONCURRENCY || 10);
+const CONCURRENCY = Number(process.env.FETCH_CONCURRENCY || 16);
 const chapterPool = createWorkPool(Number(process.env.GLOBAL_FETCH_CONCURRENCY || 40));
 const packingPool = createWorkPool(1);
 const uploadPool = createWorkPool(1);

@@ -86,7 +86,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // spaced by gap/lanes, so rate-limited sites still get paced but chapters are
 // no longer fetched strictly one by one.
 const hostLanes = new Map();
-const HOST_LANES = Number(process.env.HOST_LANES || 6);
+const HOST_LANES = Number(process.env.HOST_LANES || 10);
 
 function throttle(host) {
   const gap = gapFor(host);
