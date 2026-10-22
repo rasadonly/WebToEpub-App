@@ -14,7 +14,7 @@ export interface ChapterLink {
 /** Called progressively as TOC pages are fetched. */
 export type OnChapterBatch = (batch: ChapterLink[]) => void;
 
-const FETCH_CONCURRENCY = 10;
+const FETCH_CONCURRENCY = 16;
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
 
