@@ -218,7 +218,7 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
       return;
     }
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') handleClose();
       else if (e.key === 'ArrowRight') renditionRef.current?.next();
       else if (e.key === 'ArrowLeft') renditionRef.current?.prev();
     };
@@ -226,7 +226,7 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
     return () => {
       window.removeEventListener('keydown', onKey);
     };
-  }, [open, onClose, stopTTS]);
+  }, [open, handleClose, stopTTS]);
 
   const applyTheme = useCallback(
     (r: Rendition, name: Theme, size: number, family: string) => {
@@ -664,7 +664,7 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
           >
             <Upload className="w-4 h-4" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={onClose} title="Close">
+          <Button variant="ghost" size="sm" onClick={handleClose} title="Close">
             <X className="w-4 h-4" />
           </Button>
           <input
