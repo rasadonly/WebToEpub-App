@@ -150,12 +150,36 @@ export function EpubReaderModal({ open, onClose }: EpubReaderModalProps) {
   const stopTTS = useCallback(() => {
     ttsActiveRef.current = false;
     clearPauseTimer();
-    if (supportsTTS) window.speechSynthesis.cancel();
+    if (supportsTTS) {
+      // Some browsers ignore cancel() while paused; resume first.
+      try { window.speechSynthesis.resume(); } catch { /* noop */ }
+      window.speechSynthesis.cancel();
+    }
     clearHighlight();
     setTtsPlaying(false);
     setTtsPaused(false);
     setTtsIndex(-1);
   }, [supportsTTS]);
+
+  // Parents unmount the reader when it closes, so the `!open` cleanup below
+  // never runs — stop speech and free the book on unmount too.
+  useEffect(() => {
+    return () => {
+      ttsActiveRef.current = false;
+      if (pauseTimerRef.current !== null) window.clearTimeout(pauseTimerRef.current);
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        try { window.speechSynthesis.resume(); } catch { /* noop */ }
+        window.speechSynthesis.cancel();
+      }
+      try { renditionRef.current?.destroy(); } catch { /* noop */ }
+      try { bookRef.current?.destroy(); } catch { /* noop */ }
+    };
+  }, []);
+
+  const handleClose = useCallback(() => {
+    stopTTS();
+    onClose();
+  }, [stopTTS, onClose]);
 
   // Load voices (prefer Google English)
   useEffect(() => {
