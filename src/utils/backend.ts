@@ -332,7 +332,14 @@ async function fetchBackendToc(
   let meta: Record<string, string> = {};
 
   const ctrl = new AbortController();
-  const timer = window.setTimeout(() => ctrl.abort(), 120_000);
+  // Idle timeout (reset on every chunk, incl. server heartbeats) — long chapter
+  // lists must not be cut off mid-stream and then re-fetched from scratch.
+  let timer = 0;
+  const armIdle = () => {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(() => ctrl.abort(), 60_000);
+  };
+  armIdle();
   try {
     const r = await fetch(streamUrl, { signal: ctrl.signal });
     if (!r.ok || !r.body) throw new Error(`Stream error ${r.status}`);
@@ -344,6 +351,7 @@ async function fetchBackendToc(
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+      armIdle();
       buf += decoder.decode(value, { stream: true });
       const lines = buf.split('\n');
       buf = lines.pop() ?? '';
@@ -369,15 +377,19 @@ async function fetchBackendToc(
     }
     return { chapters: allChapters, meta };
   } catch {
-    // Fallback: legacy buffered endpoint
+    window.clearTimeout(timer);
+    // Fallback: legacy buffered endpoint. Only report chapters the stream has
+    // not already delivered, so the list continues instead of restarting.
     const result = await api<{ chapters: BackendChapter[]; meta: Record<string, string> }>(
       `/api/toc?url=${encodeURIComponent(tocUrl)}&selector=${encodeURIComponent(selector)}`,
       undefined,
       120_000,
       base
     );
-    onBatch?.(result.chapters, result.meta);
-    return result;
+    const seen = new Set(allChapters.map(c => c.url));
+    const fresh = (result.chapters || []).filter(c => !seen.has(c.url));
+    onBatch?.(fresh, result.meta);
+    return { chapters: [...allChapters, ...fresh], meta: result.meta || meta };
   } finally {
     window.clearTimeout(timer);
   }
