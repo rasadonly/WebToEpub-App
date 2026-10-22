@@ -80,21 +80,39 @@ function gapFor(host) {
   return DEFAULT_GAP_MS;
 }
 
-// host -> promise chain tail, so requests to the same host queue up
-const hostQueues = new Map();
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Per-host lanes: several requests to one host run in parallel, with starts
+// spaced by gap/lanes, so rate-limited sites still get paced but chapters are
+// no longer fetched strictly one by one.
+const hostLanes = new Map();
+const HOST_LANES = Number(process.env.HOST_LANES || 6);
 
 function throttle(host) {
   const gap = gapFor(host);
-  const prev = hostQueues.get(host) || Promise.resolve();
-  let release;
-  const next = new Promise((r) => (release = r));
-  hostQueues.set(host, prev.then(() => next));
-  return prev.then(() => ({
-    done: () => setTimeout(release, gap),
-  }));
+  let st = hostLanes.get(host);
+  if (!st) { st = { active: 0, waiters: [], nextStart: 0 }; hostLanes.set(host, st); }
+  const spacing = Math.ceil(gap / HOST_LANES);
+  const acquire = () => {
+    st.active++;
+    const now = Date.now();
+    const wait = Math.max(0, st.nextStart - now);
+    st.nextStart = Math.max(now, st.nextStart) + spacing;
+    let released = false;
+    return sleep(wait).then(() => ({
+      done: () => {
+        if (released) return;
+        released = true;
+        st.active--;
+        const w = st.waiters.shift();
+        if (w) w();
+      },
+    }));
+  };
+  if (st.active < HOST_LANES) return acquire();
+  return new Promise((r) => st.waiters.push(r)).then(acquire);
 }
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // host -> timestamp until which direct fetching is skipped
 const blockedUntil = new Map();
