@@ -310,6 +310,10 @@ app.get("/api/toc/stream", async (req, res) => {
   res.flushHeaders();
 
   const flush = (obj) => res.write(JSON.stringify(obj) + "\n");
+  // Heroku drops a response that sends no bytes for 55s (H15), which made the
+  // browser give up and fetch the chapter list again. Keep it alive.
+  flush({ type: "ping" });
+  const heartbeat = setInterval(() => flush({ type: "ping" }), 15_000);
 
   try {
     const [chapters, meta] = await Promise.all([
@@ -325,6 +329,7 @@ app.get("/api/toc/stream", async (req, res) => {
   } catch (e) {
     flush({ type: "error", message: e.message });
   }
+  clearInterval(heartbeat);
   flush({ type: "done" });
   res.end();
 });
