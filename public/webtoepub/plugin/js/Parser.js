@@ -66,8 +66,8 @@ class ParserState {
 
 class Parser {    
     constructor(imageCollector) {
-        this.minimumThrottle = 500;
-        this.maxSimultanousFetchSize = 1;
+        this.minimumThrottle = 150;
+        this.maxSimultanousFetchSize = 8;
         this.state = new ParserState();
         this.imageCollector = imageCollector || new ImageCollector();
         this.userPreferences = null;

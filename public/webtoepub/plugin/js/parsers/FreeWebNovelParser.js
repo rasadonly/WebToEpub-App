@@ -13,7 +13,7 @@ class FreeWebNovelParser extends Parser {
 
     constructor() {
         super();
-        this.minimumThrottle = 1000;
+        this.minimumThrottle = 300;
     }
 
     async getChapterUrls(dom, chapterUrlsUI) {
