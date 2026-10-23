@@ -614,6 +614,9 @@ async function ridiPostJson(target, payload, extraHeaders = {}) {
   let lastErr = null;
   for (let n = 0; n < PROXIES.length; n++) {
     const idx = (ridiRoute + n) % PROXIES.length;
+    const routeName =
+      idx === 0 ? "direct" : new URL(PROXIES[idx]).hostname;
+    const t0 = Date.now();
     try {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 25000);
@@ -634,10 +637,16 @@ async function ridiPostJson(target, payload, extraHeaders = {}) {
       }
       const text = await res.text();
       if (!res.ok) {
+        console.log(
+          `[ridi] route ${routeName} -> HTTP ${res.status} in ${Date.now() - t0}ms: ${text.slice(0, 120).replace(/\s+/g, " ")}`
+        );
         lastErr = new Error(`Ridibooks HTTP ${res.status}`);
         continue;
       }
       if (looksLikeChallenge(text)) {
+        console.log(
+          `[ridi] route ${routeName} -> challenge page in ${Date.now() - t0}ms`
+        );
         lastErr = new Error("Ridibooks: Cloudflare challenge");
         continue;
       }
@@ -648,12 +657,21 @@ async function ridiPostJson(target, payload, extraHeaders = {}) {
         /* not JSON — try the next route */
       }
       if (!json) {
+        console.log(
+          `[ridi] route ${routeName} -> non-JSON in ${Date.now() - t0}ms: ${text.slice(0, 120).replace(/\s+/g, " ")}`
+        );
         lastErr = new Error("Ridibooks: non-JSON response");
         continue;
       }
+      console.log(
+        `[ridi] route ${routeName} -> OK in ${Date.now() - t0}ms`
+      );
       ridiRoute = idx;
       return json;
     } catch (e) {
+      console.log(
+        `[ridi] route ${routeName} -> threw in ${Date.now() - t0}ms: ${e.message}`
+      );
       lastErr = e;
     }
   }
