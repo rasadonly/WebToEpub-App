@@ -25,13 +25,12 @@ import {
   Pencil,
   Trash2,
   ShieldCheck,
-  ChevronUp,
   Search,
-  Sparkles,
   User,
   Plus,
   Clock,
   Filter,
+  Info,
 } from 'lucide-react';
 
 interface ForumModalProps {
@@ -73,7 +72,6 @@ const CATEGORY_META: Record<Category, { label: string; icon: any; bg: string; co
 
 const TOKENS_KEY = 'forum-edit-tokens';
 const PROFILE_KEY = 'forum-profile';
-const VOTES_KEY = 'forum-user-votes';
 
 function getTokens(): Record<string, string> {
   try { return JSON.parse(localStorage.getItem(TOKENS_KEY) || '{}'); } catch { return {}; }
@@ -94,25 +92,22 @@ function getProfile(): { name: string; avatar_url: string } {
 function saveProfile(name: string, avatar_url: string) {
   localStorage.setItem(PROFILE_KEY, JSON.stringify({ name, avatar_url }));
 }
-function getVotedItems(): Record<string, boolean> {
-  try { return JSON.parse(localStorage.getItem(VOTES_KEY) || '{}'); } catch { return {}; }
-}
-function toggleVoteItem(id: string): boolean {
-  const v = getVotedItems();
-  const next = !v[id];
-  if (next) v[id] = true;
-  else delete v[id];
-  localStorage.setItem(VOTES_KEY, JSON.stringify(v));
-  return next;
-}
 function newToken() { return crypto.randomUUID(); }
 
 function timeAgo(iso: string) {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (diff < 60) return `${Math.max(1, Math.round(diff))}s ago`;
+  if (diff < 60) return 'just now';
   if (diff < 3600) return `${Math.round(diff / 60)}m ago`;
   if (diff < 86400) return `${Math.round(diff / 3600)}h ago`;
-  return `${Math.round(diff / 86400)}d ago`;
+  if (diff < 86400 * 30) return `${Math.round(diff / 86400)}d ago`;
+  if (diff < 86400 * 365) return `${Math.round(diff / (86400 * 30))}mo ago`;
+  return `${Math.round(diff / (86400 * 365))}y ago`;
+}
+
+function fullDate(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 function Avatar({ name, url, className = "w-8 h-8" }: { name: string; url?: string | null; className?: string }) {
@@ -138,6 +133,63 @@ function Avatar({ name, url, className = "w-8 h-8" }: { name: string; url?: stri
   );
 }
 
+function ThreadRow({ t, mine, onOpen }: { t: Thread; mine: boolean; onOpen: () => void }) {
+  const meta = CATEGORY_META[t.category];
+  const Icon = meta.icon;
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/40 transition-colors"
+    >
+      <span className={`hidden sm:grid w-9 h-9 shrink-0 place-items-center rounded-lg border ${meta.bg} ${meta.border}`}>
+        <Icon className={`w-4 h-4 ${meta.color}`} />
+      </span>
+      <span className="flex-1 min-w-0">
+        <span className="flex items-center gap-2 min-w-0">
+          <span className="font-semibold text-sm text-foreground truncate">{t.title}</span>
+          {t.is_pinned && <OfficialBadge />}
+          {mine && (
+            <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20">
+              <ShieldCheck className="w-3 h-3" /> You
+            </span>
+          )}
+        </span>
+        <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground min-w-0">
+          <Avatar name={t.author_name} url={t.avatar_url} className="w-4 h-4" />
+          <span className="font-medium truncate">{t.author_name}</span>
+          <span aria-hidden="true">·</span>
+          <span className="shrink-0">{meta.label}</span>
+          <span aria-hidden="true">·</span>
+          <span className="shrink-0">{timeAgo(t.created_at)}</span>
+        </span>
+      </span>
+      <span className="hidden md:flex flex-col items-end gap-0.5 shrink-0 w-32 text-[11px] text-muted-foreground">
+        <span className="inline-flex items-center gap-1 font-semibold text-foreground/80">
+          <MessageSquare className="w-3.5 h-3.5 text-primary" />
+          {t.comment_count} {t.comment_count === 1 ? 'reply' : 'replies'}
+        </span>
+        <span>Last activity {timeAgo(t.updated_at)}</span>
+      </span>
+      <span className="md:hidden shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground">
+        <MessageSquare className="w-3.5 h-3.5 text-primary" />
+        {t.comment_count}
+      </span>
+    </button>
+  );
+}
+
+/* Official posts are the ones the team pins (pinning requires the admin
+   password server-side). Badges never come from a display name — anyone can
+   type any name, so a name-based "admin" badge would be trivially fakeable. */
+function OfficialBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-md bg-primary px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary-foreground">
+      <ShieldCheck className="w-3 h-3" /> Official
+    </span>
+  );
+}
+
 export function ForumModal({ open, onClose }: ForumModalProps) {
   const { toast } = useToast();
   const [view, setView] = useState<'list' | 'thread' | 'new'>('list');
@@ -148,8 +200,6 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
   const [loadingComments, setLoadingComments] = useState(false);
   const [filter, setFilter] = useState<'all' | Category>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [votedMap, setVotedMap] = useState<Record<string, boolean>>({});
-  const [upvoteCounts, setUpvoteCounts] = useState<Record<string, number>>({});
 
   // Profile
   const initialProfile = useMemo(() => getProfile(), []);
@@ -166,19 +216,6 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
   const [postingComment, setPostingComment] = useState(false);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editCommentBody, setEditCommentBody] = useState('');
-
-  useEffect(() => {
-    setVotedMap(getVotedItems());
-  }, [open]);
-
-  const handleToggleUpvote = (id: string, initialCount = 0) => {
-    const isVoted = toggleVoteItem(id);
-    setVotedMap(getVotedItems());
-    setUpvoteCounts(prev => {
-      const current = prev[id] !== undefined ? prev[id] : initialCount;
-      return { ...prev, [id]: isVoted ? current + 1 : Math.max(0, current - 1) };
-    });
-  };
 
   const loadThreads = useCallback(async () => {
     setLoading(true);
@@ -272,7 +309,7 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
     setNewCategory('general');
     await loadThreads();
     setView('list');
-    toast({ title: '🎉 Thread posted successfully!' });
+    toast({ title: 'Thread posted' });
   };
 
   const saveThreadEdit = async () => {
@@ -408,6 +445,9 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
     return result;
   }, [threads, filter, searchQuery]);
 
+  const pinnedThreads = filteredThreads.filter((t) => t.is_pinned);
+  const discussionThreads = filteredThreads.filter((t) => !t.is_pinned);
+
   if (!open) return null;
 
   return (
@@ -432,17 +472,12 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
             <div className="min-w-0">
               <div className="font-display font-extrabold text-base sm:text-lg truncate leading-none flex items-center gap-2">
                 <span>{view === 'list' ? 'Community Forum' : view === 'thread' ? activeThread?.title : 'Create New Thread'}</span>
-                {view === 'list' && (
-                  <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-semibold bg-primary/10 text-primary px-2 py-0.5 rounded-full border border-primary/20">
-                    <Sparkles className="w-3 h-3" /> Live
-                  </span>
-                )}
               </div>
               <div className="text-xs text-muted-foreground truncate mt-0.5">
                 {view === 'list'
-                  ? `${threads.length} active discussion${threads.length === 1 ? '' : 's'} · Report site issues & request features`
+                  ? 'Official support forum for LinkToEpub — report site errors, request new sites, get help'
                   : view === 'thread'
-                  ? `Started by ${activeThread?.author_name} · ${timeAgo(activeThread?.created_at || '')}`
+                  ? `Started by ${activeThread?.author_name} · ${fullDate(activeThread?.created_at || '')}`
                   : 'Start a discussion or request a new web novel site'}
               </div>
             </div>
@@ -520,6 +555,16 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
               })}
             </div>
 
+            {/* Trust & safety note */}
+            <div className="flex items-start gap-2.5 rounded-xl border border-border/70 bg-muted/30 px-3.5 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
+              <Info className="w-3.5 h-3.5 mt-px shrink-0 text-primary" />
+              <p>
+                Posts from the LinkToEpub team are <span className="font-semibold text-foreground">pinned</span> and carry the{' '}
+                <span className="font-semibold text-foreground">Official</span> badge. Display names are not verified — anyone can
+                choose any name, and the team will never ask for your password here.
+              </p>
+            </div>
+
             {/* Loading / Empty State / Threads List */}
             {loading ? (
               <div className="flex flex-col items-center justify-center py-20 text-center space-y-3">
@@ -540,99 +585,33 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
                 </Button>
               </div>
             ) : (
-              <div className="space-y-3">
-                {filteredThreads.map((t) => {
-                  const meta = CATEGORY_META[t.category];
-                  const Icon = meta.icon;
-                  const isVoted = !!votedMap[t.id];
-                  const voteCount = (upvoteCounts[t.id] !== undefined ? upvoteCounts[t.id] : 1) + (t.is_pinned ? 5 : 0);
-
-                  return (
-                    <div
-                      key={t.id}
-                      className={`group relative flex items-start gap-3 sm:gap-4 p-4 rounded-2xl bg-card border shadow-xs hover:shadow-md transition-all cursor-pointer ${
-                        t.is_pinned
-                          ? 'border-amber-500/40 bg-gradient-to-r from-amber-500/5 via-card to-card'
-                          : 'border-border/80 hover:border-primary/40'
-                      }`}
-                      onClick={() => openThread(t)}
-                    >
-                      {/* Left Upvote Counter */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleToggleUpvote(t.id, 1);
-                        }}
-                        className={`shrink-0 flex flex-col items-center justify-center w-10 sm:w-11 py-1.5 rounded-xl border transition-all ${
-                          isVoted
-                            ? 'bg-primary/10 border-primary text-primary font-bold'
-                            : 'bg-muted/40 border-border/60 text-muted-foreground hover:bg-primary/5 hover:border-primary/40 hover:text-primary'
-                        }`}
-                      >
-                        <ChevronUp className={`w-4 h-4 transition-transform ${isVoted ? 'stroke-[3px] scale-110' : ''}`} />
-                        <span className="text-xs font-bold font-mono">{voteCount}</span>
-                      </button>
-
-                      {/* Content Area */}
-                      <div className="min-w-0 flex-1 space-y-1.5">
-                        {/* Top Meta Line */}
-                        <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
-                          <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-bold text-[10px] uppercase tracking-wider ${meta.bg} ${meta.color} ${meta.border} border`}>
-                            <Icon className="w-3 h-3" /> {meta.label}
-                          </span>
-
-                          <div className="flex items-center gap-1.5 font-medium text-foreground/90">
-                            <Avatar name={t.author_name} url={t.avatar_url} className="w-4 h-4" />
-                            <span className="text-xs font-semibold">{t.author_name}</span>
-                            {t.author_name.toLowerCase().includes('admin') && (
-                              <span className="bg-primary/10 text-primary text-[9px] font-bold px-1.5 py-0.2 rounded border border-primary/20">
-                                ADMIN
-                              </span>
-                            )}
-                          </div>
-
-                          <span className="text-muted-foreground/40">·</span>
-                          <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                            <Clock className="w-3 h-3" /> {timeAgo(t.created_at)}
-                          </span>
-
-                          {t.is_pinned && (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
-                              <Pin className="w-3 h-3 fill-amber-500" /> Pinned
-                            </span>
-                          )}
-
-                          {isMine(t.id) && (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20">
-                              <ShieldCheck className="w-3 h-3" /> You
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Thread Title */}
-                        <h3 className="font-display font-bold text-base sm:text-lg text-foreground group-hover:text-primary transition-colors leading-snug break-words">
-                          {t.title}
-                        </h3>
-
-                        {/* Thread Excerpt */}
-                        {t.body && (
-                          <p className="text-xs sm:text-sm text-muted-foreground line-clamp-2 leading-relaxed font-normal break-words">
-                            {t.body}
-                          </p>
-                        )}
-
-                        {/* Bottom Row / Comment Count */}
-                        <div className="pt-1 flex items-center gap-4 text-xs font-medium text-muted-foreground">
-                          <span className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors font-semibold">
-                            <MessageSquare className="w-3.5 h-3.5 text-primary" />
-                            {t.comment_count} {t.comment_count === 1 ? 'reply' : 'replies'}
-                          </span>
-                        </div>
-                      </div>
+              <div className="space-y-6">
+                {pinnedThreads.length > 0 && (
+                  <section className="space-y-2">
+                    <h3 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      <Pin className="w-3.5 h-3.5 text-amber-500" /> Official &amp; pinned
+                    </h3>
+                    <div className="rounded-2xl border border-amber-500/30 bg-card divide-y divide-border/60 overflow-hidden shadow-xs">
+                      {pinnedThreads.map((t) => (
+                        <ThreadRow key={t.id} t={t} mine={isMine(t.id)} onOpen={() => openThread(t)} />
+                      ))}
                     </div>
-                  );
-                })}
+                  </section>
+                )}
+                {discussionThreads.length > 0 && (
+                  <section className="space-y-2">
+                    {pinnedThreads.length > 0 && (
+                      <h3 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                        <MessagesSquare className="w-3.5 h-3.5" /> Discussions
+                      </h3>
+                    )}
+                    <div className="rounded-2xl border border-border/80 bg-card divide-y divide-border/60 overflow-hidden shadow-xs">
+                      {discussionThreads.map((t) => (
+                        <ThreadRow key={t.id} t={t} mine={isMine(t.id)} onOpen={() => openThread(t)} />
+                      ))}
+                    </div>
+                  </section>
+                )}
               </div>
             )}
           </div>
@@ -645,6 +624,12 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
               <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
                 <Plus className="w-5 h-5 text-primary" /> Post a new discussion
               </h2>
+
+              <div className="rounded-xl border border-border/70 bg-muted/30 px-3.5 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
+                <span className="font-semibold text-foreground">Posting guidelines:</span> for a site error, include the
+                site name, the page URL you tried, and the exact error message. For a new site, include the site's
+                homepage URL. One topic per thread helps the team answer faster.
+              </div>
 
               <ProfileFields
                 name={authorName}
@@ -660,9 +645,9 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="general">💬 General Discussion & Novel Recommendations</SelectItem>
-                    <SelectItem value="report_error">🐞 Report Site Error or Broken Chapters</SelectItem>
-                    <SelectItem value="new_site">🌐 Request Support for a New Site</SelectItem>
+                    <SelectItem value="general">General Discussion & Novel Recommendations</SelectItem>
+                    <SelectItem value="report_error">Report Site Error or Broken Chapters</SelectItem>
+                    <SelectItem value="new_site">Request Support for a New Site</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -713,11 +698,7 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
                   <div>
                     <div className="font-bold text-sm sm:text-base text-foreground flex items-center gap-2">
                       <span>{activeThread.author_name}</span>
-                      {activeThread.author_name.toLowerCase().includes('admin') && (
-                        <span className="bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded border border-primary/20">
-                          ADMIN
-                        </span>
-                      )}
+                      {activeThread.is_pinned && <OfficialBadge />}
                     </div>
                     <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
                       <span>{timeAgo(activeThread.created_at)}</span>
@@ -746,9 +727,9 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
                   <Select value={newCategory} onValueChange={(v) => setNewCategory(v as Category)}>
                     <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="general">💬 General Discussion</SelectItem>
-                      <SelectItem value="report_error">🐞 Report Site Error</SelectItem>
-                      <SelectItem value="new_site">🌐 Request New Site</SelectItem>
+                      <SelectItem value="general">General Discussion</SelectItem>
+                      <SelectItem value="report_error">Report Site Error</SelectItem>
+                      <SelectItem value="new_site">Request New Site</SelectItem>
                     </SelectContent>
                   </Select>
                   <Input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} maxLength={200} className="rounded-xl font-bold" />
@@ -772,20 +753,7 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
               )}
 
               {!editingThread && (
-                <div className="pt-3 flex items-center justify-between border-t border-border/50">
-                  <button
-                    type="button"
-                    onClick={() => handleToggleUpvote(activeThread.id, 1)}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
-                      votedMap[activeThread.id]
-                        ? 'bg-primary/10 border-primary text-primary'
-                        : 'bg-muted/50 border-border text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    <ChevronUp className="w-4 h-4" />
-                    <span>Upvote ({ (upvoteCounts[activeThread.id] !== undefined ? upvoteCounts[activeThread.id] : 1) + (activeThread.is_pinned ? 5 : 0) })</span>
-                  </button>
-
+                <div className="pt-3 flex items-center justify-end border-t border-border/50">
                   <div className="flex gap-2">
                     <Button size="sm" variant="ghost" onClick={() => setEditingThread(true)} className="gap-1 text-xs rounded-lg">
                       <Pencil className="w-3.5 h-3.5" /> Edit
