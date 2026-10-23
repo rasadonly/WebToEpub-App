@@ -475,6 +475,96 @@ async function tocFreeWebNovel(url) {
   return out;
 }
 
+// ---- JadeScrolls (jadescrolls.com) ----
+// The site is a Next.js app: its pages are empty shells and the chapter data
+// loads client-side from a public JSON API (api.jadescrolls.com/api), so
+// there is nothing to scrape in the HTML. The API is open for reads.
+const JADESCROLLS_API = "https://api.jadescrolls.com/api";
+const jadescrollsNovelIds = new Map();
+
+async function jadescrollsGet(path) {
+  const res = await fetch(`${JADESCROLLS_API}${path}`, {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+      Accept: "application/json",
+    },
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!res.ok) throw new Error(`JadeScrolls API HTTP ${res.status} for ${path}`);
+  return res.json();
+}
+
+async function jadescrollsNovel(slug) {
+  const novel = await jadescrollsGet(
+    `/novels?slug=${encodeURIComponent(slug)}`
+  );
+  if (!novel || !novel.id)
+    throw new Error(`JadeScrolls: novel not found for slug "${slug}"`);
+  jadescrollsNovelIds.set(slug, novel.id);
+  return novel;
+}
+
+async function tocJadeScrolls(url) {
+  const slug = new URL(url).pathname.split("/").filter(Boolean)[1];
+  if (!slug)
+    throw new Error("JadeScrolls: could not read the novel slug from the URL");
+  const novel = await jadescrollsNovel(slug);
+  const items = [];
+  let page = 1;
+  let totalPages = 1;
+  do {
+    const data = await jadescrollsGet(
+      `/novels-chapter/${novel.id}/chapters/list?page=${page}&limit=1000`
+    );
+    for (const ch of data.data || []) {
+      if (ch.status && ch.status !== "PUBLISHED") continue;
+      if (!ch.slug) continue;
+      items.push({
+        url: `https://jadescrolls.com/novel/${slug}/${ch.slug}`,
+        title: ch.title || `Chapter ${ch.chapter_number}`,
+        _num:
+          typeof ch.chapter_number === "number"
+            ? ch.chapter_number
+            : Number.MAX_SAFE_INTEGER,
+      });
+    }
+    totalPages = (data.meta && data.meta.total_pages) || 1;
+    page += 1;
+  } while (page <= totalPages);
+  // The API returns newest first; the converter expects reading order.
+  items.sort((a, b) => a._num - b._num);
+  if (!items.length)
+    throw new Error("JadeScrolls: the site API returned no chapters");
+  return items.map(({ url: u, title: t }) => ({ url: u, title: t }));
+}
+
+async function bodyJadeScrolls(url) {
+  const parts = new URL(url).pathname.split("/").filter(Boolean);
+  const novelSlug = parts[1];
+  const chapterSlug = parts[2];
+  if (!novelSlug || !chapterSlug)
+    throw new Error("JadeScrolls: bad chapter URL");
+  let novelId = jadescrollsNovelIds.get(novelSlug);
+  if (!novelId) novelId = (await jadescrollsNovel(novelSlug)).id;
+  const ch = await jadescrollsGet(
+    `/novels-chapter/${novelId}/chapters/${encodeURIComponent(chapterSlug)}`
+  );
+  if (ch && ch.type === "PREMIUM")
+    throw new Error(
+      "This chapter is locked on JadeScrolls (premium — it needs coins or a subscription there). Only a short preview is public, so it cannot be converted."
+    );
+  const html = String((ch && ch.content) || "").trim();
+  if (!html) throw new Error("JadeScrolls returned an empty chapter");
+  // The content opens with a "<p>Chapter N</p>" echo of the title, followed by
+  // empty spacer paragraphs — drop both; the EPUB adds its own heading.
+  const cleaned = html.replace(
+    /^<p>\s*Chapter\s+\d+\s*<\/p>\s*(<p>\s*(<br\s*\/?>)?\s*<\/p>\s*)*/i,
+    ""
+  );
+  return cleaned || html;
+}
+
 async function tocNovelFire(url) {
   let base = url.replace(/\/$/, "");
   if (base.endsWith("/chapters")) base = base.slice(0, -"/chapters".length);
@@ -2967,6 +3057,7 @@ function siteKey(hostname) {
   if (host.includes("novelhall.com")) return "novelhall";
   if (host.includes("freewebnovel.com")) return "freewebnovel";
   if (host.includes("novelfire.") || host.includes("findnovel.net") || host.includes("novelcake.") || host.includes("readfromhome.")) return "novelfire";
+  if (host.includes("jadescrolls.com")) return "jadescrolls";
   if (host.includes("novgo.")) return "novgo";
   if (host.includes("cherrymist.cafe")) return "cherrymist";
   if (host.includes("zenithtls.com")) return "zenithtls";
@@ -3023,6 +3114,8 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         return tocFreeWebNovel(tocUrl);
       case "novelfire":
         return tocNovelFire(tocUrl);
+      case "jadescrolls":
+        return tocJadeScrolls(tocUrl);
       case "novgo":
         return tocNovGo(tocUrl);
       case "novelbuddy":
@@ -3185,6 +3278,8 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
         return bodyFreeWebNovel(chapterUrl);
       case "novelfire":
         return bodyNovelFire(chapterUrl);
+      case "jadescrolls":
+        return bodyJadeScrolls(chapterUrl);
       case "novgo":
         return bodyNovGo(chapterUrl);
       case "novelbuddy":
@@ -3269,6 +3364,27 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
 
 /** Fetch metadata (title / author / cover) from a TOC page, best-effort. */
 export async function fetchBookMeta(tocUrl) {
+  // JadeScrolls pages are client-side shells with no book meta in the HTML;
+  // take the meta from the same API the TOC parser uses.
+  try {
+    if (new URL(tocUrl).hostname.includes("jadescrolls.com")) {
+      const slug = new URL(tocUrl).pathname.split("/").filter(Boolean)[1];
+      if (slug) {
+        const novel = await jadescrollsNovel(slug);
+        return {
+          title: novel.title || "",
+          author: novel.author_name || "",
+          cover: novel.cover_image || "",
+          description: String(novel.synopsis || "")
+            .replace(/<[^>]+>/g, " ")
+            .replace(/\s+/g, " ")
+            .trim(),
+        };
+      }
+    }
+  } catch {
+    /* fall through to HTML scraping */
+  }
   try {
     const doc = parseHtml(await getText(tocUrl));
     const pick = (sels) => {
