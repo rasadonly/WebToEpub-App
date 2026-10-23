@@ -589,24 +589,39 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
         },
         body: file,
       });
-      const data = (await resp.json().catch(() => ({}))) as { error?: string };
+      const data = (await resp.json().catch(() => ({}))) as { error?: string; action?: string };
       if (!resp.ok) throw new Error(data.error || `Upload failed (${resp.status})`);
+      const action = data.action || 'saved';
 
       const token = newToken();
-      const body = `${SHARE_MARKER} by ${name}\n\n\u201C${activeThread.title}\u201D is now in the Community Library \u2014 open the Library and search \u201C${activeThread.title}\u201D to download it.\n\nThank you, ${name}, for sharing with the community! \uD83D\uDE4F`;
+      const libraryLine =
+        action === 'duplicate'
+          ? `\u201C${activeThread.title}\u201D was already in the Community Library, so no duplicate copy was saved \u2014 open the Library and search \u201C${activeThread.title}\u201D to download it.`
+          : action === 'replaced'
+            ? `\u201C${activeThread.title}\u201D is now in the Community Library \u2014 this copy is bigger and has more chapters, so it replaced the older edition. Open the Library and search \u201C${activeThread.title}\u201D to download it.`
+            : `\u201C${activeThread.title}\u201D is now in the Community Library \u2014 open the Library and search \u201C${activeThread.title}\u201D to download it.`;
+      const body = `${SHARE_MARKER} by ${name}\n\n${libraryLine}\n\nThank you, ${name}, for sharing with the community! \uD83D\uDE4F`;
       const { data: cData, error } = await supabase
         .from('forum_comments')
         .insert({ thread_id: activeThread.id, body, author_name: name, avatar_url, edit_token: token })
         .select()
         .single();
       if (error || !cData) {
-        throw new Error('The EPUB was saved to the library, but posting the thank-you note failed. Please add a comment so we can credit you.');
+        throw new Error('Posting the thank-you note failed. Please add a comment so we can credit you.');
       }
       saveToken(cData.id, token);
       setComments((prev) => [...prev, cData as Comment]);
       bumpCount(activeThread.id, 1);
       setShares((prev) => ({ ...prev, [activeThread.id]: { by: name, at: new Date().toISOString() } }));
-      toast({ title: 'Thank you for sharing! \uD83D\uDE4F', description: 'The EPUB is now in the Community Library.' });
+      toast({
+        title: 'Thank you for sharing! \uD83D\uDE4F',
+        description:
+          action === 'duplicate'
+            ? 'This book was already in the Community Library, so no duplicate was saved.'
+            : action === 'replaced'
+              ? 'Your copy replaced the older library edition \u2014 bigger, with more chapters.'
+              : 'The EPUB is now in the Community Library.',
+      });
     } catch (e) {
       toast({
         title: 'Share failed',
