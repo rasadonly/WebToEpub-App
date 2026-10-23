@@ -17,11 +17,11 @@ import {
   stealthGet,
   smartGetText,
 } from "./fetcher.js";
-import { buildEpub, sanitizeFilename, writeChapterFile } from "./epub.js";
+import { buildEpub, sanitizeFilename, writeChapterFile, countEpubChapters } from "./epub.js";
 import { createWorkPool, DEFAULT_MAX_ACTIVE_JOBS } from "./workPool.js";
-import { uploadToLibrary, libraryEnabled } from "./library.js";
+import { uploadToLibrary, libraryEnabled, deleteFromLibrary, downloadFromLibrary } from "./library.js";
 import { sendEpub } from "./download.js";
-import { getLibraryIndex, startLibraryIndex } from "./libraryIndex.js";
+import { getLibraryIndex, startLibraryIndex, refreshLibraryIndex } from "./libraryIndex.js";
 
 
 const app = express();
@@ -121,6 +121,30 @@ function isEpubBuffer(buf) {
   return probe.includes("application/epub+zip") && probe.includes("META-INF/container.xml");
 }
 
+/** Same title key the library UI dedupes by (bridge.ts). */
+const libraryTitleKey = (t) => String(t || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+
+/** Title for a stored library file, mirroring prettyTitleFromPath in bridge.ts. */
+function titleFromLibraryPath(p) {
+  const file = String(p || "").split("/").pop() || "";
+  return file
+    .replace(/\.epub(\.txt)?$/i, "")
+    .replace(/-[a-z0-9]{6}$/i, "")
+    .replace(/[_-]+/g, " ")
+    .trim();
+}
+
+/** All stored EPUBs whose derived title matches the given book title. */
+async function findLibraryCopies(title) {
+  const key = libraryTitleKey(title);
+  if (!key) return [];
+  const idx = await getLibraryIndex();
+  if (!idx || !Array.isArray(idx.f)) return [];
+  return idx.f
+    .filter(([p]) => /\.epub$/i.test(p) && libraryTitleKey(titleFromLibraryPath(p)) === key)
+    .map(([p, size]) => ({ path: p, size: typeof size === "number" ? size : 0 }));
+}
+
 const shareAttempts = new Map(); // ip -> [timestamps]
 app.post("/api/library/share", express.raw({ type: "*/*", limit: "45mb" }), async (req, res) => {
   try {
@@ -139,8 +163,59 @@ app.post("/api/library/share", express.raw({ type: "*/*", limit: "45mb" }), asyn
 
     const title = decodeURIComponent(String(req.headers["x-book-title"] || "Shared Book")).slice(0, 160);
     const by = decodeURIComponent(String(req.headers["x-shared-by"] || "Reader")).slice(0, 60);
+
+    // Duplicate handling: if the library already holds this title, don't
+    // store another copy. The upload replaces the stored copies only when
+    // it is strictly better on BOTH measures the owner cares about — a
+    // bigger file AND more chapters than the biggest stored copy. Any doubt
+    // (unreadable EPUB, unknown chapter counts, index unavailable) keeps
+    // the stored copy and simply thanks the sharer.
+    const copies = await findLibraryCopies(title).catch((e) => {
+      console.warn("[library-share] copy lookup failed:", e.message);
+      return [];
+    });
+    if (copies.length) {
+      const biggest = copies.reduce((a, b) => (b.size > a.size ? b : a));
+      let better = false;
+      let newChapters = 0;
+      let oldChapters = 0;
+      if (buf.length > biggest.size) {
+        newChapters = await countEpubChapters(buf);
+        if (newChapters > 0) {
+          const existing = await downloadFromLibrary(biggest.path).catch(() => null);
+          if (existing) {
+            oldChapters = await countEpubChapters(existing);
+            better = oldChapters > 0 && newChapters > oldChapters;
+          }
+        }
+      }
+      if (!better) {
+        return res.json({
+          ok: true,
+          action: "duplicate",
+          path: biggest.path,
+          url: `https://huggingface.co/datasets/prasaduser/webtoepub-library/resolve/main/${biggest.path}?download=true`,
+        });
+      }
+      // Save the better copy first, then remove the old ones, so the title
+      // is never missing from the library in between.
+      const out = await uploadToLibrary(buf, `${title}.epub`, { title, source: "forum-share", author: by });
+      const removed = [];
+      for (const c of copies) {
+        try {
+          await deleteFromLibrary(c.path);
+          removed.push(c.path);
+        } catch (e) {
+          console.error("[library-share] failed to remove old copy", c.path, e.message);
+        }
+      }
+      refreshLibraryIndex();
+      return res.json({ ok: true, action: "replaced", path: out.path, url: out.url, removed, newChapters, oldChapters });
+    }
+
     const out = await uploadToLibrary(buf, `${title}.epub`, { title, source: "forum-share", author: by });
-    res.json({ ok: true, path: out.path, url: out.url });
+    refreshLibraryIndex();
+    res.json({ ok: true, action: "saved", path: out.path, url: out.url });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
