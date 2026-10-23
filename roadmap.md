@@ -5,5 +5,5 @@
 - [x] Test scheduling, EPUB output, and deploy and verify live capacity.
 - [x] Measure and improve NovGo URL loading and verify a sample EPUB download.
 - [x] Fix and verify Library typing delays while preserving Enter-only search.- [x] Stop EPUB reader read-aloud when the reader closes.
-- [ ] Fix unrelated Chinese library matches and verify search results.
-- [ ] Simplify the initial loading message.
+- [x] Fix unrelated Chinese library matches and verify search results.
+- [x] Simplify the initial loading message.
