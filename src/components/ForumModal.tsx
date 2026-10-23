@@ -36,6 +36,9 @@ import {
   BookUp,
   CheckCircle2,
   Upload,
+  Trophy,
+  Check,
+  BookmarkPlus,
 } from 'lucide-react';
 
 interface ForumModalProps {
@@ -89,6 +92,41 @@ function shareFromComment(c: { body: string; author_name: string; created_at: st
   if (!c.body || !c.body.startsWith(SHARE_MARKER)) return null;
   return { by: c.author_name, at: c.created_at };
 }
+
+/* Top Rankings: novels the community ranks by marking them Read / Will Read. */
+interface RankedNovel {
+  id: string;
+  title: string;
+  author: string | null;
+  category: string;
+  added_by: string;
+  created_at: string;
+}
+interface NovelMark {
+  novel_id: string;
+  user_name: string;
+  mark: 'read' | 'will_read';
+}
+
+/* Rankings are split by GENRE (Xianxia, Wuxia, …), not by origin/language. */
+const GENRE_SUGGESTIONS = [
+  'Xianxia',
+  'Xuanhuan',
+  'Wuxia',
+  'Fantasy',
+  'Modern Fantasy',
+  'Sci-Fi',
+  'Game / LitRPG',
+  'Kingdom Building',
+  'Time Loop',
+  'Apocalypse',
+  'Supernatural',
+  'Superhero',
+  'Comedy',
+  'Romance',
+  'Horror',
+  'Mystery',
+];
 
 const TOKENS_KEY = 'forum-edit-tokens';
 const PROFILE_KEY = 'forum-profile';
@@ -222,7 +260,7 @@ function OfficialBadge() {
 
 export function ForumModal({ open, onClose }: ForumModalProps) {
   const { toast } = useToast();
-  const [view, setView] = useState<'list' | 'thread' | 'new'>('list');
+  const [view, setView] = useState<'list' | 'thread' | 'new' | 'rankings'>('list');
   const [threads, setThreads] = useState<Thread[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeThread, setActiveThread] = useState<Thread | null>(null);
@@ -509,6 +547,186 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
     setShareUploading(false);
   };
 
+  // --- Top Rankings ---------------------------------------------------------
+  const [rankedNovels, setRankedNovels] = useState<RankedNovel[]>([]);
+  const [novelMarks, setNovelMarks] = useState<NovelMark[]>([]);
+  const [rankingsLoading, setRankingsLoading] = useState(false);
+  const [rankCategory, setRankCategory] = useState('All');
+  const [newNovelTitle, setNewNovelTitle] = useState('');
+  const [newNovelAuthor, setNewNovelAuthor] = useState('');
+  const [newNovelCategory, setNewNovelCategory] = useState('Xianxia');
+  const [customCategory, setCustomCategory] = useState('');
+  const [addingNovel, setAddingNovel] = useState(false);
+  const [markBusy, setMarkBusy] = useState<string | null>(null);
+
+  const loadRankings = useCallback(async () => {
+    setRankingsLoading(true);
+    const [novelsRes, marksRes] = await Promise.all([
+      supabase
+        .from('ranked_novels')
+        .select('id,title,author,category,added_by,created_at')
+        .order('created_at', { ascending: true })
+        .limit(1000),
+      supabase.from('novel_marks').select('novel_id,user_name,mark').limit(10000),
+    ]);
+    if (novelsRes.error)
+      toast({ title: 'Failed to load rankings', description: novelsRes.error.message, variant: 'destructive' });
+    else setRankedNovels((novelsRes.data as RankedNovel[]) || []);
+    if (!marksRes.error) setNovelMarks((marksRes.data as NovelMark[]) || []);
+    setRankingsLoading(false);
+  }, [toast]);
+
+  useEffect(() => {
+    if (open && view === 'rankings') void loadRankings();
+  }, [open, view, loadRankings]);
+
+  const rankStats = useMemo(() => {
+    const stats = new Map<string, { read: number; will: number }>();
+    for (const m of novelMarks) {
+      const s = stats.get(m.novel_id) || { read: 0, will: 0 };
+      if (m.mark === 'read') s.read++;
+      else s.will++;
+      stats.set(m.novel_id, s);
+    }
+    return stats;
+  }, [novelMarks]);
+
+  const myMarks = useMemo(() => {
+    const me = authorName.trim().toLowerCase();
+    const map = new Map<string, 'read' | 'will_read'>();
+    if (me) for (const m of novelMarks) if (m.user_name.toLowerCase() === me) map.set(m.novel_id, m.mark);
+    return map;
+  }, [novelMarks, authorName]);
+
+  const rankCategories = useMemo(() => {
+    const set = new Set<string>();
+    for (const n of rankedNovels) if (n.category) set.add(n.category);
+    return ['All', ...[...set].sort()];
+  }, [rankedNovels]);
+
+  const genreOptions = useMemo(() => {
+    const set = new Set<string>(GENRE_SUGGESTIONS);
+    for (const n of rankedNovels) if (n.category) set.add(n.category);
+    return [...set].sort();
+  }, [rankedNovels]);
+
+  const rankedList = useMemo(() => {
+    return rankedNovels
+      .filter((n) => rankCategory === 'All' || n.category === rankCategory)
+      .map((n) => ({ novel: n, ...(rankStats.get(n.id) || { read: 0, will: 0 }) }))
+      .sort(
+        (a, b) =>
+          b.read - a.read ||
+          b.will - a.will ||
+          (a.novel.created_at < b.novel.created_at ? -1 : 1)
+      );
+  }, [rankedNovels, rankCategory, rankStats]);
+
+  const getMarkToken = () => {
+    let t = '';
+    try {
+      t = localStorage.getItem('ranking-mark-token') || '';
+      if (!t) {
+        t = newToken();
+        localStorage.setItem('ranking-mark-token', t);
+      }
+    } catch {
+      t = newToken();
+    }
+    return t;
+  };
+
+  const setMark = async (novel: RankedNovel, mark: 'read' | 'will_read' | null) => {
+    const { name } = requireProfile();
+    setMarkBusy(novel.id);
+    if (mark === null) {
+      const { data, error } = await supabase.rpc('remove_novel_mark', {
+        p_novel_id: novel.id,
+        p_user_name: name,
+        p_token: getMarkToken(),
+      });
+      setMarkBusy(null);
+      if (error) {
+        toast({ title: 'Could not remove your mark', description: error.message, variant: 'destructive' });
+        return;
+      }
+      if (data)
+        setNovelMarks((prev) =>
+          prev.filter((m) => !(m.novel_id === novel.id && m.user_name.toLowerCase() === name.toLowerCase()))
+        );
+      return;
+    }
+    const { data, error } = await supabase.rpc('set_novel_mark', {
+      p_novel_id: novel.id,
+      p_user_name: name,
+      p_mark: mark,
+      p_token: getMarkToken(),
+    });
+    setMarkBusy(null);
+    if (error || !data) {
+      toast({ title: 'Could not save your mark', description: error?.message || 'Error', variant: 'destructive' });
+      return;
+    }
+    const row = data as unknown as NovelMark;
+    if (row.mark !== mark) {
+      toast({
+        title: 'That name already marked this novel',
+        description:
+          'Marks are tied to the browser that first used this display name. Use the same browser, or a different display name.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setNovelMarks((prev) => [
+      ...prev.filter((m) => !(m.novel_id === novel.id && m.user_name.toLowerCase() === name.toLowerCase())),
+      row,
+    ]);
+  };
+
+  const addNovel = async () => {
+    const title = newNovelTitle.trim();
+    if (!title) {
+      toast({ title: 'Novel title required', variant: 'destructive' });
+      return;
+    }
+    const category = (newNovelCategory === '__custom' ? customCategory.trim() : newNovelCategory).slice(0, 40);
+    if (!category) {
+      toast({ title: 'Category required', variant: 'destructive' });
+      return;
+    }
+    setAddingNovel(true);
+    const { name } = requireProfile();
+    const { data, error } = await supabase
+      .from('ranked_novels')
+      .insert({
+        title: title.slice(0, 200),
+        author: newNovelAuthor.trim().slice(0, 120) || null,
+        category,
+        added_by: name,
+        edit_token: newToken(),
+      })
+      .select()
+      .single();
+    setAddingNovel(false);
+    if (error || !data) {
+      const dup = (error as { code?: string } | null)?.code === '23505';
+      toast({
+        title: dup ? 'Already on the list' : 'Failed to add novel',
+        description: dup
+          ? 'That title is already ranked — find it below and add your mark instead.'
+          : error?.message || 'Error',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setRankedNovels((prev) => [...prev, data as RankedNovel]);
+    setNewNovelTitle('');
+    setNewNovelAuthor('');
+    setCustomCategory('');
+    setRankCategory(category);
+    toast({ title: 'Added to the rankings', description: 'Now mark it Read or Will Read to cast your vote.' });
+  };
+
   const saveCommentEdit = async (c: Comment) => {
     const token = getTokens()[c.id];
     const admin = token ? '' : promptAdmin();
@@ -653,6 +871,14 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
               >
                 <BookMarked className="w-4 h-4" /> Request a Book
               </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setView('rankings')}
+                className="gap-2 rounded-xl h-9 px-4 font-bold text-xs shrink-0 border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+              >
+                <Trophy className="w-4 h-4" /> Top Rankings
+              </Button>
             </div>
 
             {/* Category Filter Pills */}
@@ -759,6 +985,182 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {/* TOP RANKINGS VIEW */}
+        {view === 'rankings' && (
+          <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-5 w-full">
+            <div className="space-y-1">
+              <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+                <Trophy className="w-5 h-5 text-amber-500" /> Top Novel Rankings
+              </h2>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Ranked by the community: a novel climbs when readers mark it{' '}
+                <span className="font-semibold text-foreground">Already Read</span>. Mark your own reads and your{' '}
+                <span className="font-semibold text-foreground">Will Read</span> list to shape the board — each genre
+                (Xianxia, Wuxia, Fantasy…) has its own ranking.
+              </p>
+            </div>
+
+            <ProfileFields
+              name={authorName}
+              avatar={authorAvatar}
+              onName={setAuthorName}
+              onAvatar={setAuthorAvatar}
+              compact
+            />
+
+            {/* Category pills */}
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+              {rankCategories.map((cat) => {
+                const isSelected = rankCategory === cat;
+                const count =
+                  cat === 'All' ? rankedNovels.length : rankedNovels.filter((n) => n.category === cat).length;
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setRankCategory(cat)}
+                    className={`shrink-0 flex items-center gap-2 rounded-xl px-3.5 py-1.5 text-xs font-semibold border transition-all ${
+                      isSelected
+                        ? 'bg-primary text-primary-foreground border-primary shadow-xs'
+                        : 'bg-card text-muted-foreground border-border/70 hover:border-primary/40 hover:bg-muted/50 hover:text-foreground'
+                    }`}
+                  >
+                    <span>{cat === 'All' ? 'All Genres' : cat}</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${isSelected ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-muted-foreground'}`}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Add a novel */}
+            <div className="bg-card border border-border/80 rounded-2xl p-4 shadow-sm space-y-3">
+              <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                <Plus className="w-4 h-4 text-primary" /> Add your favourite novel
+              </h3>
+              <div className="grid sm:grid-cols-2 gap-2">
+                <Input
+                  value={newNovelTitle}
+                  onChange={(e) => setNewNovelTitle(e.target.value)}
+                  maxLength={200}
+                  placeholder="Novel title (exact)"
+                  className="h-10 text-sm rounded-xl bg-background border-border/80"
+                />
+                <Input
+                  value={newNovelAuthor}
+                  onChange={(e) => setNewNovelAuthor(e.target.value)}
+                  maxLength={120}
+                  placeholder="Author (optional)"
+                  className="h-10 text-sm rounded-xl bg-background border-border/80"
+                />
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Select value={newNovelCategory} onValueChange={setNewNovelCategory}>
+                  <SelectTrigger className="h-10 rounded-xl bg-background border-border/80 sm:w-56">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="z-[120]">
+                    {genreOptions.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="__custom">New genre…</SelectItem>
+                  </SelectContent>
+                </Select>
+                {newNovelCategory === '__custom' && (
+                  <Input
+                    value={customCategory}
+                    onChange={(e) => setCustomCategory(e.target.value)}
+                    maxLength={40}
+                    placeholder="e.g. Wuxia, Horror, Romance…"
+                    className="h-10 text-sm rounded-xl bg-background border-border/80 flex-1"
+                  />
+                )}
+                <Button
+                  type="button"
+                  onClick={addNovel}
+                  disabled={addingNovel || !newNovelTitle.trim()}
+                  className="gap-2 rounded-xl text-xs font-bold h-10"
+                >
+                  {addingNovel ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Add Novel
+                </Button>
+              </div>
+            </div>
+
+            {/* Ranked list */}
+            {rankingsLoading ? (
+              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground py-10">
+                <Loader2 className="w-4 h-4 animate-spin text-primary" /> Loading rankings…
+              </div>
+            ) : rankedList.length === 0 ? (
+              <div className="p-8 text-center border border-dashed border-border/80 rounded-2xl bg-card/40 space-y-1">
+                <p className="text-sm font-semibold text-muted-foreground">No novels here yet.</p>
+                <p className="text-xs text-muted-foreground/70">Add the first one above and mark it Read.</p>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-border/80 bg-card divide-y divide-border/60 overflow-hidden shadow-xs">
+                {rankedList.map(({ novel, read, will }, idx) => {
+                  const mine = myMarks.get(novel.id);
+                  const busy = markBusy === novel.id;
+                  return (
+                    <div key={novel.id} className="flex items-center gap-3 px-4 py-3">
+                      <span
+                        className={`w-8 h-8 shrink-0 grid place-items-center rounded-lg text-sm font-extrabold border ${
+                          idx === 0
+                            ? 'bg-amber-500/15 text-amber-500 border-amber-500/30'
+                            : idx === 1
+                              ? 'bg-slate-400/15 text-slate-400 border-slate-400/30'
+                              : idx === 2
+                                ? 'bg-orange-700/15 text-orange-600 border-orange-700/30'
+                                : 'bg-muted text-muted-foreground border-border/60'
+                        }`}
+                      >
+                        {idx + 1}
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block font-semibold text-sm text-foreground truncate">{novel.title}</span>
+                        <span className="block text-[11px] text-muted-foreground truncate">
+                          {novel.author || 'Unknown author'} · {novel.category} · added by {novel.added_by}
+                        </span>
+                      </span>
+                      <span className="flex gap-1.5 shrink-0">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={mine === 'read' ? 'default' : 'outline'}
+                          disabled={busy}
+                          onClick={() => void setMark(novel, mine === 'read' ? null : 'read')}
+                          className="h-8 rounded-lg text-[11px] font-bold gap-1"
+                        >
+                          <Check className="w-3.5 h-3.5" /> Read · {read}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={mine === 'will_read' ? 'default' : 'outline'}
+                          disabled={busy}
+                          onClick={() => void setMark(novel, mine === 'will_read' ? null : 'will_read')}
+                          className="h-8 rounded-lg text-[11px] font-bold gap-1"
+                        >
+                          <BookmarkPlus className="w-3.5 h-3.5" /> Will Read · {will}
+                        </Button>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Your marks are saved under your forum display name on this browser. Tap your active mark again to
+              remove it, or tap the other button to switch.
+            </p>
           </div>
         )}
 
