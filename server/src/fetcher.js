@@ -577,6 +577,35 @@ async function bodyJadeScrolls(url) {
 const RIDI_GQL = "https://api.ridibooks.com/graphql";
 const RIDI_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
+// Ridi's edge refuses sparse requests from datacenter IPs (HTTP 403), so
+// every call carries the full browser header set a real visit would send.
+const RIDI_PAGE_HEADERS = {
+  "User-Agent": RIDI_UA,
+  Accept:
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+  "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+  "Cache-Control": "no-cache",
+  Pragma: "no-cache",
+  "Upgrade-Insecure-Requests": "1",
+  "Sec-Fetch-Dest": "document",
+  "Sec-Fetch-Mode": "navigate",
+  "Sec-Fetch-Site": "none",
+  "Sec-Fetch-User": "?1",
+  "Sec-Ch-Ua": '"Chromium";v="126", "Google Chrome";v="126", "Not-A.Brand";v="99"',
+  "Sec-Ch-Ua-Mobile": "?0",
+  "Sec-Ch-Ua-Platform": '"Windows"',
+};
+const RIDI_API_HEADERS = {
+  "User-Agent": RIDI_UA,
+  Accept: "application/json",
+  "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+  "Sec-Fetch-Dest": "empty",
+  "Sec-Fetch-Mode": "cors",
+  "Sec-Fetch-Site": "same-origin",
+  "Sec-Ch-Ua": '"Chromium";v="126", "Google Chrome";v="126", "Not-A.Brand";v="99"',
+  "Sec-Ch-Ua-Mobile": "?0",
+  "Sec-Ch-Ua-Platform": '"Windows"',
+};
 const RIDI_EPISODE_QUERY = `query BookDetailHomeEpisodeBooksPagination($id: UUID!, $context: BookDetailHomeEpisodeBookListCellContext!) {
   riGrid { cells { bookDetailHome { episodeBookListCell(id: $id, context: $context) { cell {
     books { bookId title price { sellingPrice } }
@@ -588,9 +617,10 @@ async function ridiGql(query, variables) {
   const res = await fetch(RIDI_GQL, {
     method: "POST",
     headers: {
-      "User-Agent": RIDI_UA,
+      ...RIDI_API_HEADERS,
       "Content-Type": "application/json",
-      Accept: "application/json",
+      Origin: "https://ridibooks.com",
+      Referer: "https://ridibooks.com/",
     },
     body: JSON.stringify({ query, variables }),
     signal: AbortSignal.timeout(30000),
@@ -619,7 +649,7 @@ function ridiSeriesId(url) {
 // cell (first episodes + the cell id the GraphQL pager needs).
 async function ridiSeriesPage(seriesId) {
   const res = await fetch(`https://ridibooks.com/books/${seriesId}`, {
-    headers: { "User-Agent": RIDI_UA, Accept: "text/html" },
+    headers: RIDI_PAGE_HEADERS,
     signal: AbortSignal.timeout(30000),
   });
   if (!res.ok) throw new Error(`Ridibooks: series page HTTP ${res.status}`);
@@ -715,9 +745,8 @@ async function bodyRidibooks(url) {
   const res = await fetch("https://ridibooks.com/api/web-viewer/generate", {
     method: "POST",
     headers: {
-      "User-Agent": RIDI_UA,
+      ...RIDI_API_HEADERS,
       "Content-Type": "application/json",
-      Accept: "application/json",
       Origin: "https://ridibooks.com",
       Referer: `https://ridibooks.com/books/${bookId}/view`,
     },
