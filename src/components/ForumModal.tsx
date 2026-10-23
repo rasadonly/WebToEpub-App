@@ -1110,34 +1110,38 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
                   const mine = myMarks.get(novel.id);
                   const busy = markBusy === novel.id;
                   return (
-                    <div key={novel.id} className="flex items-center gap-3 px-4 py-3">
-                      <span
-                        className={`w-8 h-8 shrink-0 grid place-items-center rounded-lg text-sm font-extrabold border ${
-                          idx === 0
-                            ? 'bg-amber-500/15 text-amber-500 border-amber-500/30'
-                            : idx === 1
-                              ? 'bg-slate-400/15 text-slate-400 border-slate-400/30'
-                              : idx === 2
-                                ? 'bg-orange-700/15 text-orange-600 border-orange-700/30'
-                                : 'bg-muted text-muted-foreground border-border/60'
-                        }`}
-                      >
-                        {idx + 1}
-                      </span>
-                      <span className="flex-1 min-w-0">
-                        <span className="block font-semibold text-sm text-foreground truncate">{novel.title}</span>
-                        <span className="block text-[11px] text-muted-foreground truncate">
-                          {novel.author || 'Unknown author'} · {novel.category} · added by {novel.added_by}
+                    <div key={novel.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-3">
+                      <div className="flex items-start gap-3 min-w-0 sm:flex-1">
+                        <span
+                          className={`w-8 h-8 shrink-0 grid place-items-center rounded-lg text-sm font-extrabold border ${
+                            idx === 0
+                              ? 'bg-amber-500/15 text-amber-500 border-amber-500/30'
+                              : idx === 1
+                                ? 'bg-slate-400/15 text-slate-400 border-slate-400/30'
+                                : idx === 2
+                                  ? 'bg-orange-700/15 text-orange-600 border-orange-700/30'
+                                  : 'bg-muted text-muted-foreground border-border/60'
+                          }`}
+                        >
+                          {idx + 1}
                         </span>
-                      </span>
-                      <span className="flex gap-1.5 shrink-0">
+                        <span className="flex-1 min-w-0">
+                          <span className="block font-semibold text-sm text-foreground break-words sm:truncate">
+                            {novel.title}
+                          </span>
+                          <span className="block text-[11px] text-muted-foreground break-words sm:truncate">
+                            {novel.author || 'Unknown author'} · {novel.category} · added by {novel.added_by}
+                          </span>
+                        </span>
+                      </div>
+                      <span className="flex gap-1.5 shrink-0 pl-11 sm:pl-0">
                         <Button
                           type="button"
                           size="sm"
                           variant={mine === 'read' ? 'default' : 'outline'}
                           disabled={busy}
                           onClick={() => void setMark(novel, mine === 'read' ? null : 'read')}
-                          className="h-8 rounded-lg text-[11px] font-bold gap-1"
+                          className="h-8 rounded-lg text-[11px] font-bold gap-1 flex-1 sm:flex-none"
                         >
                           <Check className="w-3.5 h-3.5" /> Read · {read}
                         </Button>
@@ -1147,7 +1151,7 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
                           variant={mine === 'will_read' ? 'default' : 'outline'}
                           disabled={busy}
                           onClick={() => void setMark(novel, mine === 'will_read' ? null : 'will_read')}
-                          className="h-8 rounded-lg text-[11px] font-bold gap-1"
+                          className="h-8 rounded-lg text-[11px] font-bold gap-1 flex-1 sm:flex-none"
                         >
                           <BookmarkPlus className="w-3.5 h-3.5" /> Will Read · {will}
                         </Button>
