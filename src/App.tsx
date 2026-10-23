@@ -125,6 +125,9 @@ const App = () => (
             <Route path="/sites" element={<SitesPage />} />
             <Route path="/guide" element={<GuidePage />} />
             <Route path="/privacy" element={<PrivacyPage />} />
+            {/* Deep links: the forum modal auto-opens at the right board (see GlobalModals) */}
+            <Route path="/rankings" element={<Index />} />
+            <Route path="/requests" element={<Index />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
