@@ -195,6 +195,7 @@ interface BookCardProps {
         {state === 'loading' && progress > 0 && <span className="tabular-nums">{progress}%</span>}
         {state === 'loading' && progress === 0 && <RefreshCw className="w-3 h-3 animate-spin" />}
         {state === 'done' && <CheckCircle2 className="w-3 h-3 mr-1" />}
+        {state === 'idle' && <Download className="w-3 h-3 mr-1" />}
         {state === 'done' ? 'Done' : state === 'idle' ? 'EPUB' : ''}
       </Button>
     </div>
