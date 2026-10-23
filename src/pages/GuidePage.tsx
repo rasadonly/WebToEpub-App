@@ -75,7 +75,7 @@ export default function GuidePage() {
           Below are the specifics for the ones people ask about most.
         </p>
         <p className="text-muted-foreground mb-8 text-sm">
-          Don't see your site? <Link to="/sites" className="text-primary hover:underline">Check the full site list</Link> — 380+ are supported.
+          Don't see your site? <Link to="/sites" className="text-primary hover:underline">Check the full site list</Link> — 650+ are supported.
           If it's not there either, paste it anyway. The AI fallback handles most novel sites automatically.
         </p>
 

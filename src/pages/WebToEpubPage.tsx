@@ -135,7 +135,7 @@ export default function WebToEpubPage() {
           </div>
           <div className="text-center pt-2">
             <Link to="/sites" className="text-xs font-semibold text-primary hover:underline inline-flex items-center gap-1">
-              View complete list of 380+ supported sites <ArrowRight className="w-3 h-3" />
+              View complete list of 650+ supported sites <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
         </section>
@@ -150,7 +150,7 @@ export default function WebToEpubPage() {
             <span>·</span>
             <Link to="/alternatives" className="text-primary hover:underline">WebToEpub Alternative</Link>
             <span>·</span>
-            <Link to="/sites" className="text-primary hover:underline">380+ Supported Sites</Link>
+            <Link to="/sites" className="text-primary hover:underline">650+ Supported Sites</Link>
             <span>·</span>
             <Link to="/guide" className="text-primary hover:underline">EPUB Conversion Guide</Link>
           </div>

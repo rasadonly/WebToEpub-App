@@ -66,7 +66,7 @@ export default function ProgressLog({ progress, logs, onStop, serverJob, onDownl
             <h3 className={`font-semibold ${getStatusColor()}`}>
               {progress.message || 'Ready to convert'}
             </h3>
-            {progress.totalChapters > 0 && (
+            {progress.totalChapters > 0 && progress.currentChapter > 0 && (
               <p className="text-sm text-muted-foreground">
                 Chapter {progress.currentChapter} of {progress.totalChapters}
               </p>
@@ -92,7 +92,7 @@ export default function ProgressLog({ progress, logs, onStop, serverJob, onDownl
         </div>
 
         {/* Progress Bar */}
-        {progress.status !== 'idle' && progress.status !== 'error' && progress.totalChapters > 0 && (
+        {progress.status !== 'idle' && progress.status !== 'error' && progress.totalChapters > 0 && progress.currentChapter > 0 && (
           <div className="space-y-2">
             <Progress 
               value={progressPercentage} 

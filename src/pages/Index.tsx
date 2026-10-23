@@ -140,6 +140,68 @@ const Index = () => {
           </div>
         )}
 
+        {/* ── FAQ Section (matches JSON-LD in index.html) ── */}
+        <section className="pt-8 sm:pt-16 pb-4">
+          <h2 className="font-display text-xl sm:text-2xl font-bold text-center mb-6">
+            Frequently Asked Questions
+          </h2>
+          <div className="max-w-2xl mx-auto space-y-3">
+            {[
+              {
+                q: 'How do I convert a web novel to EPUB?',
+                a: 'Paste the novel\u2019s table of contents URL into LinkToEpub, click Fetch, optionally pick a chapter range, then click Generate EPUB to download the file.',
+              },
+              {
+                q: 'Which web novel sites are supported?',
+                a: 'LinkToEpub supports 650+ sites including Royal Road, NovelBin, NovelFull, NovelFire, WTR-LAB, Scribble Hub, FreeWebNovel, WebNovel and many more.',
+              },
+              {
+                q: 'Is LinkToEpub free?',
+                a: 'Yes. LinkToEpub is completely free to use, runs in your browser, and does not require an account or registration.',
+              },
+              {
+                q: 'Will the EPUB work on my Kindle or e-reader?',
+                a: 'Yes. The generated EPUB uses standard EPUB 3 formatting and works on Kindle (via Send to Kindle), Kobo, Apple Books, Google Play Books and most e-readers.',
+              },
+              {
+                q: 'How do I convert a Royal Road novel to EPUB?',
+                a: 'Go to the novel\u2019s main page on Royal Road (royalroad.com/fiction/XXXXX), copy the URL, paste it into LinkToEpub, click Fetch Chapters, then Generate EPUB.',
+              },
+              {
+                q: 'Can I select specific chapters to download?',
+                a: 'Yes. After fetching the chapter list, use the Chapter Range selector to choose a start and end chapter. This is useful for downloading specific arcs of long novels.',
+              },
+              {
+                q: 'Does LinkToEpub store my novels?',
+                a: 'No. Generated EPUB files are temporarily stored on our server for download and automatically deleted within 6 hours. Novel content is never stored in a database.',
+              },
+              {
+                q: 'What if my site isn\u2019t supported?',
+                a: 'LinkToEpub includes an AI fallback that automatically detects chapter structure on unsupported sites. Just paste the URL and try \u2014 it works on most novel sites even without an explicit parser.',
+              },
+            ].map(({ q, a }) => (
+              <details
+                key={q}
+                className="group rounded-xl border border-border bg-card overflow-hidden transition-all hover:border-primary/30"
+              >
+                <summary className="flex items-center justify-between cursor-pointer px-4 sm:px-5 py-3.5 text-sm font-semibold text-foreground select-none list-none [&::-webkit-details-marker]:hidden">
+                  {q}
+                  <span className="ml-3 text-muted-foreground transition-transform group-open:rotate-45 text-lg leading-none shrink-0">+</span>
+                </summary>
+                <div className="px-4 sm:px-5 pb-4 text-sm text-muted-foreground leading-relaxed border-t border-border pt-3">
+                  {a}
+                </div>
+              </details>
+            ))}
+          </div>
+          <p className="text-center text-xs text-muted-foreground mt-6">
+            Have another question?{' '}
+            <Link to="/guide" className="text-primary hover:underline">
+              Read the full guide
+            </Link>
+          </p>
+        </section>
+
       </main>
     </div>
   );

@@ -1,8 +1,8 @@
 # Link2Epub
 
-> Free online web novel to EPUB converter. Paste a table of contents URL and download a clean, device-ready EPUB. Supports 380+ novel sites.
+> Free online web novel to EPUB converter. Paste a table of contents URL and download a clean, device-ready EPUB. Supports 650+ novel sites.
 
-Link2Epub runs entirely in the browser. No account or install required. Built on the WebToEpub parser engine with support for Novelfull, NovelBin, NovelFire, WTR-LAB, Royal Road, Scribble Hub, FreeWebNovel and 380+ other web novel sites.
+Link2Epub runs entirely in the browser. No account or install required. Built on the WebToEpub parser engine with support for Novelfull, NovelBin, NovelFire, WTR-LAB, Royal Road, Scribble Hub, FreeWebNovel and 650+ other web novel sites.
 
 ## Core
 
@@ -10,7 +10,7 @@ Link2Epub runs entirely in the browser. No account or install required. Built on
 
 ## Features
 
-- 380+ supported web novel sites via the WebToEpub parser engine
+- 650+ supported web novel sites via the WebToEpub parser engine
 - Chapter range selection, reordering, and deletion
 - Custom metadata: title, author, description, cover image, filename
 - Font selection with reader-friendly defaults (Merriweather, Georgia, etc.)
