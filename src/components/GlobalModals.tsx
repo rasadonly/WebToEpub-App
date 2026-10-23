@@ -14,6 +14,7 @@ export function GlobalModals() {
   const [epubReaderOpen, setEpubReaderOpen] = useState(false);
   const [liveReaderOpen, setLiveReaderOpen] = useState(false);
   const [forumOpen, setForumOpen] = useState(false);
+  const [forumEntry, setForumEntry] = useState<'list' | 'rankings' | 'requests'>('list');
   const [liveReaderUrl, setLiveReaderUrl] = useState('');
 
   useEffect(() => {
@@ -23,7 +24,16 @@ export function GlobalModals() {
       else if (detail === 'admin') setAdminOpen(true);
       else if (detail === 'library') setLibraryOpen(true);
       else if (detail === 'epub-reader') setEpubReaderOpen(true);
-      else if (detail === 'forum') setForumOpen(true);
+      else if (detail === 'forum') {
+        setForumEntry('list');
+        setForumOpen(true);
+      } else if (detail === 'forum-rankings') {
+        setForumEntry('rankings');
+        setForumOpen(true);
+      } else if (detail === 'forum-requests') {
+        setForumEntry('requests');
+        setForumOpen(true);
+      }
       else if (detail === 'live-reader') {
         setLiveReaderUrl('');
         setLiveReaderOpen(true);
@@ -33,6 +43,24 @@ export function GlobalModals() {
     return () => window.removeEventListener('open-modal', handleOpenModal);
   }, []);
 
+  // Shareable deep links: /#/rankings and /#/requests open the forum at the
+  // right board (the static /rankings and /requests pages redirect here).
+  useEffect(() => {
+    const checkHash = () => {
+      const h = window.location.hash;
+      if (h === '#/rankings' || h.startsWith('#/rankings?')) {
+        setForumEntry('rankings');
+        setForumOpen(true);
+      } else if (h === '#/requests' || h.startsWith('#/requests?')) {
+        setForumEntry('requests');
+        setForumOpen(true);
+      }
+    };
+    checkHash();
+    window.addEventListener('hashchange', checkHash);
+    return () => window.removeEventListener('hashchange', checkHash);
+  }, []);
+
   return (
     <Suspense fallback={null}>
       {supportedOpen && <SupportedSites open={supportedOpen} onOpenChange={setSupportedOpen} hideTrigger />}
@@ -40,7 +68,14 @@ export function GlobalModals() {
       {libraryOpen && <LibraryModal open={libraryOpen} onClose={() => setLibraryOpen(false)} />}
       {epubReaderOpen && <EpubReaderModal open={epubReaderOpen} onClose={() => setEpubReaderOpen(false)} />}
       {liveReaderOpen && <LiveReaderModal open={liveReaderOpen} url={liveReaderUrl} onClose={() => setLiveReaderOpen(false)} />}
-      {forumOpen && <ForumModal open={forumOpen} onClose={() => setForumOpen(false)} />}
+      {forumOpen && (
+        <ForumModal
+          open={forumOpen}
+          onClose={() => setForumOpen(false)}
+          initialView={forumEntry === 'rankings' ? 'rankings' : 'list'}
+          initialCategory={forumEntry === 'requests' ? 'book_request' : undefined}
+        />
+      )}
     </Suspense>
   );
 }

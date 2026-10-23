@@ -44,6 +44,10 @@ import {
 interface ForumModalProps {
   open: boolean;
   onClose: () => void;
+  /** Deep-link entry point: open straight into a view (e.g. from /rankings). */
+  initialView?: 'list' | 'rankings';
+  /** Deep-link entry point: preselect a category filter (e.g. book_request from /requests). */
+  initialCategory?: Category;
 }
 
 type Category = 'report_error' | 'new_site' | 'general' | 'book_request';
@@ -258,15 +262,17 @@ function OfficialBadge() {
   );
 }
 
-export function ForumModal({ open, onClose }: ForumModalProps) {
+export function ForumModal({ open, onClose, initialView, initialCategory }: ForumModalProps) {
   const { toast } = useToast();
-  const [view, setView] = useState<'list' | 'thread' | 'new' | 'rankings'>('list');
+  const [view, setView] = useState<'list' | 'thread' | 'new' | 'rankings'>(
+    initialView === 'rankings' ? 'rankings' : 'list'
+  );
   const [threads, setThreads] = useState<Thread[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeThread, setActiveThread] = useState<Thread | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [loadingComments, setLoadingComments] = useState(false);
-  const [filter, setFilter] = useState<'all' | Category>('all');
+  const [filter, setFilter] = useState<'all' | Category>(initialCategory ?? 'all');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Profile
