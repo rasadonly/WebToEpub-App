@@ -592,7 +592,11 @@ async function convertJob(job, { tocUrl, providedChapters, metadata, options, se
 
   // wtr-lab meters anonymous reads per IP behind Cloudflare Turnstile, so it
   // must be crawled gently; other sites can use the full pool.
-  const gentle = /wtr-lab\.com/i.test(list[0]?.url || "");
+  // snowytranslations.com throttles the server IP after a burst of its heavy
+  // ~250 KB chapter pages: at full concurrency every fetch fell into the
+  // multi-proxy retry cascade and the job appeared stuck (observed frozen at
+  // 33 of 317 with all 16 pool slots wedged). Gentle pacing avoids the burst.
+  const gentle = /wtr-lab\.com|snowytranslations\.com/i.test(list[0]?.url || "");
   const poolSize = gentle ? 2 : CONCURRENCY;
 
   const results = await mapPool(list, poolSize, async (c, i) => {
