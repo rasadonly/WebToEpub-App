@@ -1,4 +1,5 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
+import { ChunkBoundary } from '@/components/ChunkBoundary';
 
 const SupportedSites = lazy(() => import('@/components/SupportedSites').then(m => ({ default: m.SupportedSites })));
 const AdminPanel = lazy(() => import('@/components/AdminPanel').then(m => ({ default: m.AdminPanel })));
@@ -62,6 +63,7 @@ export function GlobalModals() {
   }, []);
 
   return (
+    <ChunkBoundary>
     <Suspense fallback={null}>
       {supportedOpen && <SupportedSites open={supportedOpen} onOpenChange={setSupportedOpen} hideTrigger />}
       {adminOpen && <AdminPanel open={adminOpen} onOpenChange={setAdminOpen} hideTrigger />}
@@ -76,5 +78,6 @@ export function GlobalModals() {
         />
       )}
     </Suspense>
+    </ChunkBoundary>
   );
 }
