@@ -8,6 +8,11 @@ Link2Epub runs entirely in the browser. No account or install required. Built on
 
 - [App](https://linktoepub.com/): Paste TOC URL, fetch chapters, select range, generate EPUB.
 
+## Community
+
+- [Top Novel Rankings](https://linktoepub.com/rankings): Community genre rankings (Xianxia, Xuanhuan, Wuxia, Fantasy, Sci-Fi, LitRPG and more). Mark novels Already Read or Will Read to rank them.
+- [Request a Book](https://linktoepub.com/requests): Ask the community to share an EPUB; shared books are added to the community library and sharers are thanked by name.
+
 ## Features
 
 - 650+ supported web novel sites via the WebToEpub parser engine

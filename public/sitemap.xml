@@ -32,6 +32,17 @@
     <changefreq>weekly</changefreq>
     <priority>0.90</priority>
   </url>
+  <!-- Community -->
+  <url>
+    <loc>https://linktoepub.com/rankings</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.85</priority>
+  </url>
+  <url>
+    <loc>https://linktoepub.com/requests</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.85</priority>
+  </url>
   <!-- Static subpages -->
   <url>
     <loc>https://linktoepub.com/convert</loc>
