@@ -22,3 +22,8 @@ node_modules
 *.njsproj
 *.sln
 *.sw?
+# Telegram session and temporary files
+tg_downloads/
+tg_session.session
+tg_session.session-journal
+tg_upload_progress.json
