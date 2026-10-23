@@ -565,6 +565,219 @@ async function bodyJadeScrolls(url) {
   return cleaned || html;
 }
 
+// ---- Ridibooks (ridibooks.com) ----
+// Ridi is a Next.js app. A series page (ridibooks.com/books/{seriesId})
+// server-renders the book header and the first episodes into __NEXT_DATA__
+// (the riGrid cells); the remaining episodes come from the site's public
+// GraphQL API (api.ridibooks.com/graphql), paged 100 at a time. Chapter
+// text comes from the web viewer: POST /api/web-viewer/generate returns
+// signed spine files ({value: html}). Free episodes work anonymously;
+// paid episodes answer INVALID_ACCESS and app-only titles answer
+// BOOK_NOT_SUPPORTED_ON_WEB_VIEWER — both fail with a clear error.
+const RIDI_GQL = "https://api.ridibooks.com/graphql";
+const RIDI_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
+const RIDI_EPISODE_QUERY = `query BookDetailHomeEpisodeBooksPagination($id: UUID!, $context: BookDetailHomeEpisodeBookListCellContext!) {
+  riGrid { cells { bookDetailHome { episodeBookListCell(id: $id, context: $context) { cell {
+    books { bookId title price { sellingPrice } }
+    pagination { nextPage { order offset limit } }
+    seriesId
+  } } } } } }`;
+
+async function ridiGql(query, variables) {
+  const res = await fetch(RIDI_GQL, {
+    method: "POST",
+    headers: {
+      "User-Agent": RIDI_UA,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ query, variables }),
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!res.ok) throw new Error(`Ridibooks API HTTP ${res.status}`);
+  const json = await res.json();
+  if (json.errors && json.errors.length)
+    throw new Error(
+      `Ridibooks API: ${json.errors[0].message || "unknown error"}`
+    );
+  return json.data;
+}
+
+function ridiSeriesId(url) {
+  const parts = new URL(url).pathname.split("/").filter(Boolean);
+  const id = parts[0] === "books" ? parts[1] : null;
+  if (!id || !/^\d+$/.test(id))
+    throw new Error(
+      "Ridibooks: could not read the book id from the URL — paste a series page like https://ridibooks.com/books/3302009326"
+    );
+  return id;
+}
+
+// Fetch the series page once and pull the SSR'd riGrid cells out of
+// __NEXT_DATA__: the header (title / author / cover) and the episode-list
+// cell (first episodes + the cell id the GraphQL pager needs).
+async function ridiSeriesPage(seriesId) {
+  const res = await fetch(`https://ridibooks.com/books/${seriesId}`, {
+    headers: { "User-Agent": RIDI_UA, Accept: "text/html" },
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!res.ok) throw new Error(`Ridibooks: series page HTTP ${res.status}`);
+  const html = await res.text();
+  const m = html.match(
+    /<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/
+  );
+  if (!m)
+    throw new Error(
+      "Ridibooks: the series page did not contain its data block (has the layout changed?)"
+    );
+  let data;
+  try {
+    data = JSON.parse(m[1]);
+  } catch {
+    throw new Error("Ridibooks: could not parse the series page data");
+  }
+  const cells =
+    (data &&
+      data.props &&
+      data.props.pageProps &&
+      data.props.pageProps.sectionProps &&
+      data.props.pageProps.sectionProps.gridQuery &&
+      data.props.pageProps.sectionProps.gridQuery.riGrid &&
+      data.props.pageProps.sectionProps.gridQuery.riGrid.grid &&
+      data.props.pageProps.sectionProps.gridQuery.riGrid.grid.cells) ||
+    [];
+  let header = null;
+  let episodeCell = null;
+  let episodeCellId = null;
+  for (const c of cells) {
+    if (c.type === "BookDetailHomeHeader")
+      header = c.cell__BookDetailHomeHeader || null;
+    if (c.type === "BookDetailHomeEpisodeBookList") {
+      episodeCell = c.cell__BookDetailHomeEpisodeBookList || null;
+      episodeCellId = c.id || null;
+    }
+  }
+  return { header, episodeCell, episodeCellId, html };
+}
+
+async function tocRidibooks(url) {
+  const seriesId = ridiSeriesId(url);
+  const { episodeCell, episodeCellId } = await ridiSeriesPage(seriesId);
+  if (!episodeCell || !episodeCellId)
+    throw new Error(
+      "Ridibooks: this page has no episode list — it looks like a single ebook, not a serialized novel. Paste the series page URL (the one that lists the episodes)."
+    );
+  const byId = new Map();
+  const addBooks = (books) => {
+    for (const b of books || [])
+      if (b && b.bookId) byId.set(String(b.bookId), b);
+  };
+  addBooks(episodeCell.books);
+  let next = (episodeCell.pagination || {}).nextPage || null;
+  let guard = 0;
+  while (next && guard++ < 60) {
+    const data = await ridiGql(RIDI_EPISODE_QUERY, {
+      id: episodeCellId,
+      context: {
+        bookId: String(episodeCell.seriesId || seriesId),
+        deviceType: "DESKTOP",
+        tabType: "RENT",
+        order: "SEQUENTIAL",
+        pagination: { offset: next.offset, limit: next.limit || 100 },
+      },
+    });
+    const cell =
+      data &&
+      data.riGrid &&
+      data.riGrid.cells &&
+      data.riGrid.cells.bookDetailHome &&
+      data.riGrid.cells.bookDetailHome.episodeBookListCell &&
+      data.riGrid.cells.bookDetailHome.episodeBookListCell.cell;
+    if (!cell) break;
+    addBooks(cell.books);
+    next = (cell.pagination || {}).nextPage || null;
+  }
+  const items = [...byId.values()].map((b) => ({
+    url: `https://ridibooks.com/books/${b.bookId}/view`,
+    title: String(b.title || "").trim() || `Episode ${b.bookId}`,
+  }));
+  if (!items.length)
+    throw new Error("Ridibooks: the episode list came back empty");
+  return items;
+}
+
+async function bodyRidibooks(url) {
+  const parts = new URL(url).pathname.split("/").filter(Boolean);
+  const bookId = parts[0] === "books" ? parts[1] : null;
+  if (!bookId || !/^\d+$/.test(bookId))
+    throw new Error("Ridibooks: bad chapter URL");
+  const res = await fetch("https://ridibooks.com/api/web-viewer/generate", {
+    method: "POST",
+    headers: {
+      "User-Agent": RIDI_UA,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      Origin: "https://ridibooks.com",
+      Referer: `https://ridibooks.com/books/${bookId}/view`,
+    },
+    body: JSON.stringify({ book_id: bookId }),
+    signal: AbortSignal.timeout(60000),
+  });
+  const json = await res.json().catch(() => null);
+  if (!json || !json.success) {
+    const code = (json && json.error && json.error.code) || "";
+    if (code === "INVALID_ACCESS")
+      throw new Error(
+        "This episode is not free to read on Ridibooks (it needs a rental, purchase, or wait-free unlock) — only the free preview episodes can be converted."
+      );
+    if (code === "BOOK_NOT_SUPPORTED_ON_WEB_VIEWER")
+      throw new Error(
+        "This title is not available in Ridibooks' web viewer (app-only), so its text cannot be read."
+      );
+    throw new Error(
+      `Ridibooks viewer refused the episode${
+        json && json.message ? `: ${json.message}` : ""
+      }`
+    );
+  }
+  const data = json.data || {};
+  if (data.type === "comic")
+    throw new Error(
+      "This Ridibooks title is a webtoon (images), not a text novel — LinkToEpub converts text novels."
+    );
+  if (data.type !== "epub" || !Array.isArray(data.spines) || !data.spines.length)
+    throw new Error("Ridibooks viewer returned no readable content for this episode");
+  let raw = "";
+  for (const spineUrl of data.spines) {
+    const r = await fetch(spineUrl, {
+      headers: { "User-Agent": RIDI_UA },
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!r.ok) throw new Error(`Ridibooks chapter file HTTP ${r.status}`);
+    const j = await r.json().catch(() => null);
+    if (j && typeof j.value === "string") raw += j.value;
+  }
+  // Spine files are full <html> documents: keep only the <body> contents.
+  const bodies = [...raw.matchAll(/<body[^>]*>([\s\S]*?)<\/body>/gi)].map(
+    (mm) => mm[1]
+  );
+  let html = bodies.length ? bodies.join("\n") : raw;
+  // Strip Ridi's invisible watermark characters (zero-width and word-joiner
+  // codepoints seeded through the text as an anti-copy measure).
+  html = html.replace(/[\u200B-\u200D\u2060-\u2064\uFEFF]/g, "");
+  // Drop the episode-title echo paragraph (the EPUB adds its own heading)
+  // and any paragraph left empty by the watermark cleanup.
+  html = html.replace(
+    /<p[^>]*class="[^"]*xnmManagedTitle[^"]*"[^>]*>[\s\S]*?<\/p>/i,
+    ""
+  );
+  html = html.replace(/(<p[^>]*>(\s|&nbsp;|<br\s*\/?>)*<\/p>\s*)+/gi, "");
+  html = html.trim();
+  if (!html) throw new Error("Ridibooks returned an empty chapter");
+  return html;
+}
+
 async function tocNovelFire(url) {
   let base = url.replace(/\/$/, "");
   if (base.endsWith("/chapters")) base = base.slice(0, -"/chapters".length);
@@ -1469,6 +1682,7 @@ export function supportedDomains() {
     "novelbin.com",
     "wtr-lab.com",
     "wattpad.com",
+    "ridibooks.com",
     ...MAJOR_DOMAINS,
     ...Object.keys(SITE_CONFIGS),
   ]
@@ -3058,6 +3272,7 @@ function siteKey(hostname) {
   if (host.includes("freewebnovel.com")) return "freewebnovel";
   if (host.includes("novelfire.") || host.includes("findnovel.net") || host.includes("novelcake.") || host.includes("readfromhome.")) return "novelfire";
   if (host.includes("jadescrolls.com")) return "jadescrolls";
+  if (host.includes("ridibooks.com")) return "ridibooks";
   if (host.includes("novgo.")) return "novgo";
   if (host.includes("cherrymist.cafe")) return "cherrymist";
   if (host.includes("zenithtls.com")) return "zenithtls";
@@ -3116,6 +3331,8 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         return tocNovelFire(tocUrl);
       case "jadescrolls":
         return tocJadeScrolls(tocUrl);
+      case "ridibooks":
+        return tocRidibooks(tocUrl);
       case "novgo":
         return tocNovGo(tocUrl);
       case "novelbuddy":
@@ -3280,6 +3497,8 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
         return bodyNovelFire(chapterUrl);
       case "jadescrolls":
         return bodyJadeScrolls(chapterUrl);
+      case "ridibooks":
+        return bodyRidibooks(chapterUrl);
       case "novgo":
         return bodyNovGo(chapterUrl);
       case "novelbuddy":
@@ -3339,7 +3558,7 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
   // Some parsers already retry internally against metered APIs (WTR-LAB makes
   // up to 5 reader calls per attempt) — restarting those from this outer loop
   // multiplies straight into the site's rate limit, so they get one attempt.
-  const maxAttempts = key === "wtrlab" ? 1 : 3;
+  const maxAttempts = key === "wtrlab" || key === "ridibooks" ? 1 : 3;
   let last = "";
   let thinTries = 0;
   for (let i = 0; i < maxAttempts; i++) {
@@ -3377,6 +3596,40 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
 
 /** Fetch metadata (title / author / cover) from a TOC page, best-effort. */
 export async function fetchBookMeta(tocUrl) {
+  // Ridibooks series pages render the book header (title / author / cover)
+  // into __NEXT_DATA__; read the meta from there.
+  try {
+    if (new URL(tocUrl).hostname.includes("ridibooks.com")) {
+      const { header, html } = await ridiSeriesPage(ridiSeriesId(tocUrl));
+      const info = (header && header.information) || {};
+      const title = (info.title && info.title.title) || "";
+      const authors = [];
+      for (const g of info.authorGroups || [])
+        for (const a of g.authors || []) if (a.name) authors.push(a.name);
+      const cover =
+        (header &&
+          header.thumbnail &&
+          header.thumbnail.cover &&
+          (header.thumbnail.cover.xxlarge || header.thumbnail.cover.large)) ||
+        "";
+      const ogDesc = (html.match(/property="og:description" content="([^"]*)"/) || [])[1] || "";
+      if (title) {
+        return {
+          title,
+          author: authors.join(", "),
+          cover,
+          description: ogDesc
+            .replace(/&lt;/g, "<")
+            .replace(/&gt;/g, ">")
+            .replace(/&quot;/g, '"')
+            .replace(/&amp;/g, "&")
+            .trim(),
+        };
+      }
+    }
+  } catch {
+    /* fall through to HTML scraping */
+  }
   // JadeScrolls pages are client-side shells with no book meta in the HTML;
   // take the meta from the same API the TOC parser uses.
   try {
