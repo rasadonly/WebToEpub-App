@@ -12,6 +12,7 @@ import { NovelSite, EpubMetadata } from '@/types';
 import { BookOpen, Globe, Settings, Hash, Type, List, Search, Sparkles, ArrowRight, ExternalLink, X, BookOpenCheck, MoreVertical, Library as LibraryIcon, BookMarked, Download, MessagesSquare, Wand2 } from 'lucide-react';
 import { engineSearch, cancelSearch, engineLoadMetadata, EngineSearchResult } from '@/utils/webtoepub/bridge';
 import LibrarySuggestion from './LibrarySuggestion';
+import { normalizeBookSearch } from '@/utils/librarySearch';
 import { backendToc, isBackendEnabled } from '@/utils/backend';
 import { LiveStats } from '@/components/LiveStats';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
@@ -247,16 +248,12 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
 
 
   /** Normalise a string for fuzzy comparison. */
-  const norm = (s: string) =>
-    (s || '')
-      .toLowerCase()
-      .replace(/[’'`]/g, '')
-      .replace(/[^a-z0-9]+/g, ' ')
-      .trim();
+  const norm = normalizeBookSearch;
 
   /** Score a search result against the query (higher = more relevant). */
   const scoreResult = (r: EngineSearchResult, query: string): number => {
     const q = norm(query);
+    if (!q) return -100;
     const words = q.split(' ').filter(w => w.length > 1);
     const title = norm(r.title);
     const snippet = norm(r.snippet || '');
