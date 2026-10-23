@@ -46,7 +46,7 @@ interface ForumModalProps {
   open: boolean;
   onClose: () => void;
   /** Deep-link entry point: open straight into a view (e.g. from /rankings). */
-  initialView?: 'list' | 'rankings';
+  initialView?: 'list' | 'rankings' | 'requests';
   /** Deep-link entry point: preselect a category filter (e.g. book_request from /requests). */
   initialCategory?: Category;
 }
@@ -265,8 +265,9 @@ function OfficialBadge() {
 
 export function ForumModal({ open, onClose, initialView, initialCategory }: ForumModalProps) {
   const { toast } = useToast();
-  const [view, setView] = useState<'list' | 'thread' | 'new' | 'rankings'>(
-    initialView === 'rankings' ? 'rankings' : 'list'
+  const [threadReturnView, setThreadReturnView] = useState<'list' | 'requests'>('list');
+  const [view, setView] = useState<'list' | 'thread' | 'new' | 'rankings' | 'requests'>(
+    initialView === 'rankings' ? 'rankings' : initialView === 'requests' ? 'requests' : 'list'
   );
   const [threads, setThreads] = useState<Thread[]>([]);
   const [loading, setLoading] = useState(false);
@@ -348,12 +349,14 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
   useEffect(() => {
     if (!open) return;
     void loadThreads();
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && (view === 'list' ? onClose() : setView('list'));
+    const onKey = (e: KeyboardEvent) =>
+      e.key === 'Escape' && (view === 'list' ? onClose() : setView(view === 'thread' ? threadReturnView : 'list'));
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, view, onClose, loadThreads]);
+  }, [open, view, onClose, loadThreads, threadReturnView]);
 
   const openThread = async (t: Thread) => {
+    setThreadReturnView(view === 'requests' ? 'requests' : 'list');
     setActiveThread(t);
     setView('thread');
     setEditingThread(false);
@@ -412,6 +415,66 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
     toast({ title: 'Thread posted' });
   };
 
+  // --- Book Requests board --------------------------------------------------
+  const [reqQuery, setReqQuery] = useState('');
+  const [showAddRequest, setShowAddRequest] = useState(false);
+  const [reqTitle, setReqTitle] = useState('');
+  const [reqBody, setReqBody] = useState('');
+  const [reqPosting, setReqPosting] = useState(false);
+
+  const requestBoardThreads = useMemo(() => {
+    const q = reqQuery.trim().toLowerCase();
+    return threads
+      .filter((t) => t.category === 'book_request')
+      .filter(
+        (t) =>
+          !q ||
+          t.title.toLowerCase().includes(q) ||
+          t.body.toLowerCase().includes(q) ||
+          t.author_name.toLowerCase().includes(q)
+      )
+      .sort((a, b) => {
+        // Requests still waiting for a share stay on top; newest first inside each group.
+        const aw = shares[a.id] ? 1 : 0;
+        const bw = shares[b.id] ? 1 : 0;
+        if (aw !== bw) return aw - bw;
+        return a.created_at < b.created_at ? 1 : -1;
+      });
+  }, [threads, reqQuery, shares]);
+
+  const createBoardRequest = async () => {
+    if (!reqTitle.trim()) {
+      toast({ title: 'Book title required', variant: 'destructive' });
+      return;
+    }
+    setReqPosting(true);
+    const { name, avatar_url } = requireProfile();
+    const token = newToken();
+    const { data, error } = await supabase
+      .from('forum_threads')
+      .insert({
+        title: reqTitle.trim().slice(0, 200),
+        body: (reqBody.trim() || 'Looking for this book — if you have the EPUB, please share it in this thread.').slice(0, 5000),
+        category: 'book_request',
+        author_name: name,
+        avatar_url,
+        edit_token: token,
+      })
+      .select()
+      .single();
+    setReqPosting(false);
+    if (error || !data) {
+      toast({ title: 'Failed to post request', description: error?.message || 'Error', variant: 'destructive' });
+      return;
+    }
+    saveToken(data.id, token);
+    setReqTitle('');
+    setReqBody('');
+    setShowAddRequest(false);
+    await loadThreads();
+    toast({ title: 'Request posted', description: 'Readers who have this book can now share it here.' });
+  };
+
   const saveThreadEdit = async () => {
     if (!activeThread) return;
     const token = getTokens()[activeThread.id];
@@ -451,7 +514,7 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
       return;
     }
     removeToken(t.id);
-    if (activeThread?.id === t.id) setView('list');
+    if (activeThread?.id === t.id) setView(threadReturnView);
     await loadThreads();
     toast({ title: 'Thread deleted' });
   };
@@ -813,7 +876,7 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setView('list')}
+                onClick={() => setView(view === 'thread' ? threadReturnView : 'list')}
                 className="gap-1.5 rounded-full hover:bg-muted font-medium text-xs -ml-1"
               >
                 <ArrowLeft className="w-4 h-4" /> <span>Back</span>
@@ -881,8 +944,7 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
                 type="button"
                 variant="outline"
                 onClick={() => {
-                  setNewCategory('book_request');
-                  setView('new');
+                  setView('requests');
                 }}
                 className="gap-2 rounded-xl h-9 px-4 font-bold text-xs shrink-0 border-violet-500/40 text-violet-600 dark:text-violet-400 hover:bg-violet-500/10"
               >
@@ -1268,6 +1330,140 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
             <p className="text-[11px] text-muted-foreground leading-relaxed">
               Your marks are saved under your forum display name on this browser. Tap your active mark again to
               remove it, or tap the other button to switch.
+            </p>
+          </div>
+        )}
+
+        {/* BOOK REQUESTS BOARD VIEW */}
+        {view === 'requests' && (
+          <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-5 w-full">
+            <div className="space-y-1">
+              <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+                <BookMarked className="w-5 h-5 text-violet-500" /> Book Requests &amp; Sharing
+              </h2>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Ask for a book you cannot find. If you have a book someone asked for, open the request and upload
+                your EPUB — it goes straight into the Community Library and you are thanked by name in the thread.
+              </p>
+            </div>
+
+            <ProfileFields
+              name={authorName}
+              avatar={authorAvatar}
+              onName={setAuthorName}
+              onAvatar={setAuthorAvatar}
+              compact
+            />
+
+            {/* Search requests */}
+            <div className="relative">
+              <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Input
+                value={reqQuery}
+                onChange={(e) => setReqQuery(e.target.value)}
+                placeholder="Search requests by book title…"
+                className="pl-9 h-10 text-sm rounded-xl bg-card border-border/80"
+              />
+              {reqQuery && (
+                <button
+                  type="button"
+                  onClick={() => setReqQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label="Clear search"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+            {reqQuery.trim() && (
+              <p className="-mt-3 text-[11px] text-muted-foreground">
+                {requestBoardThreads.length} {requestBoardThreads.length === 1 ? 'request matches' : 'requests match'} “
+                {reqQuery.trim()}”.
+              </p>
+            )}
+
+            {/* Add new request (collapsed until clicked) */}
+            <div className="bg-card border border-border/80 rounded-2xl p-4 shadow-sm space-y-3">
+              <button
+                type="button"
+                onClick={() => setShowAddRequest((v) => !v)}
+                aria-expanded={showAddRequest}
+                className="w-full flex items-center justify-between text-left"
+              >
+                <span className="text-sm font-bold text-foreground flex items-center gap-2">
+                  <Plus className="w-4 h-4 text-violet-500" /> Add new request
+                </span>
+                <ChevronDown
+                  className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${showAddRequest ? 'rotate-180' : ''}`}
+                />
+              </button>
+              {showAddRequest && (
+                <>
+                  <Input
+                    value={reqTitle}
+                    onChange={(e) => setReqTitle(e.target.value)}
+                    maxLength={200}
+                    placeholder="Book title you are looking for (exact)"
+                    className="h-10 text-sm rounded-xl bg-background border-border/80"
+                  />
+                  <Textarea
+                    value={reqBody}
+                    onChange={(e) => setReqBody(e.target.value)}
+                    rows={3}
+                    maxLength={5000}
+                    placeholder="Details that help a sharer match it: author, language, edition, chapter range… (optional)"
+                    className="text-sm rounded-xl bg-background border-border/80"
+                  />
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      onClick={createBoardRequest}
+                      disabled={reqPosting || !reqTitle.trim()}
+                      className="gap-2 rounded-xl text-xs font-bold h-10"
+                    >
+                      {reqPosting ? <Loader2 className="w-4 h-4 animate-spin" /> : <BookMarked className="w-4 h-4" />}{' '}
+                      Post Request
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* All requests */}
+            {loading ? (
+              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground py-10">
+                <Loader2 className="w-4 h-4 animate-spin text-primary" /> Loading requests…
+              </div>
+            ) : requestBoardThreads.length === 0 ? (
+              <div className="p-8 text-center border border-dashed border-border/80 rounded-2xl bg-card/40 space-y-1">
+                {reqQuery.trim() ? (
+                  <>
+                    <p className="text-sm font-semibold text-muted-foreground">
+                      No requests match “{reqQuery.trim()}”.
+                    </p>
+                    <p className="text-xs text-muted-foreground/70">
+                      Nobody has asked for it yet — be the first with Add new request above.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-semibold text-muted-foreground">No book requests yet.</p>
+                    <p className="text-xs text-muted-foreground/70">
+                      Ask for the first one with Add new request above.
+                    </p>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-violet-500/30 bg-card divide-y divide-border/60 overflow-hidden shadow-xs">
+                {requestBoardThreads.map((t) => (
+                  <ThreadRow key={t.id} t={t} mine={isMine(t.id)} onOpen={() => openThread(t)} share={shares[t.id] || null} />
+                ))}
+              </div>
+            )}
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Requests still waiting for a share are shown first. Open any request to reply — or to upload the EPUB
+              if you have it.
             </p>
           </div>
         )}

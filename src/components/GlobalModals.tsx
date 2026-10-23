@@ -72,8 +72,7 @@ export function GlobalModals() {
         <ForumModal
           open={forumOpen}
           onClose={() => setForumOpen(false)}
-          initialView={forumEntry === 'rankings' ? 'rankings' : 'list'}
-          initialCategory={forumEntry === 'requests' ? 'book_request' : undefined}
+          initialView={forumEntry === 'rankings' ? 'rankings' : forumEntry === 'requests' ? 'requests' : 'list'}
         />
       )}
     </Suspense>
