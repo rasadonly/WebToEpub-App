@@ -4,27 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { LibraryBook, libraryGetCommunity, libraryDownloadHF } from '@/utils/webtoepub/bridge';
-
-const norm = (s: string) =>
-  (s || '')
-    .toLowerCase()
-    .replace(/\.(epub|txt)$/i, '')
-    .replace(/[''`]/g, '')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
-
-function matchScore(bookTitle: string, wanted: string): number {
-  const a = norm(bookTitle);
-  const b = norm(wanted);
-  if (!a || !b || b.length < 3) return 0;
-  if (a === b) return 1;
-  if (a.includes(b) || b.includes(a)) return 0.85;
-  const wa = new Set(a.split(' ').filter((w) => w.length > 1));
-  const wb = b.split(' ').filter((w) => w.length > 1);
-  if (wb.length < 2) return 0;
-  const hit = wb.filter((w) => wa.has(w)).length;
-  return hit / Math.max(wb.length, wa.size);
-}
+import { normalizeBookSearch as norm, libraryMatchScore as matchScore } from '@/utils/librarySearch';
 
 interface Props {
   query: string;

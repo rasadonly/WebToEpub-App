@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { matchesLibrarySearch } from '@/utils/librarySearch';
 import {
   LibraryBook,
   libraryGetTelegram,
@@ -258,13 +259,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
   }, [toast]);
 
   const filtered = useMemo(() => {
-    const q = query.toLowerCase().replace(/[^a-z0-9]+/g, '');
-    return books.filter(
-      (b) =>
-        !q ||
-        b.title.toLowerCase().replace(/[^a-z0-9]+/g, '').includes(q) ||
-        b.author.toLowerCase().replace(/[^a-z0-9]+/g, '').includes(q)
-    );
+    return books.filter(b => matchesLibrarySearch(b.title, b.author, query));
   }, [books, query]);
 
   const visibleBooks = filtered.slice(0, visibleCount);
