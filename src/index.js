@@ -108,6 +108,44 @@ app.get("/api/library", async (req, res) => {
   }
 });
 
+// Community share: a forum reader uploads an EPUB for a book request and the
+// file is committed to the shared library so everyone can download it. The
+// raw request body IS the EPUB; the book title and sharer name travel in
+// headers. Public by design (the forum has no accounts), so validate the
+// file properly and throttle per connection.
+function isEpubBuffer(buf) {
+  if (buf.length < 4 || buf[0] !== 0x50 || buf[1] !== 0x4b) return false; // "PK" zip magic
+  const probe =
+    buf.subarray(0, Math.min(buf.length, 64 * 1024)).toString("latin1") +
+    buf.subarray(Math.max(0, buf.length - 128 * 1024)).toString("latin1");
+  return probe.includes("application/epub+zip") && probe.includes("META-INF/container.xml");
+}
+
+const shareAttempts = new Map(); // ip -> [timestamps]
+app.post("/api/library/share", express.raw({ type: "*/*", limit: "45mb" }), async (req, res) => {
+  try {
+    const ip = String(req.headers["x-forwarded-for"] || req.ip || "").split(",")[0].trim();
+    const now = Date.now();
+    const hits = (shareAttempts.get(ip) || []).filter((t) => now - t < 3600_000);
+    if (hits.length >= 10) {
+      return res.status(429).json({ error: "Too many uploads from this connection — please try again in an hour." });
+    }
+    hits.push(now);
+    shareAttempts.set(ip, hits);
+
+    const buf = req.body;
+    if (!Buffer.isBuffer(buf) || buf.length === 0) return res.status(400).json({ error: "No file received." });
+    if (!isEpubBuffer(buf)) return res.status(400).json({ error: "That file is not a valid EPUB." });
+
+    const title = decodeURIComponent(String(req.headers["x-book-title"] || "Shared Book")).slice(0, 160);
+    const by = decodeURIComponent(String(req.headers["x-shared-by"] || "Reader")).slice(0, 60);
+    const out = await uploadToLibrary(buf, `${title}.epub`, { title, source: "forum-share", author: by });
+    res.json({ ok: true, path: out.path, url: out.url });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 app.get("/api/stats", (req, res) => {
   const now = Date.now();
   const uid = String(req.query.uid || "").slice(0, 64);
@@ -298,6 +336,29 @@ app.post("/api/proxy", express.raw({ type: "*/*", limit: "2mb" }), async (req, r
 //   {"type":"done"}                                   — always last
 // The legacy GET /api/toc still works but buffers all chapters first (kept
 // for backward-compat with older front-end versions).
+// Short-lived TOC cache shared by the stream and legacy endpoints. The
+// client falls back from the stream to /api/toc whenever the stream errors
+// or stalls; without this, that fallback re-crawls every TOC page (and every
+// site request) from scratch seconds after the first crawl finished.
+const tocCache = new Map(); // key -> { at, promise }
+function getTocCached(url, selector) {
+  const key = `${url}\n${selector || ""}`;
+  const hit = tocCache.get(key);
+  if (hit && Date.now() - hit.at < 60_000) return hit.promise;
+  const promise = Promise.all([fetchChapterLinks(url, selector), fetchBookMeta(url)]).then(
+    ([chapters, meta]) => ({ chapters, meta })
+  );
+  tocCache.set(key, { at: Date.now(), promise });
+  // A failed crawl is only worth reusing for ~10s (long enough for the
+  // client's immediate fallback, short enough not to mask a recovery).
+  promise.catch(() => {
+    const cur = tocCache.get(key);
+    if (cur && cur.promise === promise) cur.at = Date.now() - 50_000;
+  });
+  if (tocCache.size > 50) tocCache.delete(tocCache.keys().next().value);
+  return promise;
+}
+
 app.get("/api/toc/stream", async (req, res) => {
   const url = String(req.query.url || "");
   if (!url) {
@@ -316,10 +377,7 @@ app.get("/api/toc/stream", async (req, res) => {
   const heartbeat = setInterval(() => flush({ type: "ping" }), 15_000);
 
   try {
-    const [chapters, meta] = await Promise.all([
-      fetchChapterLinks(url, String(req.query.selector || "")),
-      fetchBookMeta(url),
-    ]);
+    const { chapters, meta } = await getTocCached(url, String(req.query.selector || ""));
     // Send in batches of 100 so the client can start showing chapters early.
     const BATCH = 100;
     for (let i = 0; i < chapters.length; i += BATCH) {
@@ -344,12 +402,13 @@ app.get("/api/toc", async (req, res) => {
     const timeout = new Promise((_, rej) =>
       setTimeout(() => rej(Object.assign(new Error("Site took too long to respond"), { code: 504 })), 24_000)
     );
-    const meta = fetchBookMeta(url).catch(() => ({}));
-    const chapters = await Promise.race([
-      fetchChapterLinks(url, String(req.query.selector || "")),
-      timeout,
+    const toc = getTocCached(url, String(req.query.selector || ""));
+    const chapters = await Promise.race([toc.then((r) => r.chapters), timeout]);
+    const meta = await Promise.race([
+      toc.then((r) => r.meta).catch(() => ({})),
+      new Promise((r) => setTimeout(() => r({}), 3000)),
     ]);
-    res.json({ chapters, meta: await Promise.race([meta, new Promise((r) => setTimeout(() => r({}), 3000))]) });
+    res.json({ chapters, meta });
   } catch (e) {
     if (!res.headersSent) res.status(e.code === 504 ? 504 : 500).json({ error: e.message });
   }
@@ -464,12 +523,39 @@ function startJob(job, spec) {
   return Promise.resolve();
 }
 
+/** A spooled chapter file counts as reusable only if a previous run wrote it
+ * completely (chapter files are full XHTML documents). */
+async function spoolIsComplete(file) {
+  try {
+    const fh = await fs.promises.open(file, "r");
+    try {
+      const st = await fh.stat();
+      if (st.size < 100) return false;
+      const buf = Buffer.alloc(32);
+      await fh.read(buf, 0, 32, st.size - 32);
+      return buf.toString("utf8").includes("</html>");
+    } finally {
+      await fh.close();
+    }
+  } catch {
+    return false;
+  }
+}
+
 async function runJob(job, spec) {
   const chapterDir = path.join(OUT_DIR, `${job.id}-chapters`);
   await fs.promises.mkdir(chapterDir, { recursive: true });
+  // Heartbeat: job.updatedAt must keep moving while ANY chapter is in flight,
+  // not only when one completes — a single slow chapter (multi-route fetches,
+  // long timeouts) could otherwise exceed the idle limit and get the whole
+  // job marked "stalled" while it is actively downloading.
+  const heartbeat = setInterval(() => {
+    job.updatedAt = Date.now();
+  }, 30_000);
   try {
     await convertJob(job, spec, chapterDir);
   } finally {
+    clearInterval(heartbeat);
     await fs.promises.rm(chapterDir, { recursive: true, force: true });
   }
 }
@@ -514,6 +600,14 @@ async function convertJob(job, { tocUrl, providedChapters, metadata, options, se
     if (stopped()) return null;
     try {
       const file = path.join(chapterDir, `${i}.xhtml`);
+      // A previous run of this same job (e.g. resumed after a restart) may
+      // already have downloaded this chapter — reuse the spooled file
+      // instead of downloading it again.
+      if (await spoolIsComplete(file)) {
+        job.completed++;
+        touch();
+        return { title: c.title || `Chapter ${i + 1}`, file };
+      }
       const saved = await chapterPool.run(async () => {
         if (stopped()) return false;
         const content = await fetchChapterContent(c.url, selector);
