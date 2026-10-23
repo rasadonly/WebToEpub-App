@@ -223,3 +223,45 @@ ${chapters
 export async function writeChapterFile(file, chapter) {
   await fs.promises.writeFile(file, chapterXhtml(chapter));
 }
+
+/**
+ * Counts the chapters (spine documents) of an EPUB held in a Buffer.
+ * Returns 0 when the file cannot be read as an EPUB — callers must treat 0
+ * as "unknown", never as a real chapter count.
+ */
+export async function countEpubChapters(buffer) {
+  try {
+    const zip = await JSZip.loadAsync(buffer);
+    let opfPath = "OEBPS/content.opf";
+    const container = zip.file("META-INF/container.xml");
+    if (container) {
+      const xml = await container.async("string");
+      const m = xml.match(/full-path="([^"]+)"/);
+      if (m) opfPath = m[1];
+    }
+    const opf = zip.file(opfPath);
+    if (opf) {
+      const xml = await opf.async("string");
+      const mediaById = new Map();
+      for (const m of xml.matchAll(/<item\s[^>]*>/g)) {
+        const id = m[0].match(/id="([^"]+)"/)?.[1];
+        const mt = m[0].match(/media-type="([^"]+)"/)?.[1];
+        if (id) mediaById.set(id, mt || "");
+      }
+      const spine = xml.match(/<spine[\s\S]*?<\/spine>/)?.[0] || "";
+      let n = 0;
+      for (const m of spine.matchAll(/<itemref\s[^>]*idref="([^"]+)"/g)) {
+        if ((mediaById.get(m[1]) || "").includes("xhtml")) n++;
+      }
+      if (n) return n;
+    }
+    // Fallback: count document files that look like chapters.
+    let n = 0;
+    zip.forEach((relPath, f) => {
+      if (!f.dir && /\.x?html?$/i.test(relPath) && !/(toc|nav|cover|title|opf)/i.test(relPath)) n++;
+    });
+    return n;
+  } catch {
+    return 0;
+  }
+}
