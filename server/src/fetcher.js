@@ -863,6 +863,80 @@ async function bodyRidibooks(url) {
   return html;
 }
 
+// ---- Snowy Translations (snowytranslations.com) ----
+// WordPress site. Each series page carries its own chapter index, but the
+// wrapper differs by the series' age: a .gp-auto-toc list (newer series),
+// a ul.gp-chapter-toc-list, or plain dated-post links inside .entry-content
+// (older series). None of them match the generic parser's chapter-link
+// scoring, which instead returned the sidebar's two most recent posts.
+// Later chapters are listed with the teaser label "Read advanced chapters"
+// (the posts themselves hold the full chapter), so those entries are
+// numbered by their position in the list. Chapter posts embed the same
+// dropdown, prev/next navigation, a members promo and ad blocks inside
+// .entry-content, all of which the generic body extractor swallowed.
+const SNOWY_POST_RE = /\/\d{4}\/\d{2}\/\d{2}\/[^/]+\/$/;
+
+async function tocSnowyTranslations(url) {
+  const doc = parseHtml(await getText(url));
+  let anchors = [];
+  for (const sel of [".gp-auto-toc", "ul.gp-chapter-toc-list", ".entry-content"]) {
+    const root = doc.querySelector(sel);
+    if (!root) continue;
+    const found = [];
+    root.querySelectorAll("a[href]").forEach((a) => {
+      const href = a.getAttribute("href") || "";
+      if (SNOWY_POST_RE.test(href))
+        found.push({
+          href,
+          text: (a.textContent || "").replace(/\s+/g, " ").trim(),
+        });
+    });
+    if (found.length >= 3) {
+      anchors = found;
+      break;
+    }
+  }
+  if (!anchors.length)
+    throw new Error(
+      "Snowy Translations: no chapter list found on this page — paste the series page URL (snowytranslations.com/series/...)"
+    );
+  const seen = new Set();
+  const out = [];
+  for (const { href, text } of anchors) {
+    if (seen.has(href)) continue;
+    if (/^(previous|next|show chapters)$/i.test(text)) continue;
+    seen.add(href);
+    const teaser = !text || /^read advanced chapters$/i.test(text);
+    out.push({ url: href, title: teaser ? `Chapter ${out.length + 1}` : text });
+  }
+  return out;
+}
+
+async function bodySnowyTranslations(url) {
+  const doc = parseHtml(await getText(url));
+  const container = doc.querySelector(".entry-content");
+  if (!container) return "";
+  stripInside(
+    container,
+    ".gp-chapter-toc-container, .gp-chapter-navigation, .code-block, script, style, iframe, ins, form, button"
+  );
+  // The "Read advanced chapters" promo paragraph (a lone link to the
+  // members site) can appear anywhere in the body.
+  container.querySelectorAll("p").forEach((p) => {
+    const text = (p.textContent || "").replace(/\s+/g, " ").trim();
+    if (/^read advanced chapters$/i.test(text)) p.remove();
+  });
+  // Drop the chapter-title echo ("Chapter 165 She really liked it") when it
+  // leads the body; the EPUB adds its own heading.
+  const firstP = container.querySelector("p");
+  if (firstP) {
+    const text = (firstP.textContent || "").replace(/\s+/g, " ").trim();
+    if (/^chapter\s+\d+(\.\d+)?\b/i.test(text) && text.length < 140)
+      firstP.remove();
+  }
+  return sanitizeHtml(container.innerHTML);
+}
+
 async function tocNovelFire(url) {
   let base = url.replace(/\/$/, "");
   if (base.endsWith("/chapters")) base = base.slice(0, -"/chapters".length);
@@ -1768,6 +1842,7 @@ export function supportedDomains() {
     "wtr-lab.com",
     "wattpad.com",
     "ridibooks.com",
+    "snowytranslations.com",
     ...MAJOR_DOMAINS,
     ...Object.keys(SITE_CONFIGS),
   ]
@@ -3358,6 +3433,7 @@ function siteKey(hostname) {
   if (host.includes("novelfire.") || host.includes("findnovel.net") || host.includes("novelcake.") || host.includes("readfromhome.")) return "novelfire";
   if (host.includes("jadescrolls.com")) return "jadescrolls";
   if (host.includes("ridibooks.com")) return "ridibooks";
+  if (host.includes("snowytranslations.com")) return "snowytranslations";
   if (host.includes("novgo.")) return "novgo";
   if (host.includes("cherrymist.cafe")) return "cherrymist";
   if (host.includes("zenithtls.com")) return "zenithtls";
@@ -3418,6 +3494,8 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         return tocJadeScrolls(tocUrl);
       case "ridibooks":
         return tocRidibooks(tocUrl);
+      case "snowytranslations":
+        return tocSnowyTranslations(tocUrl);
       case "novgo":
         return tocNovGo(tocUrl);
       case "novelbuddy":
@@ -3584,6 +3662,8 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
         return bodyJadeScrolls(chapterUrl);
       case "ridibooks":
         return bodyRidibooks(chapterUrl);
+      case "snowytranslations":
+        return bodySnowyTranslations(chapterUrl);
       case "novgo":
         return bodyNovGo(chapterUrl);
       case "novelbuddy":
