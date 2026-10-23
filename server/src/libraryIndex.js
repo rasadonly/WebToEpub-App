@@ -57,8 +57,11 @@ async function build() {
   await Promise.all(Array.from({ length: Math.min(4, dirs.length) }, worker));
   const f = files.filter((e) => e.type === "file").map((e) => [e.path, e.size ?? null]);
   if (!f.length) throw new Error("empty listing");
-  // A much shorter list is probably a partial crawl; keep the fuller one.
-  if (index && f.length < index.f.length * 0.9) throw new Error(`partial listing ${f.length}/${index.f.length}`);
+  // A drastically shorter list is probably a partial crawl; keep the fuller
+  // one. 50% rather than 90%: a deliberate library cleanup can legitimately
+  // remove a large share of files, and a 90% guard would reject the cleaned
+  // listing forever and keep serving the stale index.
+  if (index && f.length < index.f.length * 0.5) throw new Error(`partial listing ${f.length}/${index.f.length}`);
   index = { at: Date.now(), repo: REPO, f };
   fs.promises.writeFile(CACHE_FILE, JSON.stringify(index)).catch(() => {});
   return index;
