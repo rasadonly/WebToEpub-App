@@ -1155,7 +1155,7 @@ async function fetchCommunityTreeSequentialFallback(HF_TREE_BASE: string): Promi
 // Listing ~6k files takes several sequential requests; reuse it for 5 minutes
 // so reopening the Library is instant.
 let communityCache: { at: number; books: Promise<LibraryBook[]> } | null = null;
-const COMMUNITY_LS_KEY = 'community_library_v4';
+const COMMUNITY_LS_KEY = 'community_library_v5';
 const COMMUNITY_FRESH_MS = 5 * 60_000;
 const COMMUNITY_STALE_MS = 7 * 24 * 3600_000;
 
