@@ -1,6 +1,18 @@
 import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
+import { reloadOnceForChunkError } from './lib/chunkReload'
+
+// A lazily-loaded chunk (Forum, Library, pages) can fail when the browser
+// holds a cached build from before a new deploy — the chunk file it asks
+// for no longer exists. Reload once onto the fresh build instead of
+// leaving the user looking at a white screen.
+if (typeof window !== 'undefined') {
+  window.addEventListener('vite:preloadError', (event) => {
+    event.preventDefault();
+    reloadOnceForChunkError();
+  });
+}
 
 // Radix (Dialog / DropdownMenu / Popover) and our own full-screen modals lock
 // scroll by setting `overflow: hidden` and `pointer-events: none` on <body>,
