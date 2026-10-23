@@ -142,6 +142,9 @@ const CF_PROTECTED = [
   /(^|\.)docln\.(net|sbs)$/i,
   // Next.js app that renders chapter text client-side
   /(^|\.)readthedrama\.com$/i,
+  // Ridi 403s / Cloudflare-challenges direct requests from datacenter IPs
+  // on every host (series pages, GraphQL API, viewer) — proxies first.
+  /(^|\.)ridibooks\.com$/i,
 ];
 
 function isCfProtected(host) {
@@ -577,27 +580,16 @@ async function bodyJadeScrolls(url) {
 const RIDI_GQL = "https://api.ridibooks.com/graphql";
 const RIDI_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
-// Ridi's edge refuses sparse requests from datacenter IPs (HTTP 403), so
-// every call carries the full browser header set a real visit would send.
-const RIDI_PAGE_HEADERS = {
-  "User-Agent": RIDI_UA,
-  Accept:
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-  "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
-  "Cache-Control": "no-cache",
-  Pragma: "no-cache",
-  "Upgrade-Insecure-Requests": "1",
-  "Sec-Fetch-Dest": "document",
-  "Sec-Fetch-Mode": "navigate",
-  "Sec-Fetch-Site": "none",
-  "Sec-Fetch-User": "?1",
-  "Sec-Ch-Ua": '"Chromium";v="126", "Google Chrome";v="126", "Not-A.Brand";v="99"',
-  "Sec-Ch-Ua-Mobile": "?0",
-  "Sec-Ch-Ua-Platform": '"Windows"',
-};
+// Ridi refuses direct requests from datacenter IPs (HTTP 403 on the web
+// hosts, a Cloudflare challenge on the API host), so the series page is
+// fetched through the shared httpGet proxy cascade and the JSON POSTs go
+// through the proxy pool, the same pattern as the WTR-LAB reader API.
 const RIDI_API_HEADERS = {
   "User-Agent": RIDI_UA,
   Accept: "application/json",
+  // Apollo Server's CSRF guard: carried so the call passes even if a proxy
+  // rewrites the Content-Type on the way.
+  "Apollo-Require-Preflight": "true",
   "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
   "Sec-Fetch-Dest": "empty",
   "Sec-Fetch-Mode": "cors",
@@ -613,20 +605,67 @@ const RIDI_EPISODE_QUERY = `query BookDetailHomeEpisodeBooksPagination($id: UUID
     seriesId
   } } } } } }`;
 
+// POST JSON to a Ridi endpoint through the proxy pool (direct first),
+// remembering the route that last answered so a long conversion does not
+// re-probe the blocked direct route for every chapter.
+let ridiRoute = 0;
+async function ridiPostJson(target, payload, extraHeaders = {}) {
+  const body = JSON.stringify(payload);
+  let lastErr = null;
+  for (let n = 0; n < PROXIES.length; n++) {
+    const idx = (ridiRoute + n) % PROXIES.length;
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 25000);
+      let res;
+      try {
+        res = await fetch(buildUrl(PROXIES[idx], target), {
+          method: "POST",
+          headers: {
+            ...RIDI_API_HEADERS,
+            "Content-Type": "application/json",
+            ...extraHeaders,
+          },
+          body,
+          signal: ctrl.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+      const text = await res.text();
+      if (!res.ok) {
+        lastErr = new Error(`Ridibooks HTTP ${res.status}`);
+        continue;
+      }
+      if (looksLikeChallenge(text)) {
+        lastErr = new Error("Ridibooks: Cloudflare challenge");
+        continue;
+      }
+      let json = null;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        /* not JSON — try the next route */
+      }
+      if (!json) {
+        lastErr = new Error("Ridibooks: non-JSON response");
+        continue;
+      }
+      ridiRoute = idx;
+      return json;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error("Ridibooks request failed on every route");
+}
+
 async function ridiGql(query, variables) {
-  const res = await fetch(RIDI_GQL, {
-    method: "POST",
-    headers: {
-      ...RIDI_API_HEADERS,
-      "Content-Type": "application/json",
-      Origin: "https://ridibooks.com",
-      Referer: "https://ridibooks.com/",
-    },
-    body: JSON.stringify({ query, variables }),
-    signal: AbortSignal.timeout(30000),
-  });
-  if (!res.ok) throw new Error(`Ridibooks API HTTP ${res.status}`);
-  const json = await res.json();
+  const json = await ridiPostJson(
+    RIDI_GQL,
+    { query, variables },
+    { Origin: "https://ridibooks.com", Referer: "https://ridibooks.com/" }
+  );
   if (json.errors && json.errors.length)
     throw new Error(
       `Ridibooks API: ${json.errors[0].message || "unknown error"}`
@@ -648,10 +687,11 @@ function ridiSeriesId(url) {
 // __NEXT_DATA__: the header (title / author / cover) and the episode-list
 // cell (first episodes + the cell id the GraphQL pager needs).
 async function ridiSeriesPage(seriesId) {
-  const res = await fetch(`https://ridibooks.com/books/${seriesId}`, {
-    headers: RIDI_PAGE_HEADERS,
-    signal: AbortSignal.timeout(30000),
-  });
+  const res = await httpGet(
+    `https://ridibooks.com/books/${seriesId}`,
+    {},
+    25000
+  );
   if (!res.ok) throw new Error(`Ridibooks: series page HTTP ${res.status}`);
   const html = await res.text();
   const m = html.match(
@@ -742,18 +782,19 @@ async function bodyRidibooks(url) {
   const bookId = parts[0] === "books" ? parts[1] : null;
   if (!bookId || !/^\d+$/.test(bookId))
     throw new Error("Ridibooks: bad chapter URL");
-  const res = await fetch("https://ridibooks.com/api/web-viewer/generate", {
-    method: "POST",
-    headers: {
-      ...RIDI_API_HEADERS,
-      "Content-Type": "application/json",
-      Origin: "https://ridibooks.com",
-      Referer: `https://ridibooks.com/books/${bookId}/view`,
-    },
-    body: JSON.stringify({ book_id: bookId }),
-    signal: AbortSignal.timeout(60000),
-  });
-  const json = await res.json().catch(() => null);
+  let json = null;
+  try {
+    json = await ridiPostJson(
+      "https://ridibooks.com/api/web-viewer/generate",
+      { book_id: bookId },
+      {
+        Origin: "https://ridibooks.com",
+        Referer: `https://ridibooks.com/books/${bookId}/view`,
+      }
+    );
+  } catch (e) {
+    throw new Error(`Ridibooks viewer request failed: ${e.message}`);
+  }
   if (!json || !json.success) {
     const code = (json && json.error && json.error.code) || "";
     if (code === "INVALID_ACCESS")
@@ -779,10 +820,7 @@ async function bodyRidibooks(url) {
     throw new Error("Ridibooks viewer returned no readable content for this episode");
   let raw = "";
   for (const spineUrl of data.spines) {
-    const r = await fetch(spineUrl, {
-      headers: { "User-Agent": RIDI_UA },
-      signal: AbortSignal.timeout(30000),
-    });
+    const r = await httpGet(spineUrl, { Accept: "application/json" }, 20000);
     if (!r.ok) throw new Error(`Ridibooks chapter file HTTP ${r.status}`);
     const j = await r.json().catch(() => null);
     if (j && typeof j.value === "string") raw += j.value;
