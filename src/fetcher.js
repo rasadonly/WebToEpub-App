@@ -3334,21 +3334,34 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
     }
   };
 
-  const enough = (h) => h && h.replace(/<[^>]+>/g, "").trim().length >= 20;
+  const textLen = (h) => (h ? h.replace(/<[^>]+>/g, "").trim().length : 0);
+  const enough = (h) => textLen(h) >= 20;
+  // Some parsers already retry internally against metered APIs (WTR-LAB makes
+  // up to 5 reader calls per attempt) — restarting those from this outer loop
+  // multiplies straight into the site's rate limit, so they get one attempt.
+  const maxAttempts = key === "wtrlab" ? 1 : 3;
   let last = "";
-  for (let i = 0; i < 3; i++) {
+  let thinTries = 0;
+  for (let i = 0; i < maxAttempts; i++) {
     try {
       const html = await attempt();
       if (enough(html)) return html;
-      last = html || last;
+      if (textLen(html) > 0) {
+        // The parser DID return content — the chapter is genuinely short (an
+        // author's note, a prologue card). Re-downloading cannot change that:
+        // allow one second chance in case the first hit was a partial page,
+        // then accept the longest version instead of burning more requests.
+        if (textLen(html) > textLen(last)) last = html;
+        if (++thinTries >= 2) break;
+      }
     } catch {
       /* retry */
     }
-    await new Promise((r) => setTimeout(r, 400 * (i + 1)));
+    if (i < maxAttempts - 1) await new Promise((r) => setTimeout(r, 400 * (i + 1)));
   }
-  // A hand-written parser produced nothing (site changed its markup) — retry
-  // through the generic path, which includes the AI selector fallback.
-  if (key !== "generic") {
+  // Only when the parser produced nothing at all (site changed its markup) —
+  // retry through the generic path, which includes the AI selector fallback.
+  if (!last && key !== "generic") {
     try {
       const html = await bodyGeneric(chapterUrl, contentSelector);
       if (enough(html)) return html;
