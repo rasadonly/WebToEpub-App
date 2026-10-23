@@ -564,6 +564,7 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
   const [customCategory, setCustomCategory] = useState('');
   const [addingNovel, setAddingNovel] = useState(false);
   const [markBusy, setMarkBusy] = useState<string | null>(null);
+  const [rankQuery, setRankQuery] = useState('');
 
   const loadRankings = useCallback(async () => {
     setRankingsLoading(true);
@@ -617,8 +618,15 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
   }, [rankedNovels]);
 
   const rankedList = useMemo(() => {
-    return rankedNovels
-      .filter((n) => rankCategory === 'All' || n.category === rankCategory)
+    const q = rankQuery.trim().toLowerCase();
+    // While searching, look across ALL genres — the reader hunting a title
+    // should not have to guess which genre tab it sits under.
+    const pool = q
+      ? rankedNovels.filter(
+          (n) => n.title.toLowerCase().includes(q) || (n.author || '').toLowerCase().includes(q)
+        )
+      : rankedNovels.filter((n) => rankCategory === 'All' || n.category === rankCategory);
+    return pool
       .map((n) => ({ novel: n, ...(rankStats.get(n.id) || { read: 0, will: 0 }) }))
       .sort(
         (a, b) =>
@@ -626,7 +634,7 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
           b.will - a.will ||
           (a.novel.created_at < b.novel.created_at ? -1 : 1)
       );
-  }, [rankedNovels, rankCategory, rankStats]);
+  }, [rankedNovels, rankCategory, rankStats, rankQuery]);
 
   const getMarkToken = () => {
     let t = '';
@@ -842,7 +850,7 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
                 <Input
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search discussions or keywords…"
+                  placeholder={filter === 'book_request' ? 'Search book requests…' : 'Search discussions or keywords…'}
                   className="pl-9 h-9 text-xs rounded-xl bg-background border-border/60 focus-visible:ring-primary/20"
                 />
                 {searchQuery && (
@@ -959,7 +967,7 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
                     </div>
                   </section>
                 )}
-                {requestThreads.length > 0 && (
+                {(requestThreads.length > 0 || (filter === 'all' && !!searchQuery.trim())) && (
                   <section className="space-y-2">
                     <h3 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
                       <BookMarked className="w-3.5 h-3.5 text-violet-500" /> Book Requests &amp; Sharing
@@ -968,11 +976,36 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
                       Ask for a book you cannot find. If you have a requested book as an EPUB, open the request and
                       upload it — it goes straight into the Community Library and you are credited as the sharer.
                     </p>
-                    <div className="rounded-2xl border border-violet-500/30 bg-card divide-y divide-border/60 overflow-hidden shadow-xs">
-                      {requestThreads.map((t) => (
-                        <ThreadRow key={t.id} t={t} mine={isMine(t.id)} onOpen={() => openThread(t)} share={shares[t.id] || null} />
-                      ))}
+                    <div className="relative">
+                      <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <Input
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Search requests by book title…"
+                        className="pl-9 h-9 text-xs rounded-xl bg-background border-border/60 focus-visible:ring-primary/20"
+                      />
+                      {searchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setSearchQuery('')}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground"
+                          aria-label="Clear search"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
+                    {requestThreads.length > 0 ? (
+                      <div className="rounded-2xl border border-violet-500/30 bg-card divide-y divide-border/60 overflow-hidden shadow-xs">
+                        {requestThreads.map((t) => (
+                          <ThreadRow key={t.id} t={t} mine={isMine(t.id)} onOpen={() => openThread(t)} share={shares[t.id] || null} />
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground italic px-1">
+                        No requests match “{searchQuery}”.
+                      </p>
+                    )}
                   </section>
                 )}
                 {plainDiscussions.length > 0 && (
@@ -1016,6 +1049,33 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
               onAvatar={setAuthorAvatar}
               compact
             />
+
+            {/* Search (spans all genres while a query is typed) */}
+            <div className="relative">
+              <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Input
+                value={rankQuery}
+                onChange={(e) => setRankQuery(e.target.value)}
+                placeholder="Search novels by title or author…"
+                className="pl-9 h-10 text-sm rounded-xl bg-card border-border/80"
+              />
+              {rankQuery && (
+                <button
+                  type="button"
+                  onClick={() => setRankQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label="Clear search"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+            {rankQuery.trim() && (
+              <p className="-mt-3 text-[11px] text-muted-foreground">
+                Searching all genres for “{rankQuery.trim()}” — {rankedList.length}{' '}
+                {rankedList.length === 1 ? 'match' : 'matches'}.
+              </p>
+            )}
 
             {/* Category pills */}
             <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
@@ -1107,8 +1167,21 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
               </div>
             ) : rankedList.length === 0 ? (
               <div className="p-8 text-center border border-dashed border-border/80 rounded-2xl bg-card/40 space-y-1">
-                <p className="text-sm font-semibold text-muted-foreground">No novels here yet.</p>
-                <p className="text-xs text-muted-foreground/70">Add the first one above and mark it Read.</p>
+                {rankQuery.trim() ? (
+                  <>
+                    <p className="text-sm font-semibold text-muted-foreground">
+                      No novel matches “{rankQuery.trim()}”.
+                    </p>
+                    <p className="text-xs text-muted-foreground/70">
+                      It is not on the board yet — add it with the form above and mark it Read.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-semibold text-muted-foreground">No novels here yet.</p>
+                    <p className="text-xs text-muted-foreground/70">Add the first one above and mark it Read.</p>
+                  </>
+                )}
               </div>
             ) : (
               <div className="rounded-2xl border border-border/80 bg-card divide-y divide-border/60 overflow-hidden shadow-xs">
