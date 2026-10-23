@@ -131,3 +131,37 @@ export async function uploadToLibrary(buffer, filename, meta = {}) {
     pageUrl: `https://huggingface.co/datasets/${REPO}/blob/main/${path}`,
   };
 }
+
+/** Downloads one library file (used to inspect the copy already stored). */
+export async function downloadFromLibrary(path) {
+  const res = await fetch(
+    `https://huggingface.co/datasets/${REPO}/resolve/main/${path.split("/").map(encodeURIComponent).join("/")}?download=true`,
+    { headers: token() ? { Authorization: `Bearer ${token()}` } : {}, signal: AbortSignal.timeout(120_000) }
+  );
+  if (!res.ok) throw new Error(`HF download failed (${res.status}) for ${path}`);
+  return Buffer.from(await res.arrayBuffer());
+}
+
+/** Removes one file from the dataset repo (single-file commit). */
+export async function deleteFromLibrary(path) {
+  if (!libraryEnabled()) throw new Error("HUGGINGFACE_TOKEN not configured");
+  const lines = [
+    JSON.stringify({
+      key: "header",
+      value: { summary: `Remove ${path}`, description: "Replaced by a better shared copy" },
+    }),
+    JSON.stringify({ key: "deletedFile", value: { path } }),
+  ].join("\n");
+  const res = await fetch(`https://huggingface.co/api/datasets/${REPO}/commit/main`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token()}`,
+      "Content-Type": "application/x-ndjson",
+    },
+    body: lines,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`HF delete failed (${res.status}): ${text.slice(0, 200)}`);
+  }
+}
