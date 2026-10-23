@@ -55,6 +55,7 @@ const UA_POOL = [
 
 /** Hosts that rate-limit aggressively → bigger gap between hits. */
 const HOST_THROTTLE = [
+  [/snowytranslations\.com$/i, 2000],
   [/freewebnovel\.com$/i, 2500],
   [/novelfull(l)?\.(net|com)$/i, 1800],
   [/(^|\.)(all-?novelfull|allnovelfull|allnovelnext|allnovelbook|allnovel)\.(com|net|org)$/i, 1800],
