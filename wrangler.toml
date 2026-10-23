@@ -1,0 +1,15 @@
+# Deploys the CORS proxy worker (epub-cors-proxy) that the fetcher's
+# proxy pool uses. Ridi targets are relayed through the RidiRelay
+# Durable Object (APAC placement) — see cloudflare-worker-proxy.js.
+name = "epub-cors-proxy"
+main = "cloudflare-worker-proxy.js"
+compatibility_date = "2025-01-01"
+
+[durable_objects]
+bindings = [
+  { name = "RIDI_RELAY", class_name = "RidiRelay" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RidiRelay"]
