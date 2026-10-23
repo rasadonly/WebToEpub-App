@@ -155,16 +155,16 @@ interface BookCardProps {
 
       {/* Info */}
       <div className="flex-1 min-w-0">
-        <h3 className="font-serif font-semibold text-sm leading-snug line-clamp-1" title={book.title}>
+        <h3 className="font-serif font-semibold text-sm leading-snug line-clamp-none sm:line-clamp-1" title={book.title}>
           {cleanTitle}
         </h3>
-        <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground min-w-0">
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground min-w-0">
           {chapterLabel && (
             <span className="shrink-0 px-1.5 py-px rounded bg-primary/10 text-primary font-semibold tabular-nums">
               {chapterLabel}
             </span>
           )}
-          {book.author && <span className="truncate">{book.author}</span>}
+          {book.author && <span className="truncate min-w-0">{book.author}</span>}
           {book.author && book.size !== undefined && <span aria-hidden="true">·</span>}
           {book.size !== undefined && <span className="shrink-0 tabular-nums">{formatSize(book.size)}</span>}
           {book.uploadedAt && <span aria-hidden="true">·</span>}
