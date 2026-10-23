@@ -39,6 +39,7 @@ import {
   Trophy,
   Check,
   BookmarkPlus,
+  ChevronDown,
 } from 'lucide-react';
 
 interface ForumModalProps {
@@ -565,6 +566,7 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
   const [addingNovel, setAddingNovel] = useState(false);
   const [markBusy, setMarkBusy] = useState<string | null>(null);
   const [rankQuery, setRankQuery] = useState('');
+  const [showAddNovel, setShowAddNovel] = useState(false);
 
   const loadRankings = useCallback(async () => {
     setRankingsLoading(true);
@@ -737,6 +739,7 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
     setNewNovelTitle('');
     setNewNovelAuthor('');
     setCustomCategory('');
+    setShowAddNovel(false);
     setRankCategory(category);
     toast({ title: 'Added to the rankings', description: 'Now mark it Read or Will Read to cast your vote.' });
   };
@@ -1105,11 +1108,23 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
               })}
             </div>
 
-            {/* Add a novel */}
+            {/* Add a novel (collapsed until clicked) */}
             <div className="bg-card border border-border/80 rounded-2xl p-4 shadow-sm space-y-3">
-              <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-                <Plus className="w-4 h-4 text-primary" /> Add your favourite novel
-              </h3>
+              <button
+                type="button"
+                onClick={() => setShowAddNovel((v) => !v)}
+                aria-expanded={showAddNovel}
+                className="w-full flex items-center justify-between text-left"
+              >
+                <span className="text-sm font-bold text-foreground flex items-center gap-2">
+                  <Plus className="w-4 h-4 text-primary" /> Add your favourite novel
+                </span>
+                <ChevronDown
+                  className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${showAddNovel ? 'rotate-180' : ''}`}
+                />
+              </button>
+              {showAddNovel && (
+                <>
               <div className="grid sm:grid-cols-2 gap-2">
                 <Input
                   value={newNovelTitle}
@@ -1158,6 +1173,8 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
                   {addingNovel ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Add Novel
                 </Button>
               </div>
+                </>
+              )}
             </div>
 
             {/* Ranked list */}
@@ -1173,7 +1190,15 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
                       No novel matches “{rankQuery.trim()}”.
                     </p>
                     <p className="text-xs text-muted-foreground/70">
-                      It is not on the board yet — add it with the form above and mark it Read.
+                      It is not on the board yet —{' '}
+                      <button
+                        type="button"
+                        onClick={() => setShowAddNovel(true)}
+                        className="font-semibold text-primary underline underline-offset-2"
+                      >
+                        add it
+                      </button>{' '}
+                      and mark it Read.
                     </p>
                   </>
                 ) : (
