@@ -86,16 +86,16 @@ function formatDate(iso?: string) {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-/* ── Skeleton card placeholder ─────────────────────────────── */
+/* ── Skeleton row placeholder ──────────────────────────────── */
 function SkeletonCard() {
   return (
-    <div className="rounded-2xl bg-card border border-border overflow-hidden animate-pulse">
-      <div className="aspect-[2/3] bg-muted/60" />
-      <div className="p-3 space-y-2">
-        <div className="h-3 bg-muted rounded w-4/5" />
-        <div className="h-3 bg-muted rounded w-2/5" />
-        <div className="h-8 bg-muted rounded-lg w-full mt-1" />
+    <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-card border border-border animate-pulse">
+      <div className="w-10 h-10 rounded-lg bg-muted shrink-0" />
+      <div className="flex-1 space-y-2">
+        <div className="h-3 bg-muted rounded w-3/5" />
+        <div className="h-3 bg-muted rounded w-1/4" />
       </div>
+      <div className="h-8 w-20 bg-muted rounded-md shrink-0" />
     </div>
   );
 }
@@ -132,95 +132,71 @@ interface BookCardProps {
   const hasCover = Boolean(book.coverUrl) && !imgFailed;
 
   return (
-    <div className="group flex flex-col rounded-2xl bg-card border border-border overflow-hidden shadow-sm hover:shadow-lg hover:-translate-y-0.5 hover:border-primary/40 transition-all duration-200">
-      {/* Cover */}
+    <div className="group flex items-center gap-3 px-3 py-2.5 rounded-xl bg-card border border-border hover:border-primary/40 hover:bg-muted/30 transition-colors">
+      {/* Compact monogram chip (no cover art in this library) */}
       <div
-        className="relative aspect-[2/3] overflow-hidden"
-        style={{ background: `linear-gradient(165deg, hsl(${hue}deg 52% 32%), hsl(${hueEnd}deg 58% 15%))` }}
+        className="w-10 h-10 shrink-0 rounded-lg relative overflow-hidden flex items-center justify-center"
+        style={{ background: `linear-gradient(140deg, hsl(${hue}deg 45% 32%), hsl(${hueEnd}deg 50% 18%))` }}
       >
         {hasCover ? (
           <img
             src={book.coverUrl}
             alt={cleanTitle}
-            className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+            className="absolute inset-0 w-full h-full object-cover"
             loading="lazy"
             onError={() => setImgFailed(true)}
           />
         ) : (
-          <>
-            {/* Designed fallback cover: gradient, spine, typeset title */}
-            <div className="absolute inset-y-0 left-0 w-[7px] bg-gradient-to-b from-white/35 via-white/10 to-black/30" />
-            <div className="absolute -top-10 -right-10 w-36 h-36 rounded-full bg-white/10 blur-2xl" />
-            <span
-              aria-hidden="true"
-              className="absolute -bottom-7 -right-2 font-serif font-bold text-[7.5rem] leading-none text-white/[0.07] select-none"
-            >
-              {(cleanTitle.trim()[0] || '?').toUpperCase()}
-            </span>
-            <div className="absolute inset-0 flex flex-col px-4 pl-5 py-4">
-              <span className="text-[8px] font-semibold uppercase tracking-[0.28em] text-white/60">
-                LinkToEpub Library
-              </span>
-              <h4 className="mt-3 font-serif font-bold text-white text-[15px] leading-snug line-clamp-6 drop-shadow-sm">
-                {cleanTitle}
-              </h4>
-              <div className="mt-3 h-px w-10 bg-white/50" />
-              {book.author && (
-                <span className="mt-2 text-[10px] uppercase tracking-widest text-white/70 line-clamp-1">
-                  {book.author}
-                </span>
-              )}
-              <span className="mt-auto text-[8px] font-semibold uppercase tracking-[0.28em] text-white/45">
-                EPUB Edition
-              </span>
-            </div>
-          </>
-        )}
-        {chapterLabel && (
-          <span className="absolute bottom-2 left-2 px-1.5 py-0.5 rounded-md bg-black/55 backdrop-blur-sm text-white text-[10px] font-semibold tabular-nums">
-            {chapterLabel}
+          <span aria-hidden="true" className="font-serif font-bold text-base text-white/85 select-none">
+            {(cleanTitle.trim()[0] || '?').toUpperCase()}
           </span>
-        )}
-        {state === 'loading' && (
-          <div className="absolute bottom-0 inset-x-0 h-1 bg-black/30">
-            <div
-              className="h-full bg-primary transition-all duration-300 ease-out"
-              style={{ width: `${Math.max(progress, 3)}%` }}
-            />
-          </div>
         )}
       </div>
 
       {/* Info */}
-      <div className="flex flex-col flex-1 p-3">
-        <h3 className="font-serif font-semibold text-sm leading-snug line-clamp-2" title={book.title}>
+      <div className="flex-1 min-w-0">
+        <h3 className="font-serif font-semibold text-sm leading-snug line-clamp-1" title={book.title}>
           {cleanTitle}
         </h3>
-        <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground min-w-0">
+        <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground min-w-0">
+          {chapterLabel && (
+            <span className="shrink-0 px-1.5 py-px rounded bg-primary/10 text-primary font-semibold tabular-nums">
+              {chapterLabel}
+            </span>
+          )}
           {book.author && <span className="truncate">{book.author}</span>}
           {book.author && book.size !== undefined && <span aria-hidden="true">·</span>}
           {book.size !== undefined && <span className="shrink-0 tabular-nums">{formatSize(book.size)}</span>}
           {book.uploadedAt && <span aria-hidden="true">·</span>}
           {book.uploadedAt && <span className="shrink-0">{formatDate(book.uploadedAt)}</span>}
         </div>
-        <Button
-          size="sm"
-          onClick={handleClick}
-          disabled={state === 'loading'}
-          aria-label={`Download ${book.title}`}
-          className={cn(
-            'mt-3 w-full text-[11px] font-semibold',
-            state === 'done' && 'bg-green-600 hover:bg-green-600 text-white',
-          )}
-          variant={state === 'loading' ? 'outline' : 'default'}
-        >
-          {state === 'loading' && progress > 0 && <span className="tabular-nums">{progress}%</span>}
-          {state === 'loading' && progress === 0 && <RefreshCw className="w-3 h-3 animate-spin" />}
-          {state === 'done' && <CheckCircle2 className="w-3 h-3 mr-1" />}
-          {state === 'idle' && <Download className="w-3 h-3 mr-1" />}
-          {state === 'done' ? 'Downloaded' : state === 'idle' ? 'Download EPUB' : ''}
-        </Button>
+        {state === 'loading' && (
+          <div className="mt-1.5 w-full h-1 rounded-full bg-muted overflow-hidden">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-300 ease-out"
+              style={{ width: `${Math.max(progress, 3)}%` }}
+            />
+          </div>
+        )}
       </div>
+
+      {/* Button */}
+      <Button
+        size="sm"
+        onClick={handleClick}
+        disabled={state === 'loading'}
+        aria-label={`Download ${book.title}`}
+        className={cn(
+          'shrink-0 text-[11px] font-semibold min-w-[4.75rem]',
+          state === 'done' && 'bg-green-600 hover:bg-green-600 text-white',
+        )}
+        variant={state === 'loading' ? 'outline' : 'default'}
+      >
+        {state === 'loading' && progress > 0 && <span className="tabular-nums">{progress}%</span>}
+        {state === 'loading' && progress === 0 && <RefreshCw className="w-3 h-3 animate-spin" />}
+        {state === 'done' && <CheckCircle2 className="w-3 h-3 mr-1" />}
+        {state === 'done' ? 'Done' : state === 'idle' ? 'EPUB' : ''}
+      </Button>
     </div>
   );
 });
@@ -449,8 +425,8 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
 
         {/* Loading skeletons */}
         {loading && (
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 max-w-[1400px] mx-auto w-full">
-            {Array.from({ length: 15 }).map((_, i) => <SkeletonCard key={i} />)}
+          <div className="grid gap-2 xl:grid-cols-2 max-w-6xl mx-auto w-full">
+            {Array.from({ length: 14 }).map((_, i) => <SkeletonCard key={i} />)}
           </div>
         )}
 
@@ -482,7 +458,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
         {/* Grid */}
         {!loading && !error && filtered.length > 0 && (
           <>
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 max-w-[1400px] mx-auto w-full">
+            <div className="grid gap-2 xl:grid-cols-2 max-w-6xl mx-auto w-full">
               {visibleBooks.map((book) => (
                 <BookCard key={book.id} book={book} onDownload={handleDownload} />
               ))}
