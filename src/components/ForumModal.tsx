@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { getBackendUrl } from '@/utils/backend';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -31,6 +32,10 @@ import {
   Clock,
   Filter,
   Info,
+  BookMarked,
+  BookUp,
+  CheckCircle2,
+  Upload,
 } from 'lucide-react';
 
 interface ForumModalProps {
@@ -38,7 +43,7 @@ interface ForumModalProps {
   onClose: () => void;
 }
 
-type Category = 'report_error' | 'new_site' | 'general';
+type Category = 'report_error' | 'new_site' | 'general' | 'book_request';
 
 interface Thread {
   id: string;
@@ -68,7 +73,22 @@ const CATEGORY_META: Record<Category, { label: string; icon: any; bg: string; co
   report_error: { label: 'Site Error', icon: Bug, bg: 'bg-red-500/10 dark:bg-red-500/20', color: 'text-red-600 dark:text-red-400', border: 'border-red-500/20' },
   new_site: { label: 'New Site Request', icon: Globe, bg: 'bg-blue-500/10 dark:bg-blue-500/20', color: 'text-blue-600 dark:text-blue-400', border: 'border-blue-500/20' },
   general: { label: 'General Chat', icon: MessagesSquare, bg: 'bg-emerald-500/10 dark:bg-emerald-500/20', color: 'text-emerald-600 dark:text-emerald-400', border: 'border-emerald-500/20' },
+  book_request: { label: 'Book Request', icon: BookMarked, bg: 'bg-violet-500/10 dark:bg-violet-500/20', color: 'text-violet-600 dark:text-violet-400', border: 'border-violet-500/20' },
 };
+
+/* Book-request sharing: when a reader uploads the requested EPUB, the share
+   flow posts a marker comment in the request thread. The first marker wins —
+   it tells both the list and the thread that the request was fulfilled, and
+   who to thank. */
+const SHARE_MARKER = '📚 SHARED';
+interface ShareInfo {
+  by: string;
+  at: string;
+}
+function shareFromComment(c: { body: string; author_name: string; created_at: string }): ShareInfo | null {
+  if (!c.body || !c.body.startsWith(SHARE_MARKER)) return null;
+  return { by: c.author_name, at: c.created_at };
+}
 
 const TOKENS_KEY = 'forum-edit-tokens';
 const PROFILE_KEY = 'forum-profile';
@@ -133,7 +153,7 @@ function Avatar({ name, url, className = "w-8 h-8" }: { name: string; url?: stri
   );
 }
 
-function ThreadRow({ t, mine, onOpen }: { t: Thread; mine: boolean; onOpen: () => void }) {
+function ThreadRow({ t, mine, onOpen, share }: { t: Thread; mine: boolean; onOpen: () => void; share?: ShareInfo | null }) {
   const meta = CATEGORY_META[t.category];
   const Icon = meta.icon;
   return (
@@ -154,6 +174,16 @@ function ThreadRow({ t, mine, onOpen }: { t: Thread; mine: boolean; onOpen: () =
               <ShieldCheck className="w-3 h-3" /> You
             </span>
           )}
+          {t.category === 'book_request' &&
+            (share ? (
+              <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                <CheckCircle2 className="w-3 h-3" /> Shared by {share.by}
+              </span>
+            ) : (
+              <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                <Clock className="w-3 h-3" /> Waiting for a share
+              </span>
+            ))}
         </span>
         <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground min-w-0">
           <Avatar name={t.author_name} url={t.avatar_url} className="w-4 h-4" />
@@ -217,6 +247,28 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editCommentBody, setEditCommentBody] = useState('');
 
+  const [shares, setShares] = useState<Record<string, ShareInfo>>({});
+
+  const loadShares = useCallback(async (list: Thread[]) => {
+    const ids = list.filter((t) => t.category === 'book_request').map((t) => t.id);
+    if (!ids.length) {
+      setShares({});
+      return;
+    }
+    const { data } = await supabase
+      .from('forum_comments')
+      .select('thread_id,body,author_name,created_at')
+      .in('thread_id', ids)
+      .order('created_at', { ascending: true });
+    const map: Record<string, ShareInfo> = {};
+    for (const c of (data as { thread_id: string; body: string; author_name: string; created_at: string }[]) || []) {
+      if (map[c.thread_id]) continue;
+      const s = shareFromComment(c);
+      if (s) map[c.thread_id] = s;
+    }
+    setShares(map);
+  }, []);
+
   const loadThreads = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -226,9 +278,12 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
       .order('created_at', { ascending: false })
       .limit(200);
     if (error) toast({ title: 'Failed to load forum', description: error.message, variant: 'destructive' });
-    else setThreads((data as Thread[]) || []);
+    else {
+      setThreads((data as Thread[]) || []);
+      void loadShares((data as Thread[]) || []);
+    }
     setLoading(false);
-  }, [toast]);
+  }, [toast, loadShares]);
 
   const loadComments = useCallback(
     async (threadId: string) => {
@@ -396,6 +451,64 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
     bumpCount(activeThread.id, 1);
   };
 
+  // --- Book-request sharing -------------------------------------------------
+  const [shareUploading, setShareUploading] = useState(false);
+  const shareFileRef = useRef<HTMLInputElement>(null);
+
+  const activeShare = useMemo(() => {
+    for (const c of comments) {
+      const s = shareFromComment(c);
+      if (s) return s;
+    }
+    return activeThread ? shares[activeThread.id] || null : null;
+  }, [comments, shares, activeThread]);
+
+  const handleShareFile = async (file: File) => {
+    if (!activeThread) return;
+    if (!/\.epub$/i.test(file.name)) {
+      toast({ title: 'Please choose an .epub file', variant: 'destructive' });
+      return;
+    }
+    setShareUploading(true);
+    const { name, avatar_url } = requireProfile();
+    try {
+      const resp = await fetch(`${getBackendUrl()}/api/library/share`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/epub+zip',
+          'x-book-title': encodeURIComponent(activeThread.title),
+          'x-shared-by': encodeURIComponent(name),
+        },
+        body: file,
+      });
+      const data = (await resp.json().catch(() => ({}))) as { error?: string };
+      if (!resp.ok) throw new Error(data.error || `Upload failed (${resp.status})`);
+
+      const token = newToken();
+      const body = `${SHARE_MARKER} by ${name}\n\n\u201C${activeThread.title}\u201D is now in the Community Library \u2014 open the Library and search \u201C${activeThread.title}\u201D to download it.\n\nThank you, ${name}, for sharing with the community! \uD83D\uDE4F`;
+      const { data: cData, error } = await supabase
+        .from('forum_comments')
+        .insert({ thread_id: activeThread.id, body, author_name: name, avatar_url, edit_token: token })
+        .select()
+        .single();
+      if (error || !cData) {
+        throw new Error('The EPUB was saved to the library, but posting the thank-you note failed. Please add a comment so we can credit you.');
+      }
+      saveToken(cData.id, token);
+      setComments((prev) => [...prev, cData as Comment]);
+      bumpCount(activeThread.id, 1);
+      setShares((prev) => ({ ...prev, [activeThread.id]: { by: name, at: new Date().toISOString() } }));
+      toast({ title: 'Thank you for sharing! \uD83D\uDE4F', description: 'The EPUB is now in the Community Library.' });
+    } catch (e) {
+      toast({
+        title: 'Share failed',
+        description: e instanceof Error ? e.message : 'Upload failed',
+        variant: 'destructive',
+      });
+    }
+    setShareUploading(false);
+  };
+
   const saveCommentEdit = async (c: Comment) => {
     const token = getTokens()[c.id];
     const admin = token ? '' : promptAdmin();
@@ -447,6 +560,11 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
 
   const pinnedThreads = filteredThreads.filter((t) => t.is_pinned);
   const discussionThreads = filteredThreads.filter((t) => !t.is_pinned);
+  // In the "all" view, book requests get their own board section so open
+  // requests stay visible instead of sinking into general discussions.
+  const requestThreads = filter === 'all' ? discussionThreads.filter((t) => t.category === 'book_request') : [];
+  const plainDiscussions =
+    filter === 'all' ? discussionThreads.filter((t) => t.category !== 'book_request') : discussionThreads;
 
   if (!open) return null;
 
@@ -524,11 +642,22 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
               >
                 <Plus className="w-4 h-4" /> New Discussion
               </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setNewCategory('book_request');
+                  setView('new');
+                }}
+                className="gap-2 rounded-xl h-9 px-4 font-bold text-xs shrink-0 border-violet-500/40 text-violet-600 dark:text-violet-400 hover:bg-violet-500/10"
+              >
+                <BookMarked className="w-4 h-4" /> Request a Book
+              </Button>
             </div>
 
             {/* Category Filter Pills */}
             <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
-              {(['all', 'report_error', 'new_site', 'general'] as const).map((catKey) => {
+              {(['all', 'report_error', 'new_site', 'book_request', 'general'] as const).map((catKey) => {
                 const isSelected = filter === catKey;
                 const meta = catKey === 'all' ? null : CATEGORY_META[catKey];
                 const Icon = meta?.icon || Filter;
@@ -598,7 +727,23 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
                     </div>
                   </section>
                 )}
-                {discussionThreads.length > 0 && (
+                {requestThreads.length > 0 && (
+                  <section className="space-y-2">
+                    <h3 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      <BookMarked className="w-3.5 h-3.5 text-violet-500" /> Book Requests &amp; Sharing
+                    </h3>
+                    <p className="text-[11px] leading-relaxed text-muted-foreground">
+                      Ask for a book you cannot find. If you have a requested book as an EPUB, open the request and
+                      upload it — it goes straight into the Community Library and you are credited as the sharer.
+                    </p>
+                    <div className="rounded-2xl border border-violet-500/30 bg-card divide-y divide-border/60 overflow-hidden shadow-xs">
+                      {requestThreads.map((t) => (
+                        <ThreadRow key={t.id} t={t} mine={isMine(t.id)} onOpen={() => openThread(t)} share={shares[t.id] || null} />
+                      ))}
+                    </div>
+                  </section>
+                )}
+                {plainDiscussions.length > 0 && (
                   <section className="space-y-2">
                     {pinnedThreads.length > 0 && (
                       <h3 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
@@ -606,8 +751,8 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
                       </h3>
                     )}
                     <div className="rounded-2xl border border-border/80 bg-card divide-y divide-border/60 overflow-hidden shadow-xs">
-                      {discussionThreads.map((t) => (
-                        <ThreadRow key={t.id} t={t} mine={isMine(t.id)} onOpen={() => openThread(t)} />
+                      {plainDiscussions.map((t) => (
+                        <ThreadRow key={t.id} t={t} mine={isMine(t.id)} onOpen={() => openThread(t)} share={shares[t.id] || null} />
                       ))}
                     </div>
                   </section>
@@ -631,6 +776,14 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
                 homepage URL. One topic per thread helps the team answer faster.
               </div>
 
+              {newCategory === 'book_request' && (
+                <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 px-3.5 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
+                  <span className="font-semibold text-foreground">Asking for a book:</span> use the book's exact title
+                  as the topic. If another reader has the EPUB, they can upload it right from your request — it lands
+                  in the Community Library for everyone, and the sharer is thanked here by name.
+                </div>
+              )}
+
               <ProfileFields
                 name={authorName}
                 avatar={authorAvatar}
@@ -648,6 +801,7 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
                     <SelectItem value="general">General Discussion & Novel Recommendations</SelectItem>
                     <SelectItem value="report_error">Report Site Error or Broken Chapters</SelectItem>
                     <SelectItem value="new_site">Request Support for a New Site</SelectItem>
+                    <SelectItem value="book_request">Request a Book (ask the community for an EPUB)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -658,7 +812,7 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
                   maxLength={200}
-                  placeholder="e.g. Please add support for LightNovelWorld or NovelBin error..."
+                  placeholder={newCategory === 'book_request' ? 'e.g. Mother of Learning — complete EPUB' : 'e.g. Please add support for LightNovelWorld or NovelBin error...'}
                   className="h-10 text-sm rounded-xl bg-background border-border/80"
                 />
               </div>
@@ -670,7 +824,7 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
                   onChange={(e) => setNewBody(e.target.value)}
                   maxLength={5000}
                   rows={7}
-                  placeholder="Include novel URLs, error messages, or details to help us fix/add it quickly..."
+                  placeholder={newCategory === 'book_request' ? 'Which book exactly? Author, language, edition or chapter range if it matters…' : 'Include novel URLs, error messages, or details to help us fix/add it quickly...'}
                   className="text-sm rounded-xl bg-background border-border/80 resize-y"
                 />
               </div>
@@ -730,6 +884,7 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
                       <SelectItem value="general">General Discussion</SelectItem>
                       <SelectItem value="report_error">Report Site Error</SelectItem>
                       <SelectItem value="new_site">Request New Site</SelectItem>
+                      <SelectItem value="book_request">Book Request</SelectItem>
                     </SelectContent>
                   </Select>
                   <Input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} maxLength={200} className="rounded-xl font-bold" />
@@ -767,6 +922,58 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
             </div>
 
             {/* Comments Section */}
+            {activeThread.category === 'book_request' &&
+              (activeShare ? (
+                <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 sm:p-5 flex items-start gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
+                  <div className="text-sm">
+                    <p className="font-bold text-foreground">Shared by {activeShare.by} — thank you! 🙏</p>
+                    <p className="text-muted-foreground mt-1">
+                      This book is now in the <span className="font-semibold text-foreground">Community Library</span>.
+                      Open the Library and search &ldquo;{activeThread.title}&rdquo; to download it.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-violet-500/30 bg-violet-500/5 p-4 sm:p-5 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <BookUp className="w-5 h-5 text-violet-500 shrink-0 mt-0.5" />
+                    <div className="text-sm">
+                      <p className="font-bold text-foreground">Have this book as an EPUB?</p>
+                      <p className="text-muted-foreground mt-1">
+                        Share it here — the file goes straight into the Community Library for everyone who is asking,
+                        and you will be credited as the sharer in this request.
+                      </p>
+                    </div>
+                  </div>
+                  <input
+                    ref={shareFileRef}
+                    type="file"
+                    accept=".epub,application/epub+zip"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = '';
+                      if (f) void handleShareFile(f);
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    onClick={() => shareFileRef.current?.click()}
+                    disabled={shareUploading}
+                    className="gap-2 rounded-xl text-xs font-bold"
+                  >
+                    {shareUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                    {shareUploading ? 'Uploading to the library…' : 'Upload EPUB for this request'}
+                  </Button>
+                  <p className="text-[11px] text-muted-foreground">
+                    EPUB only, 100 KB – 40 MB. It will be shared under your forum name:{' '}
+                    <span className="font-semibold text-foreground">{authorName.trim() || 'Reader'}</span> (change it in
+                    the reply box below).
+                  </p>
+                </div>
+              ))}
+
             <div className="space-y-4">
               <div className="flex items-center justify-between font-bold text-sm text-foreground">
                 <span className="flex items-center gap-2">
