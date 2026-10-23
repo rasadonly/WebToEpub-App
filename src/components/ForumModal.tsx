@@ -644,7 +644,7 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
                   <SelectTrigger className="h-10 rounded-xl bg-background border-border/80">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="z-[120]">
                     <SelectItem value="general">General Discussion & Novel Recommendations</SelectItem>
                     <SelectItem value="report_error">Report Site Error or Broken Chapters</SelectItem>
                     <SelectItem value="new_site">Request Support for a New Site</SelectItem>
@@ -726,7 +726,7 @@ export function ForumModal({ open, onClose }: ForumModalProps) {
                 <div className="space-y-3 pt-2">
                   <Select value={newCategory} onValueChange={(v) => setNewCategory(v as Category)}>
                     <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[120]">
                       <SelectItem value="general">General Discussion</SelectItem>
                       <SelectItem value="report_error">Report Site Error</SelectItem>
                       <SelectItem value="new_site">Request New Site</SelectItem>
