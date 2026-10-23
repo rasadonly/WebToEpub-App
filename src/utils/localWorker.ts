@@ -950,16 +950,26 @@ async function fetchChapterContent(url: string, selector: string): Promise<strin
   const RATE_LIMITED = /(freewebnovel\.com|novelfull(l)?\.(net|com)|allnovelfull|allnovelnext|allnovel\.org|novelfire\.net|novelhall\.com|scribblehub\.com|novelgo\.id|novgo\.net|novelcodex\.com|novel-?next\.(com|net)|novel-?bin\.(com|net)|novelbin\.(com|me|net)|novelmax\.net|novelgate\.net|novelhulk\.net|fanfiction\.net|archiveofourown\.org|akknovel\.com|readlightnovel\.me)$/i;
   const base = RATE_LIMITED.test(hostname) ? 1500 : 400;
 
+  const textLen = (h: string) => (h ? h.replace(/<[^>]+>/g, "").trim().length : 0);
+  // WTR-LAB's parser retries internally against a metered API — don't stack
+  // the full outer loop on top of it.
+  const maxAttempts = key === "wtrlab" ? 2 : 4;
   let last = "";
-  for (let i = 0; i < 4; i++) {
+  let thinTries = 0;
+  for (let i = 0; i < maxAttempts; i++) {
     try {
       const html = await attempt();
-      if (html && html.replace(/<[^>]+>/g, "").trim().length >= 20) return html;
-      last = html;
+      if (textLen(html) >= 20) return html;
+      if (textLen(html) > 0) {
+        // Real but short chapter (author's note, prologue card): one second
+        // chance, then accept the longest version instead of re-downloading.
+        if (textLen(html) > textLen(last)) last = html;
+        if (++thinTries >= 2) break;
+      }
     } catch (e) {
-      last = "";
+      /* keep any thin candidate; retry */
     }
-    await new Promise((r) => setTimeout(r, base * Math.pow(2, i) + Math.random() * 300));
+    if (i < maxAttempts - 1) await new Promise((r) => setTimeout(r, base * Math.pow(2, i) + Math.random() * 300));
   }
   if (last) return last;
   throw new Error("Chapter content appears to be empty");
