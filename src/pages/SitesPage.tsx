@@ -86,7 +86,7 @@ export default function SitesPage() {
                   href={`https://${host}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xs px-3 py-2 rounded-lg border border-border bg-card hover:border-primary/40 hover:text-primary transition-colors truncate"
+                  className="text-xs px-3 py-2 rounded-lg border border-border bg-card hover:border-primary/40 hover:text-primary transition-colors truncate min-w-0"
                   title={host}
                 >
                   {host}
