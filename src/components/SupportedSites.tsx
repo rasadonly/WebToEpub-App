@@ -144,7 +144,7 @@ export function SupportedSites({ open, onOpenChange, hideTrigger }: { open?: boo
         </DialogTrigger>
       )}
 
-      <DialogContent className="max-w-none w-screen h-[100dvh] sm:rounded-none p-4 sm:p-6 overflow-y-auto" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))', paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
+      <DialogContent className="left-0 top-0 translate-x-0 translate-y-0 max-w-none w-full h-[100dvh] sm:rounded-none p-4 sm:p-6 overflow-y-auto overflow-x-hidden" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))', paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
         <DialogHeader>
           <DialogTitle>
             Supported Novel Websites{hosts.length ? ` (${hosts.length} sites)` : ''}
@@ -181,15 +181,15 @@ export function SupportedSites({ open, onOpenChange, hideTrigger }: { open?: boo
         )}
 
         {hosts.length > 0 && (
-          <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 md:grid-cols-3">
+          <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 min-w-0">
             {sorted.map(host => {
               const status = statusOf(host);
               return (
-                <Card key={host} className={`border-border/60 ${status === 'down' || status === 'parked' ? 'opacity-70' : ''}`}>
+                <Card key={host} className={`border-border/60 min-w-0 ${status === 'down' || status === 'parked' ? 'opacity-70' : ''}`}>
                   <CardHeader className="p-3 pb-1">
                     <CardTitle className="text-sm flex items-center gap-2">
                       <StatusDot status={status} />
-                      <span className="truncate">{host}</span>
+                      <span className="truncate min-w-0">{host}</span>
                       <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0">
                         {STATUS_LABEL[status]}
                       </Badge>
@@ -206,7 +206,7 @@ export function SupportedSites({ open, onOpenChange, hideTrigger }: { open?: boo
                       Visit
                     </Button>
                     {health[host]?.note && (
-                      <span className="text-[10px] text-muted-foreground truncate">{health[host].note}</span>
+                      <span className="text-[10px] text-muted-foreground truncate min-w-0">{health[host].note}</span>
                     )}
                   </CardContent>
                 </Card>
