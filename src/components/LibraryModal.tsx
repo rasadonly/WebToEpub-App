@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Send, Cloud, Archive, Download, Search, BookOpen, CheckCircle2, RefreshCw, HardDriveDownload } from 'lucide-react';
+import { X, Cloud, Archive, Download, Search, BookOpen, CheckCircle2, RefreshCw, HardDriveDownload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -8,7 +8,6 @@ import { useToast } from '@/hooks/use-toast';
 import { matchesLibrarySearch } from '@/utils/librarySearch';
 import {
   LibraryBook,
-  libraryGetTelegram,
   libraryGetMega,
   libraryGetArchive,
   libraryGetCommunity,
@@ -22,16 +21,15 @@ interface LibraryModalProps {
   onClose: () => void;
 }
 
-type Tab = 'community' | 'my-downloads' | 'telegram' | 'mega' | 'archive';
+type Tab = 'community' | 'my-downloads' | 'mega' | 'archive';
 
 const DEFAULT_MEGA_URL = 'https://mega.nz/folder/Ci4ETASB#KIFVuPI99P1Ytg0dxmtYlw';
 const INITIAL_VISIBLE = 80;
 const LOAD_MORE = 80;
 
-const TABS: { id: Tab; label: string; icon: typeof Send }[] = [
+const TABS: { id: Tab; label: string; icon: typeof BookOpen }[] = [
   { id: 'community', label: 'Community', icon: BookOpen },
   { id: 'my-downloads', label: 'My Books', icon: HardDriveDownload },
-  { id: 'telegram', label: 'Telegram', icon: Send },
   { id: 'mega', label: 'Mega', icon: Cloud },
   { id: 'archive', label: 'Archive.org', icon: Archive },
 ];
@@ -251,7 +249,6 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
           if (tabRef.current === 'community') setBooks(fresh);
         });
       } else if (which === 'my-downloads') list = await libraryGetMyDownloads();
-      else if (which === 'telegram') list = await libraryGetTelegram();
       else if (which === 'archive') list = await libraryGetArchive();
       else list = await libraryGetMega(megaOverride ?? megaUrl);
       setBooks(list);
