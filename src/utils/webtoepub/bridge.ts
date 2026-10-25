@@ -126,7 +126,6 @@ let iframe: HTMLIFrameElement | null = null;
 let readyPromise: Promise<EngineWindow> | null = null;
 
 const HF_OLD_REPO_ID = 'Amono5667/webtoepub-library';
-const HF_CATALOG_FILE = 'catalog.json';
 
 function withTimeout(url: string, init: RequestInit = {}, timeoutMs = 15_000): Promise<Response> {
   const controller = new AbortController();
@@ -1004,52 +1003,10 @@ export interface LibraryBook {
   uploadedAt?: string;
   /** Opaque handle we pass back to library functions to trigger downloads. */
   handle: unknown;
-  source: 'telegram' | 'hf' | 'mega' | 'archive';
+  source: 'hf' | 'mega' | 'archive';
 }
 
 const MIN_COMMUNITY_BOOK_SIZE = 100 * 1024; // 100 KB minimum
-
-async function fetchHFBooks(mode: 'telegram' | 'hf'): Promise<LibraryBook[]> {
-  const repoId = mode === 'telegram' ? HF_OLD_REPO_ID : HF_OLD_REPO_ID;
-  const list = await fetchJsonWithProxyFallback<HFBookEntry[]>(
-    makeHfFileUrl(repoId, HF_CATALOG_FILE),
-    12_000
-  );
-  if (!Array.isArray(list)) return [];
-
-  const books: LibraryBook[] = list
-    .filter((item) => item.size === undefined || item.size >= MIN_COMMUNITY_BOOK_SIZE)
-    .map((item) => ({
-      id: item.id,
-      title: item.title || 'Untitled',
-      author: item.author || '',
-      description: item.description || '',
-      size: item.size,
-      uploadedAt: item.uploadedAt,
-      handle: { epubPath: item.epubPath, repoId: item.repoId || repoId },
-      source: mode,
-    }))
-    .sort((a, b) => {
-      const aTime = Date.parse(a.uploadedAt || '');
-      const bTime = Date.parse(b.uploadedAt || '');
-      return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
-    });
-
-  // Deduplicate books by normalized title
-  const seen = new Map<string, LibraryBook>();
-  for (const book of books) {
-    const key = book.title.toLowerCase().replace(/[^a-z0-9]+/g, '');
-    if (!key) continue;
-    if (!seen.has(key)) {
-      seen.set(key, book);
-    }
-  }
-
-  return Array.from(seen.values());
-}
-
-export const libraryGetTelegram = () => fetchHFBooks('telegram');
-export const libraryGetPublic = () => fetchHFBooks('hf');
 
 // ── Community library (books this app uploads) ──────────────
 /** New uploads go here (server HF_LIBRARY_REPO). */
