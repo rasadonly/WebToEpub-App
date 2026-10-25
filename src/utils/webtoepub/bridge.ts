@@ -1003,7 +1003,7 @@ export interface LibraryBook {
   uploadedAt?: string;
   /** Opaque handle we pass back to library functions to trigger downloads. */
   handle: unknown;
-  source: 'hf' | 'mega' | 'archive';
+  source: 'hf' | 'archive';
 }
 
 const MIN_COMMUNITY_BOOK_SIZE = 100 * 1024; // 100 KB minimum
@@ -1366,48 +1366,6 @@ export async function libraryDownloadArchive(handle: unknown): Promise<Blob> {
   }
   const text = await fetchTextWithProxyFallback(url, 25_000);
   return new Blob([text], { type: 'application/epub+zip' });
-}
-
-// ── Mega ────────────────────────────────────────────────────
-const megaFiles = new Map<string, MegaNode>();
-export async function libraryGetMega(folderUrl: string): Promise<LibraryBook[]> {
-  const win = await ensureIframe();
-  if (!win.mega) throw new Error('Mega SDK not loaded in engine');
-  const folder = await win.mega.File.fromURL(folderUrl);
-  await folder.loadAttributes();
-  const found: MegaNode[] = [];
-  const walk = (n: MegaNode) => {
-    if (!n.children) return;
-    for (const c of n.children) {
-      if (c.directory) walk(c);
-      else if (c.name?.toLowerCase().endsWith('.epub')) found.push(c);
-    }
-  };
-  walk(folder);
-  megaFiles.clear();
-  const out: LibraryBook[] = [];
-  found.forEach((f, i) => {
-    const id = `mega-${i}`;
-    megaFiles.set(id, f);
-    out.push({
-      id,
-      title: (f.name || 'Untitled').replace(/\.epub$/i, ''),
-      author: '',
-      description: '',
-      size: f.size,
-      handle: { id },
-      source: 'mega',
-    });
-  });
-  return out;
-}
-
-export async function libraryDownloadMega(handle: unknown): Promise<Blob> {
-  const { id } = handle as { id: string };
-  const file = megaFiles.get(id);
-  if (!file) throw new Error('Mega file no longer available – reload the folder.');
-  const buf = await file.downloadBuffer();
-  return new Blob([buf], { type: 'application/epub+zip' });
 }
 
 export async function libraryGetMyDownloads(): Promise<LibraryBook[]> {
