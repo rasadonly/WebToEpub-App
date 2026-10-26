@@ -149,7 +149,7 @@ interface BookCardProps {
 
       {/* Info */}
       <div className="flex-1 min-w-0">
-        <h3 className="font-serif font-semibold text-sm leading-snug line-clamp-none sm:line-clamp-1" title={book.title}>
+        <h3 className="font-serif font-semibold text-sm leading-snug break-words line-clamp-none sm:line-clamp-1" title={book.title}>
           {cleanTitle}
         </h3>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground min-w-0">
@@ -232,7 +232,12 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
     if (open) setTimeout(() => searchRef.current?.focus(), 200);
   }, [open]);
 
+  // Guards against stale tab loads: without this, a slow load for a tab the
+  // user already left (e.g. Archive) can resolve after the current tab's load
+  // and overwrite the list on screen — Archive books under the Community tab.
+  const loadGen = useRef(0);
   const load = async (which: Tab) => {
+    const gen = ++loadGen.current;
     setLoading(true);
     setError(null);
     setBooks([]);
@@ -241,15 +246,17 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
       let list: LibraryBook[] = [];
       if (which === 'community') {
         list = await libraryGetCommunity((fresh) => {
-          if (tabRef.current === 'community') setBooks(fresh);
+          if (loadGen.current === gen && tabRef.current === 'community') setBooks(fresh);
         });
       } else if (which === 'my-downloads') list = await libraryGetMyDownloads();
       else if (which === 'archive') list = await libraryGetArchive();
+      if (loadGen.current !== gen) return; // a newer tab load started; don't overwrite it
       setBooks(list);
     } catch (e) {
+      if (loadGen.current !== gen) return;
       setError((e as Error).message || 'Failed to load library');
     } finally {
-      setLoading(false);
+      if (loadGen.current === gen) setLoading(false);
     }
   };
 
@@ -395,7 +402,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
       </div>
 
       {/* ── Body ── */}
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-4 bg-muted/30">
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain px-4 sm:px-6 py-4 bg-muted/30">
 
         {/* Loading skeletons */}
         {loading && (
