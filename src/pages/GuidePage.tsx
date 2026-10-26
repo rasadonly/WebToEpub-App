@@ -56,6 +56,7 @@ export default function GuidePage() {
                   Open the novel&apos;s <strong>main page</strong> on the source site — the page with the
                   synopsis and the chapter list, not a chapter or reader page. Examples of good URLs:
                   <span className="block mt-1 font-mono text-xs bg-muted px-2 py-1 rounded">allnovelfull.com/the-beginning-after-the-end.html</span>
+                  <span className="block mt-1 font-mono text-xs bg-muted px-2 py-1 rounded">novelcool.com/novel/Alchemy-Emperor-of-the-Divine-Dao.html</span>
                 </>,
                 <>
                   Copy that URL and paste it into the search bar on the home page. The book&apos;s title,
