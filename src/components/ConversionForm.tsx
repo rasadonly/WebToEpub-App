@@ -135,6 +135,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
       const host = new URL(s.trim()).hostname.toLowerCase();
       if (/(^|\.)wtr-lab\.com$/.test(host)) return 'WTR-LAB';
       if (/(^|\.)ranobes\.(top|net)$/.test(host)) return 'Ranobes';
+      if (/(^|\.)novelcool\.com$/.test(host)) return 'NovelCool';
       return null;
     } catch { return null; }
   };
