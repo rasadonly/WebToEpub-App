@@ -129,6 +129,15 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
 
   const isUrlLike = (s: string) => /^https?:\/\//i.test(s.trim());
 
+  /** WTR-LAB support was removed: pasted links get this notice instead of a fetch. */
+  const isWtrLabUrl = (s: string) => {
+    try { return /(^|\.)wtr-lab\.com$/i.test(new URL(s.trim()).hostname); } catch { return false; }
+  };
+  const wtrLabRemovedToast = () => toast({
+    title: 'WTR-LAB support removed',
+    description: 'Sadly, support for WTR-LAB has been removed due to technical reasons.',
+  });
+
   /** Drops tracking params (utm_*, ref, fbclid…) that break some parsers. */
   const cleanUrl = (raw: string) => {
     try {
@@ -169,6 +178,10 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
           variant: 'destructive',
         });
       }
+      return;
+    }
+    if (isWtrLabUrl(url)) {
+      wtrLabRemovedToast();
       return;
     }
     setIsAnalysing(true);
@@ -235,6 +248,8 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
       const slugTitle = extractTitleFromUrl(url);
       if (slugTitle) mergeAuto({ title: slugTitle });
       void analyse(url, true).then(() => {
+        // WTR-LAB links stop here: the notice above already fired, never auto-start them.
+        if (isWtrLabUrl(url)) return;
         // Book details are in — start loading chapters automatically (once per link).
         if (autoStartedUrlRef.current === url || analysedUrlRef.current !== url) return;
         autoStartedUrlRef.current = url;
@@ -435,6 +450,12 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
     // If it's not a URL, run a search instead of trying to fetch
     if (!isUrlLike(value)) {
       runSearch(value);
+      return;
+    }
+
+    // WTR-LAB links are refused with a notice instead of a conversion attempt.
+    if (isWtrLabUrl(value)) {
+      wtrLabRemovedToast();
       return;
     }
 
