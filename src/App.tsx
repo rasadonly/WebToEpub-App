@@ -39,7 +39,7 @@ function NavBar() {
       <div className="container mx-auto px-4 flex items-center justify-between h-12 max-w-5xl gap-3">
         {/* Brand */}
         <Link to="/" className="font-bold text-base tracking-tight hover:opacity-90 transition-opacity shrink-0">
-          Link<span className="text-primary">To</span>Epub
+          Link<span className="text-primary">To</span>Epub<span className="text-primary">.</span>
         </Link>
 
         {/* Page nav - Hidden on mobile, visible on sm and up */}
