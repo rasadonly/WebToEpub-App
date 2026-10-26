@@ -4,18 +4,6 @@ import { trackPageView } from '@/utils/analytics';
 
 const guides = [
   {
-    slug: 'wtr-lab',
-    name: 'WTR-LAB',
-    domain: 'wtr-lab.com',
-    url_example: 'wtr-lab.com/en/serie-3914/i-am-the-fated-villain',
-    steps: [
-      'Find your novel on WTR-LAB and open its main page.',
-      'Copy the URL.',
-      'Paste into LinkToEpub. WTR-LAB is fetched slowly to avoid rate-limiting — give it a minute.',
-    ],
-    gotcha: 'Large novels on WTR-LAB can take 2–3 minutes. That\'s normal — the server is being polite to the site.',
-  },
-  {
     slug: 'novelcool',
     name: 'NovelCool',
     domain: 'novelcool.com',
