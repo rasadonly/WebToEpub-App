@@ -234,7 +234,13 @@ async function api<T>(path: string, init?: RequestInit, timeoutMs = 60_000, base
   const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const r = await fetch(`${(base || getBackendUrl()).replace(/\/$/, '')}${path}`, { ...init, signal: ctrl.signal });
-    if (!r.ok) throw new Error(`Backend error ${r.status}`);
+    if (!r.ok) {
+      // Surface the server's own error message (e.g. the NovelCool manga
+      // notice) instead of a bare status code.
+      const body = await r.json().catch(() => null);
+      const msg = body && typeof body.error === 'string' ? body.error : `Backend error ${r.status}`;
+      throw new Error(msg);
+    }
     const ct = r.headers.get('content-type') || '';
     if (!ct.includes('application/json')) {
       throw new Error('Server returned HTML instead of JSON');
