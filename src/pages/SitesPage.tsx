@@ -4,7 +4,6 @@ import { trackPageView } from '@/utils/analytics';
 import { engineListSupportedHosts } from '@/utils/webtoepub/bridge';
 
 const FEATURED: { domain: string; note: string }[] = [
-  { domain: 'wtr-lab.com', note: 'Machine-translated Chinese novels, massive catalog' },
   { domain: 'novelcool.com', note: 'Huge collection of light novels and web novels' },
   { domain: 'ranobes.top', note: 'Fast, clean reader with good translation coverage' },
   { domain: 'allnovelfull.com', note: 'Xianxia, cultivation, Chinese translations' }
