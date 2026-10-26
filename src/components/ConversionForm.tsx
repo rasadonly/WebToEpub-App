@@ -129,13 +129,18 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
 
   const isUrlLike = (s: string) => /^https?:\/\//i.test(s.trim());
 
-  /** WTR-LAB support was removed: pasted links get this notice instead of a fetch. */
-  const isWtrLabUrl = (s: string) => {
-    try { return /(^|\.)wtr-lab\.com$/i.test(new URL(s.trim()).hostname); } catch { return false; }
+  /** Sites whose support was removed: pasted links get a notice instead of a fetch. */
+  const removedSiteFor = (s: string): string | null => {
+    try {
+      const host = new URL(s.trim()).hostname.toLowerCase();
+      if (/(^|\.)wtr-lab\.com$/.test(host)) return 'WTR-LAB';
+      if (/(^|\.)ranobes\.(top|net)$/.test(host)) return 'Ranobes';
+      return null;
+    } catch { return null; }
   };
-  const wtrLabRemovedToast = () => toast({
-    title: 'WTR-LAB support removed',
-    description: 'Sadly, support for WTR-LAB has been removed due to technical reasons.',
+  const removedSiteToast = (name: string) => toast({
+    title: `${name} support removed`,
+    description: `Sadly, support for ${name} has been removed due to technical reasons.`,
   });
 
   /** Drops tracking params (utm_*, ref, fbclid…) that break some parsers. */
@@ -180,8 +185,9 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
       }
       return;
     }
-    if (isWtrLabUrl(url)) {
-      wtrLabRemovedToast();
+    const removedSite = removedSiteFor(url);
+    if (removedSite) {
+      removedSiteToast(removedSite);
       return;
     }
     setIsAnalysing(true);
@@ -248,8 +254,8 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
       const slugTitle = extractTitleFromUrl(url);
       if (slugTitle) mergeAuto({ title: slugTitle });
       void analyse(url, true).then(() => {
-        // WTR-LAB links stop here: the notice above already fired, never auto-start them.
-        if (isWtrLabUrl(url)) return;
+        // Removed-site links stop here: the notice above already fired, never auto-start them.
+        if (removedSiteFor(url)) return;
         // Book details are in — start loading chapters automatically (once per link).
         if (autoStartedUrlRef.current === url || analysedUrlRef.current !== url) return;
         autoStartedUrlRef.current = url;
@@ -453,9 +459,10 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
       return;
     }
 
-    // WTR-LAB links are refused with a notice instead of a conversion attempt.
-    if (isWtrLabUrl(value)) {
-      wtrLabRemovedToast();
+    // Removed-site links are refused with a notice instead of a conversion attempt.
+    const removedSite = removedSiteFor(value);
+    if (removedSite) {
+      removedSiteToast(removedSite);
       return;
     }
 
