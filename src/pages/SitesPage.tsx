@@ -4,7 +4,8 @@ import { trackPageView } from '@/utils/analytics';
 import { engineListSupportedHosts } from '@/utils/webtoepub/bridge';
 
 const FEATURED: { domain: string; note: string }[] = [
-  { domain: 'allnovelfull.com', note: 'Xianxia, cultivation, Chinese translations' }
+  { domain: 'allnovelfull.com', note: 'Xianxia, cultivation, Chinese translations' },
+  { domain: 'novelcool.com', note: 'Huge collection of light novels and web novels' },
 ];
 
 export default function SitesPage() {
