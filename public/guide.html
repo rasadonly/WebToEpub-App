@@ -16,16 +16,24 @@
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-Q5R86ZENND');</script>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:system-ui,-apple-system,sans-serif;background:#0f0f12;color:#f1f1f1;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:3rem 1.5rem;text-align:center}
+    body{font-family:system-ui,-apple-system,sans-serif;background:#0f0f12;color:#f1f1f1;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:3rem 1.5rem}
     .logo{font-size:1.2rem;font-weight:700;color:#e11d48;margin-bottom:2rem}
-    h1{font-size:clamp(1.8rem,4vw,2.8rem);font-weight:800;line-height:1.2;margin-bottom:1rem;max-width:700px}
-    p{color:#9ca3af;max-width:600px;line-height:1.7;margin-bottom:2rem;font-size:1.05rem}
-    .btn{display:inline-flex;align-items:center;gap:.5rem;background:#e11d48;color:#fff;border-radius:10px;padding:1rem 2.2rem;font-size:1.05rem;font-weight:700;text-decoration:none;box-shadow:0 4px 24px #e11d4840}
-    .features{margin-top:3.5rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1.5rem;max-width:800px;width:100%}
-    .card{background:#18181b;border:1px solid #27272a;padding:1.5rem;border-radius:12px;text-align:left}
-    .card h3{font-size:1.1rem;margin-bottom:.5rem;color:#f4f4f5}
-    .card p{font-size:.88rem;color:#a1a1aa;margin:0}
-    footer{margin-top:4rem;font-size:.85rem;color:#71717a;display:flex;gap:1rem;flex-wrap:wrap;justify-content:center}
+    h1{font-size:clamp(1.8rem,4vw,2.8rem);font-weight:800;line-height:1.2;margin-bottom:1rem;max-width:700px;text-align:center}
+    .intro{color:#9ca3af;max-width:600px;line-height:1.7;margin-bottom:2rem;font-size:1.05rem;text-align:center}
+    .btn{display:inline-flex;align-items:center;gap:.5rem;background:#e11d48;color:#fff;border-radius:10px;padding:1rem 2.2rem;font-size:1.05rem;font-weight:700;text-decoration:none;box-shadow:0 4px 24px #e11d4840;margin-bottom:3rem}
+    .guide{max-width:700px;width:100%}
+    .guide section{background:#18181b;border:1px solid #27272a;padding:1.5rem;border-radius:12px;margin-bottom:1.5rem}
+    .guide h2{font-size:1.2rem;margin-bottom:.75rem;color:#f4f4f5}
+    .guide p,.guide li{font-size:.95rem;color:#a1a1aa;line-height:1.7}
+    .guide p{margin-bottom:.75rem}
+    .guide p:last-child{margin-bottom:0}
+    .guide ol,.guide ul{padding-left:1.25rem}
+    .guide li{margin-bottom:.5rem}
+    .guide strong{color:#f4f4f5}
+    .guide code{font-family:ui-monospace,monospace;font-size:.82rem;background:#27272a;padding:.15rem .4rem;border-radius:6px;color:#d4d4d8}
+    .guide a{color:#fb7185;text-decoration:none}
+    .guide a:hover{text-decoration:underline}
+    footer{margin-top:2rem;font-size:.85rem;color:#71717a;display:flex;gap:1rem;flex-wrap:wrap;justify-content:center}
     footer a{color:#a1a1aa;text-decoration:none}
     footer a:hover{color:#e11d48}
   </style>
@@ -34,22 +42,58 @@
 <body>
   <div class="logo"><a href="https://linktoepub.com/" style="color:inherit;text-decoration:none">LinkToEpub</a></div>
   <h1>How to Convert Web Novels to EPUB</h1>
-  <p>Follow these simple steps to download any web novel as a beautifully formatted EPUB file, ready for your Kindle, Kobo, or any e-reader.</p>
+  <p class="intro">LinkToEpub turns a web novel into a clean EPUB file you can read on any ebook app. The whole process is: paste a link, fetch the chapters, generate the file.</p>
   <a href="https://linktoepub.com/" class="btn">Start Converting &rarr;</a>
 
-  <div class="features">
-    <div class="card">
-      <h3>Step 1: Find Your Novel</h3>
-      <p>Go to any supported novel site and copy the table-of-contents URL.</p>
-    </div>
-    <div class="card">
-      <h3>Step 2: Paste &amp; Fetch</h3>
-      <p>Paste the URL into LinkToEpub and click Fetch Chapters.</p>
-    </div>
-    <div class="card">
-      <h3>Step 3: Download EPUB</h3>
-      <p>Select your chapters, click Generate, and download your EPUB.</p>
-    </div>
+  <div class="guide">
+    <section>
+      <h2>1. Convert a novel by URL</h2>
+      <ol>
+        <li>Open the novel&rsquo;s <strong>main page</strong> on the source site &mdash; the page with the synopsis and the chapter list, not a chapter or reader page. Good URLs look like <code>novelcool.com/novel/Martial-Peak.html</code> or <code>ranobes.top/novels/1083994-shadow-slave.html</code>.</li>
+        <li>Copy that URL and paste it into the search bar on the home page. The book&rsquo;s title, author, and cover load automatically &mdash; fix anything that looks wrong before you continue.</li>
+        <li>Click <strong>Fetch Chapters</strong>. The chapter list loads with a progress bar. Very long novels can take a few minutes; that is normal.</li>
+        <li>Pick your chapters. By default everything is selected. Under <strong>Show advanced options</strong> you can set a Start and End Chapter instead &mdash; handy for splitting a huge novel into volumes.</li>
+        <li>Click <strong>Generate EPUB</strong>. The file is built on the server.</li>
+        <li>Download the EPUB when it is ready. Generated files stay on the server for 6 hours, so grab yours the same day.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>2. No URL? Search by novel name</h2>
+      <p>Type the novel&rsquo;s name into the same search bar instead of a URL. Results come back from across the supported sites &mdash; pick the right one and it fills in the link for you, then continue from Fetch Chapters as above.</p>
+    </section>
+
+    <section>
+      <h2>3. Tune the result (advanced options)</h2>
+      <p>Under <strong>Show advanced options</strong> you can change the book&rsquo;s metadata (title, author, language), pick a font for the EPUB, choose which site&rsquo;s layout to use, and set custom CSS selectors for the chapter list and chapter text. The selectors are the fix when a site fetches but the content comes out empty or wrong.</p>
+    </section>
+
+    <section>
+      <h2>4. Read it</h2>
+      <p>Open the downloaded EPUB in any ebook app &mdash; Kindle, Kobo, Apple Books, Moon+ Reader, or anything else that reads EPUB. You can also open it in the built-in <strong>EPUB Reader</strong> from the menu, without leaving the site.</p>
+    </section>
+
+    <section>
+      <h2>5. Skip converting: the Community Library and Forum</h2>
+      <p>Thousands of novels are already converted. In the <strong>Library</strong> you can download ready-made EPUBs straight from the Community collection, plus the Archive.org collection &mdash; no converting needed. Your own downloads live under My Books.</p>
+      <p>The <strong>Forum</strong> is where the community helps out: report a site that fails, request a new site, or request a book you cannot find &mdash; another reader can upload the EPUB for you and you get thanked by name in the thread.</p>
+    </section>
+
+    <section>
+      <h2>6. When something goes wrong</h2>
+      <ul>
+        <li><strong>Fetch fails, or only a few chapters show.</strong> Almost always this means you pasted a chapter URL instead of the novel&rsquo;s main page. Go back to the main page and copy that URL.</li>
+        <li><strong>A site fails every time.</strong> It may be blocking automated access. Report it in the Forum with the URL so it can be looked at.</li>
+        <li><strong>Chapters fetch but the text is empty or wrong.</strong> Try custom selectors under Advanced options for that site&rsquo;s layout.</li>
+        <li><strong>Your site is not in the 650+ list.</strong> Paste the URL anyway &mdash; the AI fallback handles most novel sites automatically.</li>
+        <li><strong>Only recent chapters appear.</strong> Some sites list only the latest chapters on their main page. If the site has a full chapter list page, use that URL instead.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Supported sites</h2>
+      <p><a href="https://linktoepub.com/sites">Browse the full list of 650+ supported sites</a>. If your site is missing, the Forum takes new-site requests.</p>
+    </section>
   </div>
 
   <footer>
