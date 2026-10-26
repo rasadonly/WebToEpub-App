@@ -155,6 +155,19 @@ function getProfile(): { name: string; avatar_url: string } {
 function saveProfile(name: string, avatar_url: string) {
   localStorage.setItem(PROFILE_KEY, JSON.stringify({ name, avatar_url }));
 }
+
+// A nameless visitor gets one random name, saved at once so it sticks
+// across visits. It only changes when the user edits it themselves.
+function randomReaderName() {
+  return `Reader${1000 + Math.floor(Math.random() * 9000)}`;
+}
+function getOrCreateProfile(): { name: string; avatar_url: string } {
+  const p = getProfile();
+  if (p.name) return p;
+  const name = randomReaderName();
+  saveProfile(name, p.avatar_url || '');
+  return { name, avatar_url: p.avatar_url || '' };
+}
 function newToken() { return crypto.randomUUID(); }
 
 function timeAgo(iso: string) {
@@ -278,7 +291,7 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
   const [searchQuery, setSearchQuery] = useState('');
 
   // Profile
-  const initialProfile = useMemo(() => getProfile(), []);
+  const initialProfile = useMemo(() => getOrCreateProfile(), []);
   const [authorName, setAuthorName] = useState(initialProfile.name || '');
   const [authorAvatar, setAuthorAvatar] = useState(initialProfile.avatar_url || '');
   const [newTitle, setNewTitle] = useState('');
@@ -290,6 +303,7 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
   // Comment compose
   const [commentBody, setCommentBody] = useState('');
   const [postingComment, setPostingComment] = useState(false);
+  const [showComposerProfile, setShowComposerProfile] = useState(false);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editCommentBody, setEditCommentBody] = useState('');
 
@@ -1775,15 +1789,33 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
               )}
             </div>
 
-            {/* Comment Composer */}
-            <div className="border border-border/80 rounded-2xl p-4 bg-card shadow-md space-y-3 sticky bottom-3 backdrop-blur-lg">
-              <ProfileFields
-                name={authorName}
-                avatar={authorAvatar}
-                onName={setAuthorName}
-                onAvatar={setAuthorAvatar}
-                compact
-              />
+            {/* Comment Composer: identity fields stay hidden until the user asks to change them */}
+            <div className="border border-border/80 rounded-2xl p-3 bg-card shadow-md space-y-2 sticky bottom-3 backdrop-blur-lg">
+              <div className="flex items-center gap-2">
+                <Avatar name={authorName} url={authorAvatar} className="w-6 h-6" />
+                <span className="text-xs text-muted-foreground">
+                  Posting as <span className="font-semibold text-foreground">{authorName}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (showComposerProfile) saveProfile(authorName.trim(), authorAvatar.trim());
+                    setShowComposerProfile((v) => !v);
+                  }}
+                  className="ml-auto text-[11px] font-semibold text-primary hover:underline shrink-0"
+                >
+                  {showComposerProfile ? 'Done' : 'Change'}
+                </button>
+              </div>
+              {showComposerProfile && (
+                <ProfileFields
+                  name={authorName}
+                  avatar={authorAvatar}
+                  onName={setAuthorName}
+                  onAvatar={setAuthorAvatar}
+                  compact
+                />
+              )}
               <Textarea
                 value={commentBody}
                 onChange={(e) => setCommentBody(e.target.value)}
