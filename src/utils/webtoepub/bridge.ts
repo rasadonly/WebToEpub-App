@@ -708,7 +708,8 @@ export async function engineListSupportedHosts(): Promise<string[]> {
   const win = await ensureIframe();
   const factory = win.parserFactory;
   if (!factory) return [];
-  return Array.from(factory.parsers.keys()) as string[];
+  // WTR-LAB support was removed, so it is not listed as a supported host.
+  return (Array.from(factory.parsers.keys()) as string[]).filter(h => h.toLowerCase() !== 'wtr-lab.com');
 }
 
 /**
@@ -756,8 +757,10 @@ export async function engineSearch(
   const myToken = ++searchCancelToken;
   const isLive = () => myToken === searchCancelToken;
 
-  // Iterate ALL sites (primary + secondary)
-  const allSites: any[] = [...(SSE.PRIMARY_SITES || []), ...(SSE.SECONDARY_SITES || [])];
+  // Iterate ALL sites (primary + secondary). WTR-LAB support was removed,
+  // so it is never searched even though the engine still lists it.
+  const allSites: any[] = [...(SSE.PRIMARY_SITES || []), ...(SSE.SECONDARY_SITES || [])]
+    .filter((s: any) => String(s.hostname || '').toLowerCase() !== 'wtr-lab.com');
 
   // Non-blocking down-hosts check: grab local cache instantly without waiting for network/Supabase
   let downHosts = new Set<string>();
