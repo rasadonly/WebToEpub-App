@@ -708,8 +708,8 @@ export async function engineListSupportedHosts(): Promise<string[]> {
   const win = await ensureIframe();
   const factory = win.parserFactory;
   if (!factory) return [];
-  // WTR-LAB, Ranobes, and NovelCool support was removed, so they are not listed as supported hosts.
-  const removedHosts = new Set(['wtr-lab.com', 'ranobes.top', 'ranobes.net', 'novelcool.com']);
+  // WTR-LAB and Ranobes support was removed, so they are not listed as supported hosts.
+  const removedHosts = new Set(['wtr-lab.com', 'ranobes.top', 'ranobes.net']);
   return (Array.from(factory.parsers.keys()) as string[]).filter(h => !removedHosts.has(h.toLowerCase()));
 }
 
@@ -758,9 +758,9 @@ export async function engineSearch(
   const myToken = ++searchCancelToken;
   const isLive = () => myToken === searchCancelToken;
 
-  // Iterate ALL sites (primary + secondary). WTR-LAB, Ranobes, and NovelCool
+  // Iterate ALL sites (primary + secondary). WTR-LAB and Ranobes
   // support was removed, so they are never searched even though the engine still lists them.
-  const removedHosts = new Set(['wtr-lab.com', 'ranobes.top', 'ranobes.net', 'novelcool.com']);
+  const removedHosts = new Set(['wtr-lab.com', 'ranobes.top', 'ranobes.net']);
   const allSites: any[] = [...(SSE.PRIMARY_SITES || []), ...(SSE.SECONDARY_SITES || [])]
     .filter((s: any) => !removedHosts.has(String(s.hostname || '').toLowerCase()));
 
