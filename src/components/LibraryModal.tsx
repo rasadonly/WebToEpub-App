@@ -126,7 +126,7 @@ interface BookCardProps {
   const hasCover = Boolean(book.coverUrl) && !imgFailed;
 
   return (
-    <div className="group flex items-center gap-3 px-3 py-2.5 rounded-xl bg-card border border-border hover:border-primary/40 hover:bg-muted/30 transition-colors">
+    <div className="group flex items-center gap-3 px-3 py-2.5 rounded-xl bg-card border border-border hover:border-primary/40 hover:bg-muted/30 transition-colors min-w-0">
       {/* Compact monogram chip (no cover art in this library) */}
       <div
         className="w-10 h-10 shrink-0 rounded-lg relative overflow-hidden flex items-center justify-center"
@@ -322,7 +322,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] bg-background flex flex-col"
+      className="fixed inset-0 z-[100] bg-background flex flex-col overflow-x-hidden"
       style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
       {/* ── Header ── */}
@@ -402,7 +402,7 @@ export function LibraryModal({ open, onClose }: LibraryModalProps) {
       </div>
 
       {/* ── Body ── */}
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain px-4 sm:px-6 py-4 bg-muted/30">
+      <div ref={scrollRef} className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain px-4 sm:px-6 py-4 bg-muted/30">
 
         {/* Loading skeletons */}
         {loading && (
