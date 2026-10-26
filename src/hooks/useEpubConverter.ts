@@ -176,6 +176,11 @@ export function useEpubConverter() {
               addLog(`Server returned ${liveChaptersRef.current.length} chapters`);
             }
           } catch (e) {
+            // NovelCool manga is terminal: the server says so explicitly, and
+            // no direct/engine fallback can fix it — surface it instead of
+            // falling through to "No chapter links found". This message must
+            // match the server's verbatim (server/src/fetcher.js).
+            if ((e as Error).message === "This is a manga, currently we don't support manga.") throw e;
             if (liveChaptersRef.current.length > 0) {
               // Keep what already arrived instead of re-fetching from zero.
               usedFastPath = true;
