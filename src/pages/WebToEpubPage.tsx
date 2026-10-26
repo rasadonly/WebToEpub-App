@@ -127,7 +127,6 @@ export default function WebToEpubPage() {
             <div className="p-3 bg-card border border-border rounded-lg font-semibold">NovelFull</div>
             <div className="p-3 bg-card border border-border rounded-lg font-semibold">Royal Road</div>
             <div className="p-3 bg-card border border-border rounded-lg font-semibold">Scribble Hub</div>
-            <div className="p-3 bg-card border border-border rounded-lg font-semibold">WTR-LAB</div>
             <div className="p-3 bg-card border border-border rounded-lg font-semibold">NovelBin</div>
             <div className="p-3 bg-card border border-border rounded-lg font-semibold">Wattpad</div>
             <div className="p-3 bg-card border border-border rounded-lg font-semibold">AO3 (Fanfiction)</div>
