@@ -355,6 +355,17 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
     return () => window.removeEventListener('keydown', onKey);
   }, [open, view, onClose, loadThreads, threadReturnView]);
 
+  // Lock the page behind the forum while it is open: without this, a fast
+  // (momentum) scroll inside the forum chains past the forum's scroll
+  // boundary and scrolls the homescreen underneath, so the homescreen has
+  // moved by the time the forum closes.
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
+
   const openThread = async (t: Thread) => {
     setThreadReturnView(view === 'requests' ? 'requests' : 'list');
     setActiveThread(t);
@@ -920,7 +931,7 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
       </div>
 
       {/* Main Forum Body */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto overscroll-contain">
         {/* LIST VIEW */}
         {view === 'list' && (
           <div className="max-w-4xl mx-auto p-4 sm:p-6 space-y-5">
