@@ -730,7 +730,7 @@ class SiteSearchEngine {
             let results = site.parseResults(dom);
 
             // AI Fallback if no results and AI query is configured (or as general fallback)
-            if (results.length === 0 && typeof AiClient !== "undefined") {
+            if (false && results.length === 0 && typeof AiClient !== "undefined") { // AI providers unavailable
                 results = await AiClient.fetchAiResults(html, query, url);
             }
 
