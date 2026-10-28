@@ -97,6 +97,74 @@ export type Database = {
         }
         Relationships: []
       }
+      novel_marks: {
+        Row: {
+          created_at: string
+          edit_token: string
+          id: string
+          mark: string
+          novel_id: string
+          updated_at: string
+          user_name: string
+        }
+        Insert: {
+          created_at?: string
+          edit_token: string
+          id?: string
+          mark: string
+          novel_id: string
+          updated_at?: string
+          user_name: string
+        }
+        Update: {
+          created_at?: string
+          edit_token?: string
+          id?: string
+          mark?: string
+          novel_id?: string
+          updated_at?: string
+          user_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "novel_marks_novel_id_fkey"
+            columns: ["novel_id"]
+            isOneToOne: false
+            referencedRelation: "ranked_novels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ranked_novels: {
+        Row: {
+          added_by: string
+          author: string | null
+          category: string
+          created_at: string
+          edit_token: string
+          id: string
+          title: string
+        }
+        Insert: {
+          added_by: string
+          author?: string | null
+          category?: string
+          created_at?: string
+          edit_token: string
+          id?: string
+          title: string
+        }
+        Update: {
+          added_by?: string
+          author?: string | null
+          category?: string
+          created_at?: string
+          edit_token?: string
+          id?: string
+          title?: string
+        }
+        Relationships: []
+      }
       site_health: {
         Row: {
           checked_at: string
@@ -138,6 +206,33 @@ export type Database = {
         Returns: boolean
       }
       is_forum_admin: { Args: { p_admin: string }; Returns: boolean }
+      remove_novel_mark: {
+        Args: { p_novel_id: string; p_token: string; p_user_name: string }
+        Returns: boolean
+      }
+      set_novel_mark: {
+        Args: {
+          p_mark: string
+          p_novel_id: string
+          p_token: string
+          p_user_name: string
+        }
+        Returns: {
+          created_at: string
+          edit_token: string
+          id: string
+          mark: string
+          novel_id: string
+          updated_at: string
+          user_name: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "novel_marks"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       update_forum_comment: {
         Args: {
           p_admin?: string
@@ -193,7 +288,7 @@ export type Database = {
       }
     }
     Enums: {
-      forum_category: "report_error" | "new_site" | "general"
+      forum_category: "report_error" | "new_site" | "general" | "book_request"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -321,7 +416,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      forum_category: ["report_error", "new_site", "general"],
+      forum_category: ["report_error", "new_site", "general", "book_request"],
     },
   },
 } as const
