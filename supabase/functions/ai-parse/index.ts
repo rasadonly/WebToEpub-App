@@ -57,13 +57,15 @@ Deno.serve(async (req) => {
 
     // 2) NVIDIA (fallback) — try a couple of model ids in case one is retired
     if (nvKey && (!provider || provider === "nvidia" || provider === "lovable")) {
-      const models = ["meta/llama-3.3-70b-instruct", "meta/llama-3.1-70b-instruct", "meta/llama-3.1-8b-instruct"];
+      // Llama 3.x models were retired by NVIDIA on 2026-08-26; Nemotron 3.5 Lightning verified working Oct 2026.
+      const models = ["nvidia/nemotron-3.5-lightning-30b-a3b"];
       for (const model of models) {
         try {
           const res = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${nvKey}` },
-            body: JSON.stringify({ model, messages, temperature, stream: false }),
+            signal: AbortSignal.timeout(45000),
+            body: JSON.stringify({ model, messages, temperature, stream: false, chat_template_kwargs: { enable_thinking: false } }),
           });
           if (res.ok) return passthrough(await res.text(), res.status, res.headers.get("Content-Type"));
           const t = await res.text();
