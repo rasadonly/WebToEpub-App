@@ -3,7 +3,6 @@
 parserFactory.register("listnovel.com", () => new MadaraParser());
 parserFactory.register("novelnice.com", () => new NovelniceParser());
 //dead url
-parserFactory.register("readwebnovel.xyz", () => new MadaraParser());
 parserFactory.register("wuxiaworld.site", () => new MadaraParser());
 //dead url
 parserFactory.register("pery.info", () => new MadaraParser());
@@ -13,13 +12,10 @@ parserFactory.register("nightcomic.com", () => new MadaraParser());
 parserFactory.register("webnovel.live", () => new MadaraParser());
 //dead url
 parserFactory.register("noveltrench.com", () => new MadaraParser());
-parserFactory.register("mangasushi.net", () => new MadaraParser());
 //dead url
 parserFactory.register("mangabob.com", () => new MadaraParser());
-parserFactory.register("greenztl2.com", () => new MadaraVariantParser());
 
 parserFactory.register("indratranslations.com", () => new KdtnovelsParser());
-parserFactory.register("kdtnovels.com", () => new KdtnovelsParser());
 
 parserFactory.registerRule(
     (url, dom) => MadaraParser.isMadaraTheme(dom) * 0.6,

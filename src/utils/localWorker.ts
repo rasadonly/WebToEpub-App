@@ -506,26 +506,6 @@ async function tocNovelFull(
   return results;
 }
 
-async function tocNovelBin(
-  url: string,
-  onBatch?: OnChapterBatch
-): Promise<string[]> {
-  const html = await getText(url);
-  const idMatch = html.match(/data-novel-id=["'](\d+)["']/);
-  const origin = new URL(url).origin;
-  const novelId = idMatch?.[1] || new URL(url).pathname.split("/").filter(Boolean).pop();
-  const ajaxHtml = await getText(`${origin}/ajax/chapter-archive?novelId=${novelId}`);
-  const results: ChapterLink[] = [];
-  parseHtml(ajaxHtml)
-    .querySelectorAll("a[href]")
-    .forEach((a) => {
-      const href = a.getAttribute("href");
-      const title = (a.textContent || '').trim();
-      if (href) results.push({ url: absoluteUrl(origin, href), title });
-    });
-  if (onBatch && results.length > 0) onBatch(results);
-  return results.map(c => c.url);
-}
 
 
 async function tocWtrLab(url: string, onBatch?: OnChapterBatch): Promise<string[]> {
@@ -588,13 +568,6 @@ async function bodyNovelFull(url: string): Promise<string> {
   return sanitizeHtml(el.innerHTML);
 }
 
-async function bodyNovelBin(url: string): Promise<string> {
-  const doc = parseHtml(await getText(url));
-  const el = doc.querySelector("#chapter-content, #chr-content, .chr-c");
-  if (!el) return "";
-  stripInside(el, "script, style, ins, iframe, .ad, .ads, .advertisement");
-  return sanitizeHtml(el.innerHTML);
-}
 
 async function bodyWtrLab(url: string): Promise<string> {
   const doc = parseHtml(await getText(url));
@@ -773,22 +746,17 @@ async function bodyGeneric(url: string, selector: string): Promise<string> {
 // ---------- Dispatch ----------
 
 export function siteKey(hostname: string): string {
-  if (hostname.includes("novelhall.com")) return "novelhall";
   if (hostname.includes("freewebnovel.com")) return "freewebnovel";
-  if (hostname.includes("novelfire.") || hostname.includes("findnovel.net") || hostname.includes("novelcake.") || hostname.includes("readfromhome.")) return "novelfire";
+  if (hostname.includes("novelfire.") || hostname.includes("novelcake.") || hostname.includes("readfromhome.")) return "novelfire";
   if (hostname.includes("novgo.")) return "novgo";
-  if (hostname.includes("cherrymist.cafe")) return "cherrymist";
   if (hostname.includes("zenithtls.com")) return "zenithtls";
   if (hostname.includes("hako.vn") || hostname.includes("docln.")) return "hako";
-  if (hostname.includes("kanunu8.com") || hostname.includes("kanunu.")) return "kanunu";
   if (hostname.includes("tianyabooks.com")) return "tianya";
-  if (hostname.includes("readthedrama.com")) return "readthedrama";
   if (hostname.includes("novelbuddy.com")) return "novelbuddy";
   if (hostname.includes("novelarrow.com")) return "novelarrow";
   if (hostname.includes("novelfull.net")) return "novelfullnet";
   if (hostname.includes("novelfull.com")) return "novelfullcom";
   if (hostname.includes("novelfull")) return "novelfull";
-  if (hostname.includes("novelbin") || hostname.includes("novlove")) return "novelbin";
   if (hostname.includes("wtr-lab.com")) return "wtrlab";
   if (hostname.includes("wattpad.com")) return "wattpad";
   if (hostname.includes("readnovelmtl.com")) return "readnovelmtl";
@@ -897,15 +865,6 @@ async function bodyInkitt(url: string): Promise<string> {
 
 
 
-async function tocNovelhall(url: string): Promise<string[]> {
-  const doc = parseHtml(await getText(url));
-  const out: string[] = [];
-  doc.querySelectorAll("#morelist a, .book-catalog a").forEach((a) => {
-    const href = a.getAttribute("href");
-    if (href) out.push(absoluteUrl(url, href));
-  });
-  return out;
-}
 
 async function fetchChapterContent(url: string, selector: string): Promise<string> {
   const hostname = (() => {
@@ -915,7 +874,6 @@ async function fetchChapterContent(url: string, selector: string): Promise<strin
 
   const attempt = async (): Promise<string> => {
     switch (key) {
-      case "novelhall":    return bodyNovelhall(url);
       case "freewebnovel": return bodyFreeWebNovel(url);
       case "novelfire":    return bodyNovelFire(url);
       case "novgo":        return bodyNovGo(url);
@@ -924,7 +882,6 @@ async function fetchChapterContent(url: string, selector: string): Promise<strin
       case "novelfullnet":
       case "novelfullcom":
       case "novelfull":    return bodyNovelFull(url);
-      case "novelbin":     return bodyNovelBin(url);
       case "wtrlab":       return bodyWtrLab(url);
       case "wattpad":      return bodyWattpad(url);
       case "readnovelmtl": {
@@ -933,12 +890,8 @@ async function fetchChapterContent(url: string, selector: string): Promise<strin
       }
       case "hako":
         return bodyGeneric(url, "#chapter-content, .long-text, .chapter-content");
-      case "kanunu":
-        return bodyGeneric(url, "#neirong, .neirong, .book-content");
       case "tianya":
         return bodyGeneric(url, ".article, .container");
-      case "readthedrama":
-        return bodyGeneric(url, ".chapter-content, article .prose, article");
       case "inkitt": return bodyInkitt(url);
       case "novelight": return bodyNovelight(url);
 
@@ -947,7 +900,7 @@ async function fetchChapterContent(url: string, selector: string): Promise<strin
   };
 
   // Hosts that rate-limit hard need longer, exponential waits between tries.
-  const RATE_LIMITED = /(freewebnovel\.com|novelfull(l)?\.(net|com)|allnovelfull|allnovelnext|allnovel\.org|novelfire\.net|novelhall\.com|scribblehub\.com|novelgo\.id|novgo\.net|novelcodex\.com|novel-?next\.(com|net)|novel-?bin\.(com|net)|novelbin\.(com|me|net)|novelmax\.net|novelgate\.net|novelhulk\.net|fanfiction\.net|archiveofourown\.org|akknovel\.com|readlightnovel\.me)$/i;
+  const RATE_LIMITED = /(freewebnovel\.com|novelfull(l)?\.(net|com)|allnovelfull|allnovelnext|allnovel\.org|novelfire\.net|scribblehub\.com|novelgo\.id|novgo\.net|novelcodex\.com|novel-?next\.(com|net)|novel-?bin\.(com|net)|novelmax\.net|novelgate\.net|novelhulk\.net|fanfiction\.net|akknovel\.com|readlightnovel\.me)$/i;
   const base = RATE_LIMITED.test(hostname) ? 1500 : 400;
 
   const textLen = (h: string) => (h ? h.replace(/<[^>]+>/g, "").trim().length : 0);
@@ -975,30 +928,6 @@ async function fetchChapterContent(url: string, selector: string): Promise<strin
   throw new Error("Chapter content appears to be empty");
 }
 
-async function bodyNovelhall(url: string): Promise<string> {
-  const doc = parseHtml(await getText(url));
-  const el =
-    doc.querySelector("div#htmlContent") ||
-    doc.querySelector("article div.entry-content") ||
-    doc.querySelector("div.entry-content") ||
-    doc.querySelector("div.read-content") ||
-    doc.querySelector("div.content");
-  if (!el) return "";
-  stripInside(
-    el,
-    "script, style, ins, iframe, .ad, .ads, .advertisement, .chapter-nav, .nav, center, a[href*='novelhall.com/'], div.mnt, div#volumelist"
-  );
-  // Novelhall separates paragraphs with <br> tags only — turn them into <p>.
-  const html = el.innerHTML;
-  if (!/<p[\s>]/i.test(html) && /<br/i.test(html)) {
-    const parts = html
-      .split(/(?:\s*<br\s*\/?>\s*)+/i)
-      .map((s) => s.trim())
-      .filter((s) => s && s.replace(/<[^>]+>/g, "").trim().length > 0);
-    if (parts.length) return parts.map((p) => `<p>${p}</p>`).join("\n");
-  }
-  return html;
-}
 
 // ---- Wattpad ----
 // Wattpad's public API v3 endpoint returns JSON with story parts.
@@ -1111,7 +1040,6 @@ export async function fetchChapterLinks(tocUrl: string, linkSelector: string): P
   const key = siteKey(hostname);
   try {
     switch (key) {
-      case "novelhall":    return await tocNovelhall(tocUrl);
       case "freewebnovel": return await tocFreeWebNovel(tocUrl);
       case "novelfire":    return await tocNovelFire(tocUrl);
       case "novgo":        return await tocNovGo(tocUrl);
@@ -1120,7 +1048,6 @@ export async function fetchChapterLinks(tocUrl: string, linkSelector: string): P
       case "novelfullnet": return await tocNovelFull(tocUrl);
       case "novelfullcom": return await tocNovelFull(tocUrl);
       case "novelfull":    return await tocNovelFull(tocUrl);
-      case "novelbin":     return await tocNovelBin(tocUrl);
       case "wtrlab":       return await tocWtrLab(tocUrl);
       case "wattpad":      return await tocWattpad(tocUrl);
       case "readnovelmtl": {
@@ -1143,16 +1070,12 @@ export async function fetchChapterLinks(tocUrl: string, linkSelector: string): P
         return out;
       }
       case "hako":
-      case "kanunu":
-      case "tianya":
-      case "readthedrama": {
+      case "tianya": {
         const doc = parseHtml(await getText(tocUrl));
         const sel =
           key === "hako"
             ? ".chapter-name a, .list-chapters a, ul.list-chapters li a"
-            : key === "readthedrama"
-              ? 'a[href*="/chapters/"]'
-              : ".mulu-list a, .idx-list a";
+            : ".mulu-list a, .idx-list a";
         const out: string[] = [];
         const seen = new Set<string>();
         doc.querySelectorAll(sel).forEach((a) => {
@@ -1234,43 +1157,6 @@ export async function fetchChaptersFull(
  * Chapter links are in <ol class="chapter-group__list"> with <li._publish a>.
  * Uses single-quoted href attributes in HTML.
  */
-async function tocCherrymist(
-  url: string,
-  onBatch?: OnChapterBatch
-): Promise<string[]> {
-  const html = await getText(url);
-  const doc = parseHtml(html);
-  const items: ChapterLink[] = [];
-
-  // linkedom handles single-quote href attrs
-  doc
-    .querySelectorAll('.chapter-group__list ._publish a, .chapter-group__list-item._publish a')
-    .forEach((a) => {
-      const href = a.getAttribute('href');
-      const title = (a.textContent || '').trim();
-      if (href && href.includes('/chapter/')) {
-        items.push({ url: absoluteUrl(url, href), title });
-      }
-    });
-
-  // Fallback: regex scan for single-quoted chapter hrefs
-  if (!items.length) {
-    const seen = new Set<string>();
-    const titleMatches = [...html.matchAll(/chapter-group__list-item-link[^>]+>\s*([^<\n]+?)\s*<\/a/g)];
-    let idx = 0;
-    for (const m of html.matchAll(/href='(https?:\/\/[^']+\/chapter\/[^']+)'/g)) {
-      if (!seen.has(m[1])) {
-        seen.add(m[1]);
-        items.push({ url: m[1], title: titleMatches[idx]?.[1]?.trim() || '' });
-        idx++;
-      }
-    }
-  }
-
-  const urls = items.map(c => c.url);
-  if (onBatch && items.length) onBatch(items);
-  return urls;
-}
 
 export async function fetchChapterLinksLive(
   tocUrl: string,
@@ -1292,9 +1178,7 @@ export async function fetchChapterLinksLive(
       case "novelfullnet": await tocNovelFull(tocUrl, wrap); break;
       case "novelfullcom": await tocNovelFull(tocUrl, wrap); break;
       case "novelfull":    await tocNovelFull(tocUrl, wrap); break;
-      case "novelbin":     await tocNovelBin(tocUrl, wrap); break;
       case "wtrlab":       await tocWtrLab(tocUrl, wrap); break;
-      case "cherrymist":   await tocCherrymist(tocUrl, wrap); break;
       default: {
         // For sites that return everything at once (API-based / single-page),
         // fetch and emit one batch so the UI still updates.

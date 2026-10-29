@@ -153,7 +153,7 @@ const Index = () => {
               },
               {
                 q: 'Which web novel sites are supported?',
-                a: 'LinkToEpub supports 650+ sites including Royal Road, NovelBin, NovelFull, NovelFire, WTR-LAB, Scribble Hub, FreeWebNovel, WebNovel and many more.',
+                a: 'LinkToEpub supports 179 sites including NovelFull, NovelFire, WTR-LAB, Scribble Hub, FreeWebNovel, WebNovel and many more.',
               },
               {
                 q: 'Is LinkToEpub free?',
@@ -164,8 +164,8 @@ const Index = () => {
                 a: 'Yes. The generated EPUB uses standard EPUB 3 formatting and works on Kindle (via Send to Kindle), Kobo, Apple Books, Google Play Books and most e-readers.',
               },
               {
-                q: 'How do I convert a Royal Road novel to EPUB?',
-                a: 'Go to the novel\u2019s main page on Royal Road (royalroad.com/fiction/XXXXX), copy the URL, paste it into LinkToEpub, click Fetch Chapters, then Generate EPUB.',
+                q: 'How do I convert a NovelFull novel to EPUB?',
+                a: 'Go to the novel\u2019s main page on NovelFull (novelfull.com), copy the URL, paste it into LinkToEpub, click Fetch Chapters, then Generate EPUB.',
               },
               {
                 q: 'Can I select specific chapters to download?',

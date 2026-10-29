@@ -1558,7 +1558,7 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
                   maxLength={200}
-                  placeholder={newCategory === 'book_request' ? 'e.g. Mother of Learning — complete EPUB' : 'e.g. Please add support for LightNovelWorld or NovelBin error...'}
+                  placeholder={newCategory === 'book_request' ? 'e.g. Mother of Learning — complete EPUB' : 'e.g. Please add support for a new site or report a NovelFull error...'}
                   className="h-10 text-sm rounded-xl bg-background border-border/80"
                 />
               </div>

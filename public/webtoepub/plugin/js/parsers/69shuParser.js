@@ -4,7 +4,6 @@ parserFactory.registerUrlRule(
     url => (util.extractHostName(url).includes("69shu")),
     () => new ShuParser()
 );
-parserFactory.register("69shuba.tw", () => new _69shuTwParser());
 parserFactory.registerDeadSite("69yuedu.net", () => new _69yueduParser());
 
 class ShuParser extends Parser {

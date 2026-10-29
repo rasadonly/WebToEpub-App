@@ -1,13 +1,11 @@
 "use strict";
 
-parserFactory.register("allnovel.org", () => new NovelfullParser());
 parserFactory.register("allnovelbin.net", () => new NovelbinParser());
 parserFactory.register("allnovelfull.app", () => new NovelfullParser());
 parserFactory.register("allnovelfull.com", () => new NovelfullParser());
 //dead url
 parserFactory.registerDeadSite("allnovelfull.org", () => new NovelfullParser());
 parserFactory.register("allnovelfull.net", () => new NovelfullParser());
-parserFactory.register("allnovelnext.com", () => new NovelfullParser());
 parserFactory.register("all-novelfull.net", () => new NovelfullParser());
 parserFactory.register("boxnovelfull.com", () => new NovelfullParser());
 //dead url
@@ -16,12 +14,9 @@ parserFactory.register("freewn.com", () => new NovelfullParser());
 parserFactory.register("novel-bin.com", () => new NovelHyphenBinParser());
 parserFactory.register("novel-bin.net", () => new NovelHyphenBinParser());
 parserFactory.register("novel-bin.org", () => new NovelHyphenBinParser());
-parserFactory.register("novel-next.com", () => new NovelfullParser());
 //dead url
 parserFactory.registerDeadSite("novel35.com", () => new Novel35Parser());
 parserFactory.register("novelactive.org", () => new NovelfullParser());
-parserFactory.register("novelbin.com", () => new NovelbinParser());
-parserFactory.register("novelbin.me", () => new NovelbinParser());
 parserFactory.register("novelbin.net", () => new NovelbinParser());
 parserFactory.register("novelbin.org", () => new NovelbinParser());
 parserFactory.register("noveldrama.org", () => new NovelfullParser());
@@ -33,15 +28,10 @@ parserFactory.register("novelfullbook.com", () => new NovelfullParser());
 parserFactory.register("novelfulll.com", () => new NovelfullParser());
 //dead url
 parserFactory.registerDeadSite("novelhulk.net", () => new NovelfullParser());
-parserFactory.register("novelmax.net", () => new NovelfullParser());
-parserFactory.register("novelnext.com", () => new NovelfullParser());
 parserFactory.register("novelnext.dramanovels.io", () => new NovelfullParser());
-parserFactory.register("novelnext.net", () => new NovelfullParser());
-parserFactory.register("novelnextz.com", () => new NovelfullParser());
 //dead url
 parserFactory.registerDeadSite("noveltop1.org", () => new NovelfullParser());
 parserFactory.register("noveltrust.net", () => new NovelfullParser());
-parserFactory.register("novelusb.com", () => new NovelfullParser());
 parserFactory.register("novelusb.net", () => new NovelfullParser());
 parserFactory.register("novelxo.net", () => new NovelfullParser());
 parserFactory.register("novgo.net", () => new NovelfullParser());

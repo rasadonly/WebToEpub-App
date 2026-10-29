@@ -136,7 +136,7 @@ export default function GuidePage() {
                 Try custom selectors under Advanced options for that site&apos;s layout.
               </li>
               <li>
-                <strong className="text-foreground">Your site is not in the 650+ list.</strong>{' '}
+                <strong className="text-foreground">Your site is not in the list of 179 supported sites.</strong>{' '}
                 Paste the URL anyway — the AI fallback handles most novel sites automatically.
               </li>
               <li>
@@ -151,7 +151,7 @@ export default function GuidePage() {
         <div className="mt-8 bg-card border border-border rounded-xl p-5">
           <h2 className="font-semibold mb-1">Supported sites</h2>
           <p className="text-sm text-muted-foreground">
-            <Link to="/sites" className="text-primary hover:underline">Browse the full list of 650+ supported sites</Link>.
+            <Link to="/sites" className="text-primary hover:underline">Browse the full list of 179 supported sites</Link>.
             If your site is missing, the Forum takes new-site requests.
           </p>
         </div>

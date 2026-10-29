@@ -1,7 +1,5 @@
 "use strict";
 
-parserFactory.register("www.8muses.com", () => new EightMusesParser());
-parserFactory.register("comics.8muses.com", () => new EightMusesParser());
 
 class EightMusesParserImageCollector extends ImageCollector {
     constructor() {

@@ -5,15 +5,12 @@
 //dead urls
 parserFactory.register("blossomtranslation.com", () => new FictioneerParser());
 parserFactory.register("igniforge.com", () => new FictioneerParser());
-parserFactory.register("lilyonthevalley.com", () => new FictioneerParser());
 parserFactory.register("razentl.com", () => new FictioneerParser());
 //these still exist
-parserFactory.register("cherrymist.cafe", () => new FictioneerParser());
 parserFactory.register("emberlib731.xyz", () => new FictioneerParser());
 parserFactory.register("flyonthewalls.blog", () => new FictioneerParser());
 parserFactory.register("novelib.com", () => new FictioneerParser());
 parserFactory.register("smeraldogarden.com", () => new FictioneerParser());
-parserFactory.register("springofromance.com", () => new FictioneerParser());
 
 parserFactory.registerRule(
     (url, dom) => FictioneerParser.isFictioneerTheme(dom) * 0.7,

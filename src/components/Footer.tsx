@@ -5,7 +5,7 @@ export function Footer() {
     <footer className="w-full border-t border-border/80 bg-card/40 mt-16 py-10">
       <div className="container mx-auto px-4 max-w-5xl text-center space-y-5">
         <p className="text-muted-foreground text-sm sm:text-base leading-relaxed">
-          Works with <Link to="/sites" className="text-primary hover:underline font-semibold">650+ sites</Link> — Royal Road, NovelBin, Scribble Hub and more.
+          Works with <Link to="/sites" className="text-primary hover:underline font-semibold">179 sites</Link> — NovelFull, NovelFire, Scribble Hub and more.
           Free online web novel conversion with zero account required.
         </p>
         <div className="flex flex-wrap justify-center gap-3 sm:gap-6 text-xs sm:text-sm text-muted-foreground font-medium">

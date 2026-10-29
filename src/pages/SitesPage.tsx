@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { trackPageView } from '@/utils/analytics';
 import { engineListSupportedHosts } from '@/utils/webtoepub/bridge';
+import { SUPPORTED_HOST_SET } from '@/utils/supportedHosts';
 
 const FEATURED: { domain: string; note: string }[] = [
   { domain: 'allnovelfull.com', note: 'Xianxia, cultivation, Chinese translations' },
@@ -17,7 +18,7 @@ export default function SitesPage() {
     document.title = 'Supported Sites — LinkToEpub';
     trackPageView('/sites');
     engineListSupportedHosts()
-      .then(list => setHosts(list.sort()))
+      .then(list => setHosts(list.filter(h => SUPPORTED_HOST_SET.has(h.replace(/^www\./, ''))).sort()))
       .catch(() => setHosts([]))
       .finally(() => setLoading(false));
   }, []);
@@ -37,7 +38,7 @@ export default function SitesPage() {
 
         <h1 className="text-3xl font-bold mb-2">Supported Sites</h1>
         <p className="text-muted-foreground mb-8">
-          {hosts.length ? hosts.length : '650'}+ sites work out of the box. Just paste the novel's main page URL — not a chapter link.
+          {hosts.length ? hosts.length : '179'} sites work out of the box. Just paste the novel's main page URL — not a chapter link.
           If your site isn't in the list, paste it anyway. The AI fallback picks up most novel sites automatically.
         </p>
 

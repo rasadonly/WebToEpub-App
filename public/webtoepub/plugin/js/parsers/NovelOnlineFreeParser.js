@@ -5,14 +5,10 @@
 
 parserFactory.register("novelonlinefree.com", () => new NovelOnlineFreeParser());
 //dead url
-parserFactory.register("novelonlinefree.info", () => new NovelOnlineFreeParser());
-parserFactory.register("novelonlinefull.com", () => new NovelOnlineFreeParser());
-parserFactory.register("wuxiaworld.online", () => new NovelOnlineFreeParser());
 //dead url
 parserFactory.register("chinesewuxia.world", () => new NovelOnlineFreeParser());
 parserFactory.register("bestlightnovel.com", () => new NovelOnlineFreeParser());
 //dead url
-parserFactory.register("wuxia-world.online", () => new NovelOnlineFreeParser());
 parserFactory.register("wuxiaworld.live", () => new NovelOnlineFreeParser());
 
 class NovelOnlineFreeParser extends Parser {

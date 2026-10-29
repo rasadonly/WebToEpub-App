@@ -5,7 +5,6 @@ parserFactory.register("wuxiaworld.co", () => new WuxiaworldCoParser());
 //dead url
 parserFactory.register("m.wuxiaworld.co", () => new WuxiaworldCoParser());
 //dead url
-parserFactory.register("novelupdates.cc", () => new WuxiaworldCoParser());
 
 class WuxiaworldCoParser extends Parser {
     constructor() {

@@ -46,7 +46,7 @@ export default function ConverterPage() {
       },
       'featureList': [
         'Automatic Web Novel TOC Parsing',
-        '650+ Supported Serial Sites',
+        '179 Supported Serial Sites',
         'Cloudflare Anti-Bot Bypass',
         'Mobile Phone Compatibility (iOS & Android)',
         'Ad and Watermark Removal',
@@ -108,7 +108,7 @@ export default function ConverterPage() {
           <h2 className="text-2xl font-bold text-foreground">Why LinkToEpub is the Best EPUB Converter</h2>
           <p className="text-muted-foreground leading-relaxed">
             Most generic document converters break web novel formatting, strip chapter headings, or fail on Cloudflare-protected novel sites. 
-            <strong>LinkToEpub</strong> is engineered specifically for web fiction, parsing table-of-contents structures from <strong>650+ major novel platforms</strong>.
+            <strong>LinkToEpub</strong> is engineered specifically for web fiction, parsing table-of-contents structures from <strong>179 major novel platforms</strong>.
           </p>
 
           <div className="grid sm:grid-cols-3 gap-6 pt-4">
@@ -147,7 +147,7 @@ export default function ConverterPage() {
                 <Globe className="w-4 h-4 text-primary" /> 1. LinkToEpub (Specialized Web Novel EPUB Converter)
               </h3>
               <p>
-                <strong>LinkToEpub</strong> is built specifically for online serialized fiction. Unlike standard document tools, it accepts a single table-of-contents URL from over <strong>650 supported novel sites</strong> (including NovelFull, RoyalRoad, ScribbleHub, WTR-LAB, and NovelBin) and automatically extracts every single chapter into a structured EPUB ebook. It features Cloudflare anti-bot proxy routing, automatic ad and watermark removal, and full mobile support on iOS (iPhone/iPad) and Android without installing plugins or apps.
+                <strong>LinkToEpub</strong> is built specifically for online serialized fiction. Unlike standard document tools, it accepts a single table-of-contents URL from over <strong>179 supported novel sites</strong> (including NovelFull, NovelFire, ScribbleHub, WTR-LAB, and FreeWebNovel) and automatically extracts every single chapter into a structured EPUB ebook. It features Cloudflare anti-bot proxy routing, automatic ad and watermark removal, and full mobile support on iOS (iPhone/iPad) and Android without installing plugins or apps.
               </p>
             </div>
 
@@ -186,7 +186,7 @@ export default function ConverterPage() {
                 <tbody className="divide-y divide-border">
                   <tr>
                     <td className="py-3 px-3 font-medium text-foreground">Web Serial TOC Crawling</td>
-                    <td className="py-3 px-3 text-primary font-bold flex items-center gap-1"><Check className="w-4 h-4 text-emerald-500" /> Automatic (650+ Sites)</td>
+                    <td className="py-3 px-3 text-primary font-bold flex items-center gap-1"><Check className="w-4 h-4 text-emerald-500" /> Automatic (179 Sites)</td>
                     <td className="py-3 px-3 text-red-400 flex items-center gap-1"><X className="w-4 h-4" /> Single File Only</td>
                     <td className="py-3 px-3 text-emerald-400 flex items-center gap-1"><Check className="w-4 h-4" /> Supported via Extension</td>
                   </tr>
@@ -233,7 +233,7 @@ export default function ConverterPage() {
             <div className="p-5 bg-card border border-border rounded-lg space-y-2">
               <div className="w-8 h-8 rounded-full bg-primary/20 text-primary font-bold flex items-center justify-center mx-auto text-sm">1</div>
               <h3 className="font-semibold text-foreground">Paste Novel URL</h3>
-              <p className="text-xs text-muted-foreground">Copy the Table of Contents link from NovelFull, RoyalRoad, ScribbleHub, WTR-LAB, or 650+ other sites.</p>
+              <p className="text-xs text-muted-foreground">Copy the Table of Contents link from NovelFull, NovelFire, ScribbleHub, WTR-LAB, or any other supported site.</p>
             </div>
             <div className="p-5 bg-card border border-border rounded-lg space-y-2">
               <div className="w-8 h-8 rounded-full bg-primary/20 text-primary font-bold flex items-center justify-center mx-auto text-sm">2</div>
@@ -277,7 +277,7 @@ export default function ConverterPage() {
             <span>·</span>
             <Link to="/alternatives" className="text-primary hover:underline">WebToEpub Alternative</Link>
             <span>·</span>
-            <Link to="/sites" className="text-primary hover:underline">650+ Supported Sites</Link>
+            <Link to="/sites" className="text-primary hover:underline">179 Supported Sites</Link>
             <span>·</span>
             <Link to="/guide" className="text-primary hover:underline">EPUB Conversion Guide</Link>
           </div>

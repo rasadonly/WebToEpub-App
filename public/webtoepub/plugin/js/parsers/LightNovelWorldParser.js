@@ -1,16 +1,8 @@
 "use strict";
 
-parserFactory.register("findnovel.net", () => new FindNovelParser());
-parserFactory.register("lightnovelcave.com", () => new LightNovelWorldParser());
-parserFactory.register("lightnovelworld.co", () => new LightNovelWorldParser());
-parserFactory.register("lightnovelworld.com", () => new LightNovelWorldParser());
-parserFactory.register("lightnovelpub.com", () => new LightNovelPubParser());
 parserFactory.register("lightnovelpub.fan", () => new LightNovelWorldParser());
 parserFactory.register("novelfire.docsachhay.net", () => new LightNovelWorldParser());
-parserFactory.register("novelbob.org", () => new LightNovelWorldParser());
-parserFactory.register("novelpub.com", () => new LightNovelWorldParser());
 parserFactory.register("novelfire.net", () => new NovelfireParser());
-parserFactory.register("webnovelpub.com", () => new LightNovelWorldParser());
 parserFactory.register("webnovelpub.pro", () => new LightNovelWorldParser());
 parserFactory.register("pandanovel.co", () => new LightNovelWorldParser());
 

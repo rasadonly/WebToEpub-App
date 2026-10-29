@@ -3,10 +3,8 @@
 */
 "use strict";
 
-parserFactory.register("readlightnovel.me", () => new ReadLightNovelParser());
 parserFactory.register("readlightnovel.meme", () => new ReadLightNovelParser());
 //dead url
-parserFactory.register("readlightnovel.org", () => new ReadLightNovelParser());
 //dead url
 parserFactory.register("readlightnovel.today", () => new ReadLightNovelParser());
 

@@ -1,39 +1,26 @@
 "use strict";
 
-parserFactory.register("arcanetranslations.com", () => new NoblemtlParser());
 //dead url
 parserFactory.register("bookalb.com", () => new NoblemtlParser());
 parserFactory.register("ckandawrites.online", () => new KnoxtspaceParser());
-parserFactory.register("daotranslate.com", () => new NoblemtlParser());
 parserFactory.register("daotranslate.us", () => new NoblemtlParser());
 //dead url
-parserFactory.register("faloomtl.com", () => new NoblemtlParser());
 //dead url
-parserFactory.register("genesistls.com", () => new NoblemtlParser());
 parserFactory.register("hoxionia.com", () => new NoblemtlParser());
 parserFactory.register("jobnib.com", () => new NoblemtlParser());
 parserFactory.register("moonlightnovel.com", () => new NoblemtlParser());
-parserFactory.register("noblemtl.com", () => new NoblemtlParser());
 parserFactory.register("novelcranel.org", () => new NoblemtlParser());
 //dead url
-parserFactory.register("novelsparadise.net", () => new NoblemtlParser());
 //dead url
-parserFactory.register("readfreebooksonline.org", () => new NoblemtlParser());
 //dead url
 parserFactory.register("tamagotl.com", () => new NoblemtlParser());
 parserFactory.register("taonovel.com", () => new NoblemtlParser());
-parserFactory.register("knoxt.space", () => new KnoxtspaceParser());
 parserFactory.register("lazygirltranslations.com", () => new LazygirltranslationsParser());
 //dead url
-parserFactory.register("novelsknight.com", () => new NoblemtlParser());
-parserFactory.register("novelsknight.punchmanga.online", () => new NovelsknightlParser());
-parserFactory.register("cyborg-tl.com", () => new CyborgTlParser());
 
 parserFactory.register("pandamtl.com", () => new NoblemtlParser());
 parserFactory.register("universalnovel.com", () => new NoblemtlParser());
-parserFactory.register("whitemoonlightnovels.com", () => new WhitemoonlightnovelsParser());
 
-parserFactory.register("my-novel.online", () => new MyNovelOnlineParser());
 
 parserFactory.registerRule(
     (url, dom) => NoblemtlParser.isNoblemtlTheme(dom) * 0.7,

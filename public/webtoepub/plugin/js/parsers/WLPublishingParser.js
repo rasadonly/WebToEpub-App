@@ -4,7 +4,6 @@
 
 "use strict";
 
-parserFactory.register("finestories.com", () => new WLPublishingParser());
 parserFactory.register("scifistories.com", () => new WLPublishingParser());
 parserFactory.register("storiesonline.net", () => new WLPublishingParser());
 

@@ -1,6 +1,5 @@
 "use strict";
 parserFactory.register("mtlnovels.com", () => new MtlnovelsParser());
-parserFactory.register("mtlnovel.com", () => new MtlnovelsParser());
 parserFactory.registerUrlRule(
     url => (util.extractHostName(url).endsWith(".mtlnovels.com")),
     () => new MtlnovelsParser()

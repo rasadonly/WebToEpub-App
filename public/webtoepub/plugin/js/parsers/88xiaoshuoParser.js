@@ -1,18 +1,12 @@
 "use strict";
 
 parserFactory.register("m.88xiaoshuo.net", () => new _88xiaoshuoParser());
-parserFactory.register("88xiaoshuo.net", () => new _88xiaoshuoParser());
 parserFactory.register("m.ilwxs.com", () => new _88xiaoshuoParser());
 parserFactory.register("ilwxs.com", () => new _88xiaoshuoParser());
 parserFactory.register("m.ttshu8.com", () => new _88xiaoshuoParser());
 parserFactory.register("ttshu8.com", () => new _88xiaoshuoParser());
 parserFactory.register("m.xpaoshuba.com", () => new _88xiaoshuoParser());
 parserFactory.register("xpaoshuba.com", () => new _88xiaoshuoParser());
-parserFactory.register("m.shuhaige.net", () => new _88xiaoshuoParser());
-parserFactory.register("shuhaige.net", () => new _88xiaoshuoParser());
-parserFactory.register("m.qbxsw.com", () => new _88xiaoshuoParser());
-parserFactory.register("qbxsw.com", () => new _88xiaoshuoParser());
-parserFactory.register("m.38xs.com", () => new _88xiaoshuoParser());
 
 class _88xiaoshuoParser extends Parser {
     constructor() {

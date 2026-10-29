@@ -3,7 +3,6 @@
 */
 "use strict";
 
-parserFactory.register("sonako.wikia.com", () => new SonakoParser());
 parserFactory.register("sonako.fandom.com", () => new SonakoParser());
 
 //-----------------------------------------------------------------------------

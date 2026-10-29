@@ -2,18 +2,6 @@ import { NovelSite } from '@/types';
 
 export const SUPPORTED_SITES: NovelSite[] = [
   {
-    name: 'Novelhall',
-    domain: 'novelhall.com',
-    tocSelector: '#morelist a',
-    contentSelector: '#htmlContent',
-    titleSelector: 'h1',
-    removeSelectors: ['.ad', '.advertisement', 'script', 'style'],
-    exampleUrls: [
-      'https://www.novelhall.com/against-the-gods-0',
-      'https://www.novelhall.com/martial-god-asura-0'
-    ]
-  },
-  {
     name: 'Novelfull',
     domain: 'novelfull.com',
     tocSelector: '.list-chapter a',

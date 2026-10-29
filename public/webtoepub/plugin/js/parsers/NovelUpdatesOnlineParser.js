@@ -2,7 +2,6 @@
 
 //dead url
 parserFactory.register("novelupdates.online", () => new NovelUpdatesOnlineParser());
-parserFactory.register("boxnovel.net", () => new NovelUpdatesOnlineParser());
 
 class NovelUpdatesOnlineParser extends Parser {
     constructor() {

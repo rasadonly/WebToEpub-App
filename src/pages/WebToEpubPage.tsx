@@ -125,16 +125,16 @@ export default function WebToEpubPage() {
           <h2 className="text-2xl font-bold text-foreground text-center">Popular Web Novel Sites Supported</h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center text-xs">
             <div className="p-3 bg-card border border-border rounded-lg font-semibold">NovelFull</div>
-            <div className="p-3 bg-card border border-border rounded-lg font-semibold">Royal Road</div>
+            <div className="p-3 bg-card border border-border rounded-lg font-semibold">FreeWebNovel</div>
             <div className="p-3 bg-card border border-border rounded-lg font-semibold">Scribble Hub</div>
-            <div className="p-3 bg-card border border-border rounded-lg font-semibold">NovelBin</div>
+            <div className="p-3 bg-card border border-border rounded-lg font-semibold">WTR-LAB</div>
             <div className="p-3 bg-card border border-border rounded-lg font-semibold">Wattpad</div>
-            <div className="p-3 bg-card border border-border rounded-lg font-semibold">AO3 (Fanfiction)</div>
+            <div className="p-3 bg-card border border-border rounded-lg font-semibold">FanFiction.net</div>
             <div className="p-3 bg-card border border-border rounded-lg font-semibold">NovelFire</div>
           </div>
           <div className="text-center pt-2">
             <Link to="/sites" className="text-xs font-semibold text-primary hover:underline inline-flex items-center gap-1">
-              View complete list of 650+ supported sites <ArrowRight className="w-3 h-3" />
+              View complete list of 179 supported sites <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
         </section>
@@ -149,7 +149,7 @@ export default function WebToEpubPage() {
             <span>·</span>
             <Link to="/alternatives" className="text-primary hover:underline">WebToEpub Alternative</Link>
             <span>·</span>
-            <Link to="/sites" className="text-primary hover:underline">650+ Supported Sites</Link>
+            <Link to="/sites" className="text-primary hover:underline">179 Supported Sites</Link>
             <span>·</span>
             <Link to="/guide" className="text-primary hover:underline">EPUB Conversion Guide</Link>
           </div>

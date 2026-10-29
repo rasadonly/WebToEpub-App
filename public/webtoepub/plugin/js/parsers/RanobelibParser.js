@@ -1,6 +1,5 @@
 "use strict";
 
-parserFactory.register("ranobelib.me", () => new RanobelibParser());
 parserFactory.register("api.cdnlibs.org", () => new RanobelibParser());
 
 class RanobelibParser extends Parser {

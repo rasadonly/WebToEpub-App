@@ -1,8 +1,6 @@
 "use strict";
 
-parserFactory.register("forums.spacebattles.com", () => new SpacebattlesParser());
 //dead url
-parserFactory.register("forums.sufficientvelocity.com", () => new SpacebattlesParser());
 parserFactory.register("alternatehistory.com", () => new SpacebattlesParser());
 //dead url
 parserFactory.register("forum.questionablequesting.com", () => new SpacebattlesParser());

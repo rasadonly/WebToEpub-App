@@ -4,11 +4,8 @@
 "use strict";
 
 parserFactory.register("bakapervert.wordpress.com", () => new WordpressBaseParser());
-parserFactory.register("crimsonmagic.me", () => new WordpressBaseParser());
 parserFactory.register("shalvationtranslations.wordpress.com", () => new WordpressBaseParser());
 parserFactory.register("frostfire10.wordpress.com", () => new WordpressBaseParser());
-parserFactory.register("isekaicyborg.wordpress.com", () => new WordpressBaseParser());
-parserFactory.register("moonbunnycafe.com", () => new WordpressBaseParser());
 //dead url
 parserFactory.register("rainingtl.org", () => new WordpressBaseParser());
 //dead url

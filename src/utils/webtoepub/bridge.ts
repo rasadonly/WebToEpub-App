@@ -6,7 +6,7 @@ import { getRecentDownloads } from '@/utils/recentDownloads';
 /**
  * Bridge to the vendored WebToEpub engine (public/webtoepub/index.html).
  *
- * We load the full engine inside a hidden same-origin iframe so all ~650
+ * We load the full engine inside a hidden same-origin iframe so all the
  * self-registering parsers keep working exactly as they do upstream, then
  * drive it programmatically from our React UI via contentWindow globals.
  */

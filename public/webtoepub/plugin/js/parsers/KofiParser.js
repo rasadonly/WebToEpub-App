@@ -8,7 +8,6 @@
 
 console.log("[WebToEpub] KofiParser v4.1 Loaded (Fast Discovery)");
 
-parserFactory.register("ko-fi.com", () => new KofiParser());
 parserFactory.registerManualSelect("Ko-fi", () => new KofiParser());
 
 class KofiParser extends Parser {
