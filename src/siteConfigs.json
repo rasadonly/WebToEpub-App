@@ -3864,16 +3864,6 @@
       "div#content"
     ]
   },
-  "zetrotranslation.com": {
-    "parser": "MadaraParser",
-    "toc": [
-      "li.wp-manga-chapter a"
-    ],
-    "content": [
-      "div.reading-content .text-left",
-      "div.entry-content"
-    ]
-  },
   "zhenhunxiaoshuo.com": {
     "parser": "ZhenhunxiaoshuoParser",
     "toc": [

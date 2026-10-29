@@ -252,6 +252,33 @@ export function stealthAvailable() {
 const INKITT_COOKIE =
   "user_credentials=4be4b2f459c9113e1a86bad353c1c89e9886c0285d11bf7cb9441e3f3f61278655ae43c8e47c607dfc31ccd985f88faa3e216542766d50d0b1b2d2fc181e4889%3A%3A12744546%3A%3A2026-09-16T06%3A16%3A52Z; _rocky_session_1=92ea8ac4dcdd4c3c8b169a722c1e9f36; __stripe_mid=94754462-ddb8-4b14-ba53-f09d65f073847cf17b";
 
+
+// Many Chinese/Japanese/Korean sites declare their charset only in a <meta>
+// tag (or not at all in the header); fetch's text() then defaults to UTF-8
+// and GBK/Big5/Shift_JIS pages come back as mojibake. Decode the raw bytes
+// with the declared charset instead (header first, then meta sniffing).
+async function decodeBodyText(r) {
+  const buf = await r.arrayBuffer();
+  const ct = r.headers.get("content-type") || "";
+  const headerCs = ct.match(/charset=([\w-]+)/i)?.[1];
+  const head = new TextDecoder("latin1").decode(buf.slice(0, 2048));
+  const metaCs = head.match(/<meta[^>]+charset\s*=\s*["']?\s*([\w-]+)/i)?.[1];
+  const declaredCs = metaCs || headerCs;
+  const decode = (cs) => { try { return new TextDecoder(cs).decode(buf); } catch { return null; } };
+  // U+FFFD marks a lossy decode; the literal sequence 锟斤拷 is what a
+  // second wrong decode (of already-corrupted UTF-8) produces — both count.
+  const badness = (s) => (s.match(/\uFFFD/g) || []).length + 3 * (s.match(/\u951F\u65A4\u62F7/g) || []).length;
+  let text = decode(headerCs || metaCs || "utf-8");
+  if (text == null) text = new TextDecoder("utf-8").decode(buf);
+  // Proxies sometimes label GBK bytes as utf-8; if that produced replacement
+  // characters and the page itself declares another charset, trust the page.
+  if (metaCs && headerCs && metaCs.toLowerCase() !== headerCs.toLowerCase() && badness(text) > 0) {
+    const alt = decode(metaCs);
+    if (alt != null && badness(alt) < badness(text)) text = alt;
+  }
+  return { text, declared: declaredCs && !/^utf-?8$/i.test(declaredCs) ? declaredCs : null, bad: badness(text) };
+}
+
 async function httpGet(url, extra = {}, timeoutMs = 7000) {
   const parsed = new URL(url);
   const host = parsed.hostname;
@@ -309,7 +336,16 @@ async function httpGet(url, extra = {}, timeoutMs = 7000) {
           if (r.ok) {
             const ct = r.headers.get("content-type") || "";
             if (/html|text\/plain/i.test(ct)) {
-              const text = await r.text();
+              const { text, declared, bad } = await decodeBodyText(r);
+              // A transcoding proxy can "open" a GBK/Big5 page while
+              // destroying its text (decoded as UTF-8 upstream, replacement
+              // chars baked in). If the page declares a non-UTF-8 charset
+              // and the body is full of replacement chars, this route is
+              // lossy — fall through to the next one (direct decodes fine).
+              if (declared && bad > 40) {
+                lastErr = new Error("Lossy route (charset corruption)");
+                continue;
+              }
               if (looksLikeChallenge(text)) {
                 challenged++;
                 if (!proxy) blockedHosts.add(host);
@@ -319,7 +355,7 @@ async function httpGet(url, extra = {}, timeoutMs = 7000) {
               if (!proxy) blockedHosts.delete(host);
               return new Response(text, {
                 status: 200,
-                headers: { "content-type": ct || "text/html; charset=utf-8" },
+                headers: { "content-type": "text/html; charset=utf-8" },
               });
             }
             if (!proxy) blockedHosts.delete(host);
@@ -1664,10 +1700,42 @@ async function tocHako(url) {
 }
 
 async function bodyHako(url) {
-  return extractWithSelector(
-    parseHtml(await getText(url)),
-    "#chapter-content, .long-text, .chapter-content"
-  );
+  const html = await getText(url);
+  // Protected chapters: #chapter-c-protected carries data-c (JSON array of
+  // "NNNN<base64>" chunks), data-k (per-page key, in the clear) and data-s
+  // (scheme). The site's own decoder: sort chunks by the numeric prefix,
+  // base64-decode, then for xor_shuffle XOR each byte with the key's ASCII.
+  const prot = html.match(/id="chapter-c-protected"[^>]*>/);
+  if (prot) {
+    const tag = prot[0];
+    const attr = (n) => tag.match(new RegExp(`${n}="([^"]*)"`))?.[1];
+    const scheme = attr('data-s') || '';
+    const key = attr('data-k') || '';
+    const rawC = attr('data-c');
+    if (rawC) {
+      try {
+        const chunks = JSON.parse(rawC.replace(/&quot;/g, '"').replace(/&amp;/g, '&'));
+        const parts = chunks
+          .slice()
+          .sort((a, b) => parseInt(a.slice(0, 4), 10) - parseInt(b.slice(0, 4), 10))
+          .map((c) => Buffer.from(c.slice(4), 'base64'));
+        let text;
+        if (scheme === 'xor_shuffle' && key) {
+          text = parts.map((buf) => {
+            const out = Buffer.alloc(buf.length);
+            for (let i = 0; i < buf.length; i++) out[i] = buf[i] ^ key.charCodeAt(i % key.length);
+            return out.toString('utf8');
+          }).join('');
+        } else if (scheme === 'base64_reverse') {
+          text = Buffer.from(parts.map((b) => b.toString('binary')).join('').split('').reverse().join(''), 'base64').toString('utf8');
+        } else {
+          text = parts.map((b) => b.toString('utf8')).join('');
+        }
+        if (text && text.replace(/<[^>]+>/g, '').trim().length > 200) return `<div>${text}</div>`;
+      } catch { /* fall through to selector extraction */ }
+    }
+  }
+  return extractWithSelector(parseHtml(html), "#chapter-content, .long-text, .chapter-content");
 }
 
 // ---------------- kanunu8.com (努努书坊) ----------------
@@ -2439,13 +2507,21 @@ async function tocLightNovelWorld(url) {
 
 // --- Ranobes: /chapters/<id>/ with page/N/ pagination, newest first ---
 async function tocRanobes(url) {
-  const html = await getText(url);
-  const doc = parseHtml(html);
-  let tocUrl =
-    doc.querySelector("div.r-fullstory-chapters-foot a[href*='/chapters/']")?.getAttribute("href") ||
-    doc.querySelector("a[href*='/chapters/']")?.getAttribute("href");
+  // Book pages (/ranobe/{id}-{slug}.html) 404 on the plain fetch route, but
+  // the chapter index is addressable directly: /chapters/{slug}/.
+  let tocUrl = null;
+  const bookM = new URL(url).pathname.match(/\/ranobe\/\d+-([a-z0-9-]+)\.html$/i);
+  if (bookM) tocUrl = `${new URL(url).origin}/chapters/${bookM[1]}/`;
+  let html = '';
   if (!tocUrl) {
-    return linksFrom(html, url, "ul.chapters-scroll-list a", ".title").reverse();
+    html = await getText(url);
+    const doc = parseHtml(html);
+    tocUrl =
+      doc.querySelector("div.r-fullstory-chapters-foot a[href*='/chapters/']")?.getAttribute("href") ||
+      doc.querySelector("a[href*='/chapters/']")?.getAttribute("href");
+    if (!tocUrl) {
+      return linksFrom(html, url, "ul.chapters-scroll-list a", ".title").reverse();
+    }
   }
   tocUrl = absoluteUrl(url, tocUrl).replace(/\/$/, "") + "/";
   const tocHtml = await getText(tocUrl);
@@ -2491,7 +2567,26 @@ async function tocMadara(url) {
           signal: AbortSignal.timeout(30000),
         });
         if (!res.ok) continue;
-        items = pick(await res.text());
+        const frag = await res.text();
+        items = pick(frag);
+        if (!items.length) continue;
+        // Paginated variant (e.g. novelnice): the fragment announces
+        // "Page 1 of N" and serves the remaining newest-first blocks via
+        // POST ?t={page}. Merge them all before the caller's reverse.
+        let totalPages = parseInt(frag.match(/Page\s*1\s*of\s*(\d+)/i)?.[1] || '1', 10);
+        for (const m of frag.matchAll(/data-page="(\d+)"/g)) totalPages = Math.max(totalPages, parseInt(m[1], 10));
+        for (let p = 2; p <= Math.min(totalPages, 60); p++) {
+          try {
+            const r2 = await fetch(buildUrl(proxy, `${ajaxUrl}?t=${p}`), {
+              method: "POST",
+              headers: { ...DEFAULT_HEADERS, "X-Requested-With": "XMLHttpRequest" },
+              signal: AbortSignal.timeout(30000),
+            });
+            const more = pick(await r2.text());
+            if (!more.length) break;
+            items = items.concat(more);
+          } catch { break; }
+        }
         if (items.length) break;
       } catch {
         /* try next route */
@@ -2680,16 +2775,19 @@ async function tocXenForo(url) {
   const u = new URL(url);
   const base = u.origin;
   // Extract thread id from URL like /threads/name.12345/
-  const threadMatch = u.pathname.match(/\/threads\/[^/]+\.(\d+)/);
-  if (!threadMatch) return [];
-  const threadId = threadMatch[1];
-  // Use the threadmarks reader page
-  const readerUrl = `${base}/threads/${threadId}/threadmarks`;
+  // Thread segment is "{slug}.{id}" or a bare "{id}" (both forms occur in
+  // the wild; XenForo serves the threadmark index under either).
+  const threadMatch = u.pathname.match(/^(.*\/threads\/[^/]+)/);
+  const seg = threadMatch ? threadMatch[1].split('/').pop() : '';
+  if (!threadMatch || !/^\d+$/.test(seg) && !/\.\d+$/.test(seg)) return [];
+  // The threadmark index hangs off the thread path itself; deriving it from
+  // the input URL keeps any path prefix (e.g. alternatehistory.com/forum).
+  const readerUrl = `${base}${threadMatch[1]}/threadmarks`;
   const html = await getText(readerUrl);
   const doc = parseHtml(html);
   const out = [];
   // XenForo threadmark list
-  doc.querySelectorAll('.block-body .structItem--threadmark .structItem-title a[href]').forEach(a => {
+  doc.querySelectorAll('.structItem--threadmark .structItem-title a[href]').forEach(a => {
     const href = a.getAttribute('href');
     if (href) out.push({ url: absoluteUrl(base, href), title: textOf(a) });
   });
@@ -3014,6 +3112,293 @@ async function tocBakaTsuki(startUrl) {
   return out;
 }
 
+// --- Alphapolis (alphapolis.co.jp): the work page embeds its full episode
+// list as JSON ("episodes":[{episodeNo,url,mainTitle,dispOrder,isPublic}]).
+// Episode pages render their text into div#novelBody (see body selectors).
+async function tocAlphapolis(startUrl) {
+  const html = await getText(startUrl);
+  const i = html.indexOf('"episodes":');
+  if (i < 0) return [];
+  const start = html.indexOf('[', i);
+  if (start < 0) return [];
+  let depth = 0, inStr = false, esc = false, end = -1;
+  for (let j = start; j < html.length; j++) {
+    const c = html[j];
+    if (esc) { esc = false; continue; }
+    if (c === '\\') { esc = true; continue; }
+    if (c === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (c === '[') depth++;
+    else if (c === ']') { depth--; if (depth === 0) { end = j; break; } }
+  }
+  if (end < 0) return [];
+  let eps;
+  try { eps = JSON.parse(html.slice(start, end + 1)); } catch { return []; }
+  const origin = new URL(startUrl).origin;
+  return eps
+    .filter((e) => e && e.isPublic !== false && e.url)
+    .sort((a, b) => (a.dispOrder || 0) - (b.dispOrder || 0))
+    .map((e) => ({ title: String(e.mainTitle || `Episode ${e.episodeNo || ''}`).trim(), url: absoluteUrl(origin, e.url) }));
+}
+
+// Regex anchor extraction for pages whose markup breaks the DOM parser
+// (linkedom returns an empty tree on some large/malformed documents, e.g.
+// nested <body> tags in AJAX archive fragments).
+function regexLinks(html, base, hrefRe) {
+  const out = [];
+  for (const m of html.matchAll(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/g)) {
+    const rawHref = m[1].replace(/&amp;/g, '&').replace(/&#038;/g, '&').replace(/&quot;/g, '"');
+    const url = absoluteUrl(base, unwrapProxyUrl(rawHref));
+    if (!hrefRe.test(url)) continue;
+    const title = m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    out.push({ url, title });
+  }
+  return out;
+}
+
+// --- Libread (libread.com, FreeWebNovel-family layout): the book page
+// server-renders range 1 (40 chapters) and links further ranges at
+// /libread/{slug}-{id}/{n}. Walk the ranges and sort by chapter number.
+async function tocLibread(startUrl) {
+  const u = new URL(startUrl);
+  const bookPath = u.pathname.replace(/\/$/, '');
+  const chapNum = (href) => parseInt(href.match(/chapter-(\d+)/)?.[1] || '0', 10);
+  const collect = (html, base) => regexLinks(html, base, /\/chapter-\d+/).filter((i) => i.url.includes(bookPath));
+  const byUrl = new Map();
+  const merge = (items) => {
+    let added = 0;
+    for (const it of items) {
+      const prev = byUrl.get(it.url);
+      if (!prev) { byUrl.set(it.url, it); added++; }
+      else if ((it.title || '').length > (prev.title || '').length) byUrl.set(it.url, it);
+    }
+    return added;
+  };
+  merge(collect(await smartGetText(startUrl), startUrl));
+  for (let n = 2; n <= 80; n++) {
+    let html;
+    try { html = await smartGetText(`${u.origin}${bookPath}/${n}`); } catch { break; }
+    if (!merge(collect(html, startUrl))) break;
+  }
+  return [...byUrl.values()].sort((a, b) => chapNum(a.url) - chapNum(b.url));
+}
+
+// --- Naver Webnovel (novel.naver.com): the series list paginates with
+// ?novelId={id}&page={n}, 10 episodes per page, newest first.
+async function tocNaver(startUrl) {
+  const u = new URL(startUrl);
+  const novelId = u.searchParams.get('novelId');
+  if (!novelId) return [];
+  const volOf = (href) => parseInt(new URL(href, u.origin).searchParams.get('volumeNo') || '0', 10);
+  const byVol = new Map();
+  for (let page = 1; page <= 200; page++) {
+    let html;
+    try { html = await getText(`${u.origin}/webnovel/list?novelId=${novelId}&page=${page}`); } catch { break; }
+    let found = 0;
+    for (const item of regexLinks(html, u.origin, /\/webnovel\/detail/)) {
+      if (item.url.includes(`novelId=${novelId}`) && item.url.includes('volumeNo=') && !byVol.has(item.url)) {
+        byVol.set(item.url, item); found++;
+      }
+    }
+    if (!found) break;
+  }
+  return [...byVol.values()].sort((a, b) => volOf(a.url) - volOf(b.url));
+}
+
+// --- NovelCEO (novelceo.com, incl. noveldrama.org redirects): the book page
+// only embeds the first 30 chapters, but its own JS loads the full list from
+// /ajax/chapter-archive?novelId={slug} in one call (NovelBin-family endpoint).
+async function tocNovelCeo(startUrl) {
+  const u = new URL(startUrl);
+  const slug = u.pathname.split('/').filter(Boolean).pop();
+  if (!slug) return [];
+  try {
+    const html = await getText(`${u.origin}/ajax/chapter-archive?novelId=${encodeURIComponent(slug)}`);
+    const out = regexLinks(html, u.origin, /\/chapter-\d+/);
+    if (out.length) return dedupeByUrl(out);
+  } catch { /* fall through */ }
+  return [];
+}
+
+// --- Nine Heavens (nineheavens.org): the chapter list lives on
+// /novels/{slug}/?tab=chapters&page={n}, 50 per page, newest chunk first.
+async function tocNineHeavens(startUrl) {
+  const u = new URL(startUrl);
+  const base = `${u.origin}${u.pathname.replace(/\/?$/, '/')}`;
+  const chapNum = (href) => parseInt(href.match(/chapter-(\d+)/)?.[1] || '0', 10);
+  const byUrl = new Map();
+  for (let page = 1; page <= 60; page++) {
+    let html;
+    try { html = await smartGetText(`${base}?tab=chapters&page=${page}`); } catch { break; }
+    let found = 0;
+    for (const item of regexLinks(html, u.origin, /\/chapter-\d+-/)) {
+      if (!byUrl.has(item.url)) { byUrl.set(item.url, item); found++; }
+    }
+    if (!found) break;
+  }
+  return [...byUrl.values()].sort((a, b) => chapNum(a.url) - chapNum(b.url));
+}
+
+
+// --- LNMTL (lnmtl.com): the book page is a Vue app embedding lnmtl.volumes;
+// each volume's chapters paginate as JSON at /chapter?volumeId={id}&page={n}
+// (50 per page, rows carry the chapter slug).
+async function tocLnmtl(startUrl) {
+  // LNMTL rejects the proxy routes (401/deadline) but serves direct fetches.
+  const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+  const direct = async (u, json = false) => {
+    const r = await fetch(u, { headers: { 'User-Agent': UA, ...(json ? { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' } : {}) } });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.text();
+  };
+  // www.lnmtl.com answers 401 while the bare domain serves fine — normalize.
+  const bare = startUrl.replace('://www.', '://');
+  const html = await direct(bare);
+  const origin = new URL(bare).origin;
+  const volIds = [];
+  const vm = html.match(/lnmtl\.volumes\s*=\s*(\[[\s\S]*?\]);/);
+  if (vm) {
+    try {
+      for (const v of JSON.parse(vm[1])) if (v && v.id) volIds.push(v.id);
+    } catch { /* fall through */ }
+  }
+  if (!volIds.length) {
+    for (const m of html.matchAll(/"id"\s*:\s*(\d+)[^}]*?"number"\s*:/g)) volIds.push(m[1]);
+  }
+  const out = [];
+  for (const vid of volIds) {
+    for (let page = 1; page <= 60; page++) {
+      let data;
+      try { data = JSON.parse(await direct(`${origin}/chapter?volumeId=${vid}&page=${page}`, true)); } catch { break; }
+      const rows = data?.data || [];
+      if (!rows.length) break;
+      for (const r of rows) if (r?.slug) out.push({ url: `${origin}/chapter/${r.slug}`, title: String(r.title || r.name || r.slug) });
+      if (page >= (data.last_page || page)) break;
+    }
+  }
+  return dedupeByUrl(out);
+}
+
+// --- Novel-Bin mirrors (novel-bin.com/.net): no index endpoint exists by
+// design ("Showing the first 30 chapters"); chapter URLs are purely
+// sequential /novel-bin/{slug}/chapter-{n} and the book page prints the
+// total (and links the latest chapter). Synthesize the full list.
+async function tocNovelBinMirror(startUrl) {
+  const html = await smartGetText(startUrl);
+  const u = new URL(startUrl);
+  const slug = u.pathname.split('/').filter(Boolean).pop();
+  if (!slug) return [];
+  const titled = new Map();
+  let maxSeen = 0;
+  for (const item of regexLinks(html, u.origin, /\/chapter-\d+$/)) {
+    const n = parseInt(item.url.match(/chapter-(\d+)$/)?.[1] || '0', 10);
+    if (n) { titled.set(n, item); if (n > maxSeen) maxSeen = n; }
+  }
+  const printed = parseInt(html.replace(/<[^>]+>/g, ' ').match(/(\d[\d,]*)\s*total/i)?.[1]?.replace(/,/g, '') || '0', 10);
+  const total = Math.max(maxSeen, printed);
+  if (!total) return [...titled.values()];
+  const out = [];
+  for (let n = 1; n <= total; n++) {
+    out.push(titled.get(n) || { url: `${u.origin}/novel-bin/${slug}/chapter-${n}`, title: `Chapter ${n}` });
+  }
+  return out;
+}
+
+// --- ttshu8 (m.ttshu8.com): the book page's range <select> enumerates
+// /book/{id}_{n}/ pages of 50 chapters. Walk the ranges in order.
+async function tocTtshu8(startUrl) {
+  const u = new URL(startUrl);
+  const bookM = u.pathname.match(/^(\/book\/\d+)\/?(?:_\d+\/?)?$/);
+  if (!bookM) return [];
+  const bookPath = bookM[1];
+  const byUrl = new Map();
+  const merge = (html) => {
+    let added = 0;
+    for (const item of regexLinks(html, u.origin, /\.html$/)) {
+      if (item.url.includes(bookPath + '/') && !byUrl.has(item.url)) { byUrl.set(item.url, item); added++; }
+    }
+    return added;
+  };
+  merge(await smartGetText(startUrl));
+  for (let n = 2; n <= 60; n++) {
+    let html;
+    try { html = await smartGetText(`${u.origin}${bookPath}_${n}/`); } catch { break; }
+    if (!merge(html)) break;
+  }
+  return [...byUrl.values()];
+}
+
+// --- xpaoshuba (m.xpaoshuba.com): chapter lists paginate as
+// /Partlist/{id}_{n}/ (50 per page); page 1 links the last page.
+async function tocXpaoshuba(startUrl) {
+  const u = new URL(startUrl);
+  const m = u.pathname.match(/\/Partlist\/(\d+)(?:_\d+)?\/?$/i) ||
+    u.pathname.match(/\/book\/(\d+)(?:\/index\.html)?\/?$/i);
+  if (!m) return [];
+  const id = m[1];
+  // Direct fetches are fast here (~1s); the proxy sweep is not, and a big
+  // book has 250+ list pages — fetch them with a small concurrency pool.
+  const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+  const direct = async (url) => {
+    const r = await fetch(url, { headers: { 'User-Agent': UA } });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.text();
+  };
+  const pageItems = (html) => regexLinks(html, u.origin, /\.shtml$/).filter((i) => i.url.includes(`/Partlist/${id}/`));
+  const first = await direct(`${u.origin}/Partlist/${id}/`);
+  let lastPage = 1;
+  for (const mm of first.matchAll(new RegExp(`/Partlist/${id}_(\\d+)/`, 'g'))) lastPage = Math.max(lastPage, parseInt(mm[1], 10));
+  const pages = new Map([[1, pageItems(first)]]);
+  const queue = [];
+  for (let n = 2; n <= Math.min(lastPage, 400); n++) queue.push(n);
+  let qi = 0;
+  const worker = async () => {
+    while (qi < queue.length) {
+      const n = queue[qi++];
+      try { pages.set(n, pageItems(await direct(`${u.origin}/Partlist/${id}_${n}/`))); } catch { /* skip page */ }
+    }
+  };
+  await Promise.all(Array.from({ length: 6 }, worker));
+  const byUrl = new Map();
+  for (let n = 1; n <= lastPage; n++) for (const it of pages.get(n) || []) if (!byUrl.has(it.url)) byUrl.set(it.url, it);
+  const out = [...byUrl.values()];
+  // Desktop serves the whole catalog on one page (newest-first) and the
+  // book page's embedded latest block lands ahead of it; mobile pages
+  // ascend. When titles carry chapter numbers, sort ascending outright.
+  const chapNo = (t) => parseInt((String(t).match(/第\s*(\d+)\s*章/) || [])[1] || '0', 10);
+  const numbered = out.filter((x) => chapNo(x.title) > 0).length;
+  if (numbered >= Math.max(10, out.length * 0.9)) out.sort((a, b) => chapNo(a.title) - chapNo(b.title));
+  return out;
+}
+
+
+// --- Ilwxs mobile (m.ilwxs.com): the book list paginates on the book URL
+// itself — /shu/{id}/ then /shu/{id}_{n}/ (~50 per page, ascending).
+async function tocIlwxsMobile(startUrl) {
+  const u = new URL(startUrl);
+  const m = u.pathname.match(/^\/(shu\/\d+)(?:_\d+)?\/?$/);
+  if (!m) return [];
+  const bookPath = '/' + m[1];
+  const byUrl = new Map();
+  const merge = (html) => {
+    let added = 0;
+    for (const item of regexLinks(html, u.origin, /\.html$/)) {
+      if (item.url.includes(bookPath + '/') && !byUrl.has(item.url)) { byUrl.set(item.url, item); added++; }
+    }
+    return added;
+  };
+  const first = await smartGetText(startUrl);
+  merge(first);
+  let lastPage = 1;
+  for (const mm of first.matchAll(new RegExp(bookPath.replace('/', '\\/') + '_(\\d+)/', 'g'))) lastPage = Math.max(lastPage, parseInt(mm[1], 10));
+  for (let n = 2; n <= Math.min(lastPage, 200); n++) {
+    let html;
+    try { html = await smartGetText(`${u.origin}${bookPath}_${n}/`); } catch { break; }
+    if (!merge(html) && n > lastPage) break;
+  }
+  return [...byUrl.values()];
+}
+
 // --- WuxiaWorld.com: gRPC-web binary chapter list decoder ---
 async function tocWuxiaWorld(url) {
   const u = new URL(url);
@@ -3217,15 +3602,20 @@ async function tocKnoxT(url) {
   const origin = new URL(url).origin;
   const items = linksFrom(html, url, '.entry-content a[href], .chapter-list a[href], table a[href]')
     .filter(i => /chapter|chap|ch[-_]?\d|part[-_]?\d|episode/i.test(i.title + i.url));
-  if (items.length) return dedupeByUrl(items);
+  // The current knoxt.space theme renders a site-wide "latest chapters"
+  // widget inside the same containers, which swamps the book's own list.
+  // Prefer links scoped to this book's slug; a cross-series list is worse
+  // than falling through to the config/sweep paths.
+  const slug = url.split('/').filter(Boolean).pop() || '';
+  const scoped = slug ? items.filter(i => i.url.includes(slug)) : [];
+  if (scoped.length) return dedupeByUrl(scoped);
   // WP REST API fallback
-  const slug = url.split('/').filter(Boolean).pop();
   try {
     const json = await getJson(`${origin}/wp-json/wp/v2/posts?categories_name=${slug}&per_page=100&orderby=date&order=asc`);
     if (Array.isArray(json) && json.length)
       return json.map(p => ({ url: p.link, title: p.title?.rendered || p.slug }));
   } catch {}
-  return dedupeByUrl(items);
+  return [];
 }
 
 // --- Chrysanthemum Garden: WP-based BL/danmei translations ---
@@ -3291,28 +3681,73 @@ async function tocNovelMtl(url) {
     .filter(i => /chapter|chap|ch[-_]?\d/i.test(i.url));
 }
 
-// --- Literotica: adult fiction, paginated chapters ---
+// --- Literotica: a series' chapters all sit on ONE series page
+// (/series/se/{id-or-slug}) inside a "Table of Contents" section; story
+// pages (/s/{slug}) link their series and otherwise paginate themselves
+// with ?page=N anchors. Page-wide /s/ sweeps pollute the TOC with the
+// series URL's own ?dialog=new-story variant, /comments links and other
+// stories' footer slugs, so every result is cleaned of those.
+function litCleanToc(items) {
+  return dedupeByUrl((items || []).filter((i) =>
+    i.url && !i.url.includes('?dialog=') && !/\/comments\/?($|\?)/.test(i.url)));
+}
+
 async function tocLiterotica(url) {
-  const html = await getText(url);
-  const doc = parseHtml(html);
   const origin = 'https://www.literotica.com';
-  // Series page
-  const seriesItems = linksFrom(html, origin, 'a[href*="/series/"], a[href*="/s/"]');
-  if (seriesItems.length > 2) return dedupeByUrl(seriesItems);
-  // Author page
-  const authorItems = linksFrom(html, origin, 'table.st a[href], .a-story-link a[href]');
-  if (authorItems.length) return dedupeByUrl(authorItems);
-  // Single story — check for pages
-  const pageCount = parseInt(doc.querySelector('select.b-pager-pages option:last-child')?.getAttribute('value') || '1');
-  if (pageCount <= 1) return [{ url, title: textOf(doc.querySelector('h1')) || 'Chapter 1' }];
-  const pages = [];
-  for (let p = 1; p <= pageCount; p++) pages.push({ url: `${url}?page=${p}`, title: `Page ${p}` });
-  return pages;
+  const u = new URL(url);
+  const html = await smartGetText(url);
+  const doc = parseHtml(html);
+
+  if (u.pathname.includes('/series/')) {
+    // Primary: the anchors inside the "Table of Contents" container.
+    const heads = [...doc.querySelectorAll('h1, h2, h3')];
+    const h = heads.find((el) => textOf(el).toLowerCase() === 'table of contents');
+    if (h) {
+      let node = h;
+      for (let up = 0; up < 4 && node; up++) {
+        node = node.parentElement;
+        if (!node) break;
+        const items = [...node.querySelectorAll('a[href*="/s/"]')].map((a) => ({
+          url: absoluteUrl(origin, a.getAttribute('href')),
+          title: textOf(a),
+        }));
+        const cleaned = litCleanToc(items);
+        if (cleaned.length) return cleaned;
+      }
+    }
+    // Fallback: on the sampled series pages the page-wide /s/ anchor set is
+    // exactly the chapter set once dialog/comment variants are removed.
+    return litCleanToc(linksFrom(html, origin, 'a[href*="/s/"]'));
+  }
+
+  if (u.pathname.startsWith('/s/')) {
+    // A story in a series: recurse into the series page for the full list.
+    const seriesLink = linksFrom(html, origin, 'a[href*="/series/se/"]')
+      .find((i) => new URL(i.url).pathname.startsWith('/series/se/'));
+    if (seriesLink) return tocLiterotica(seriesLink.url);
+    // Single story: its own pagination anchors give the page count.
+    const base = url.split('?')[0];
+    let maxPage = 1;
+    for (const a of linksFrom(html, origin, 'a[href*="?page="]')) {
+      const au = new URL(a.url);
+      if (au.pathname === u.pathname) {
+        maxPage = Math.max(maxPage, parseInt(au.searchParams.get('page') || '1', 10));
+      }
+    }
+    const title = textOf(doc.querySelector('h1')) || 'Chapter 1';
+    if (maxPage <= 1) return [{ url: base, title }];
+    const pages = [{ url: base, title }];
+    for (let p = 2; p <= maxPage; p++) pages.push({ url: `${base}?page=${p}`, title: `Page ${p}` });
+    return pages;
+  }
+
+  // Author page (legacy selectors).
+  return litCleanToc(linksFrom(html, origin, 'table.st a[href], .a-story-link a[href]'));
 }
 
 async function bodyLiterotica(url) {
   const doc = parseHtml(await getText(url));
-  return extractWithSelector(doc, '.aa_ht, .b-story-body-x, #story_text, .story-body');
+  return extractWithSelector(doc, '[class*="article__content"], .aa_ht, .b-story-body-x, #story_text, .story-body');
 }
 
 // --- NovelStar: CN novel site, AJAX chapter archive ---
@@ -3357,6 +3792,847 @@ async function toc69shuba(url) {
     } catch {}
   }
   return [];
+}
+
+
+// --- NovelHi (novelhi.com): chapter pages render a "Loading chapter..."
+// shell; the real text comes from a tokenized /content endpoint whose JSON
+// payload is ROT13-obfuscated. Tokens are per-page and short-lived, so the
+// page and the endpoint are fetched back-to-back in one direct session.
+function rot13(s) {
+  return s.replace(/[a-zA-Z]/g, (c) => {
+    const base = c <= 'Z' ? 65 : 97;
+    return String.fromCharCode(((c.charCodeAt(0) - base + 13) % 26) + base);
+  });
+}
+async function bodyNovelHi(url) {
+  const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+  try {
+    const r = await fetch(url, { headers: { 'User-Agent': UA } });
+    const html = await r.text();
+    const grab = (id) =>
+      html.match(new RegExp(`id="${id}"[^>]*value="([^"]+)"`))?.[1] ||
+      html.match(new RegExp(`value="([^"]+)"[^>]*id="${id}"`))?.[1];
+    const path = grab('chapterContentPath');
+    const token = grab('chapterContentToken');
+    if (path && token) {
+      const ep = new URL(path, url).href + (path.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token);
+      const r2 = await fetch(ep, { headers: { 'User-Agent': UA, Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' } });
+      const data = await r2.json().catch(() => null);
+      const content = data?.data?.content;
+      if (content) return `<div>${rot13(content)}</div>`;
+    }
+  } catch { /* fall through */ }
+  return bodyGeneric(url, '#chr-content, #chapter-content, div.chapter-content');
+}
+
+// --- MVLEmpyr (mvlempyr.com/.io): the Webflow book page carries only a
+// #novel-code; the chapter list lives in a backend WordPress whose tag id
+// is 7^code mod 1999999997 (the site's own JS computes it the same way).
+async function tocMvlempyr(startUrl) {
+  const html = await smartGetText(startUrl);
+  const u = new URL(startUrl);
+  const code = html.match(/id="novel-code"[^>]*>\s*(\d+)/)?.[1] ||
+    html.match(/novel-code[^0-9]{0,20}(\d{3,})/)?.[1];
+  if (!code) return [];
+  let tag = 1n;
+  const base = 7n, mod = 1999999997n;
+  let exp = BigInt(code);
+  let b = base % mod;
+  while (exp > 0n) { if (exp & 1n) tag = (tag * b) % mod; b = (b * b) % mod; exp >>= 1n; }
+  const api = 'https://chap.heliosarchive.online/wp-json/wp/v2/posts';
+  const byNum = new Map();
+  for (let page = 1; page <= 12; page++) {
+    const r = await fetch(`${api}?tags=${tag}&per_page=500&page=${page}`, { headers: { Accept: 'application/json' } });
+    if (!r.ok) break;
+    const posts = await r.json().catch(() => []);
+    if (!Array.isArray(posts) || !posts.length) break;
+    for (const p of posts) {
+      const n = parseInt(p?.acf?.chapter_number ?? '', 10);
+      if (!n) continue;
+      byNum.set(n, { url: `${u.origin}/chapter/${code}-${n}`, title: String(p?.acf?.ch_name || `Chapter ${n}`) });
+    }
+    const totalPages = parseInt(r.headers.get('x-wp-totalpages') || '1', 10);
+    if (page >= totalPages) break;
+  }
+  return [...byNum.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
+}
+
+
+// --- Foxteller (foxteller.com): chapter text comes from POST /aux_dem with
+// the page's own d (novel id) / e (chapter id) variables + CSRF token; the
+// payload is base64 with A-F substituted by %R?& tokens.
+async function bodyFoxteller(url) {
+  const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+  try {
+    const r1 = await fetch(url, { headers: { 'User-Agent': UA } });
+    const html = await r1.text();
+    const d = html.match(/let d\s*=\s*'(\d+)'/)?.[1];
+    const e = html.match(/let e\s*=\s*'(\d+)'/)?.[1];
+    const csrf = html.match(/name="csrf-token" content="([^"]+)"/)?.[1];
+    if (d && e) {
+      const cookies = (r1.headers.getSetCookie?.() || []).map((c) => c.split(';')[0]).join('; ');
+      const r2 = await fetch('https://www.foxteller.com/aux_dem', {
+        method: 'POST',
+        headers: {
+          'User-Agent': UA,
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+          ...(csrf ? { 'X-CSRF-TOKEN': csrf } : {}),
+          ...(cookies ? { Cookie: cookies } : {}),
+        },
+        body: JSON.stringify({ x1: d, x2: e }),
+      });
+      const data = await r2.json().catch(() => null);
+      if (data?.aux) {
+        const b64 = data.aux
+          .replaceAll('%Ra&', 'A').replaceAll('%Rc&', 'B').replaceAll('%Rb&', 'C')
+          .replaceAll('%Rd&', 'D').replaceAll('%Rf&', 'E').replaceAll('%Re&', 'F');
+        const decoded = Buffer.from(b64, 'base64').toString('utf-8');
+        if (decoded.length > 200) return `<div>${decoded}</div>`;
+      }
+    }
+  } catch { /* fall through */ }
+  return bodyGeneric(url, 'article');
+}
+
+
+// --- Timotxt (timotxt.com): the book page shows only the latest-12 window;
+// the full ordered list lives at /{bookId}/dir.
+async function tocTimotxt(startUrl) {
+  const u = new URL(startUrl);
+  const id = u.pathname.split('/').filter(Boolean)[0];
+  if (!id) return [];
+  const html = await smartGetText(`${u.origin}/${id}/dir`);
+  const items = regexLinks(html, u.origin, /\.html$/)
+    .filter((i) => new RegExp(`/${id}/\\d+\\.html$`).test(i.url));
+  const num = (x) => parseInt(x.url.match(/(\d+)\.html$/)?.[1] || '0', 10);
+  return dedupeByUrl(items).sort((a, b) => num(a) - num(b));
+}
+
+
+// --- Wuxia.click (WuxiaWorld.eu-family software): the book page paginates
+// its chapter list inline at ?page=N (~100 per page); chapters live at
+// /chapter/{slug}-{n}.
+async function tocWuxiaClick(startUrl) {
+  const u = new URL(startUrl);
+  const slug = u.pathname.split('/').filter(Boolean).pop();
+  if (!slug) return [];
+  const base = `${u.origin}/novel/${slug}`;
+  const byNum = new Map();
+  const collect = (html) => {
+    for (const item of regexLinks(html, u.origin, /\/chapter\//)) {
+      const n = parseInt(item.url.match(/-(\d+)\/?$/)?.[1] || '0', 10);
+      if (n && item.url.includes(`/chapter/${slug}-`)) byNum.set(n, item);
+    }
+  };
+  const first = await smartGetText(base);
+  collect(first);
+  let maxPage = 1;
+  for (const m of first.matchAll(/[?&]page=(\d+)/g)) maxPage = Math.max(maxPage, parseInt(m[1], 10));
+  for (let p = 2; p <= Math.min(maxPage, 80); p++) {
+    let html;
+    try { html = await smartGetText(`${base}?page=${p}`); } catch { break; }
+    collect(html);
+  }
+  return [...byNum.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
+}
+
+
+// --- Piaotia (piaotia.com / ptwxz.com): chapter prose has no container at
+// all — paragraphs are direct <body> children between div.toplink and
+// div.bottomlink. Slice that region and strip the remaining furniture.
+async function bodyPiaotia(url) {
+  try {
+    const html = await smartGetText(url);
+    const startM = html.match(/<div class="toplink">/.source ? /<div class="toplink">[\s\S]*?<\/div>/ : null);
+    const start = startM ? startM.index + startM[0].length : 0;
+    let end = html.indexOf('<div class="bottomlink"', start);
+    if (end < 0) end = html.indexOf('<!--', start);
+    if (end > start) {
+      const slice = html.slice(start, end)
+        .replace(/<table[\s\S]*?<\/table>/gi, '')
+        .replace(/<center>[\s\S]*?<\/center>/gi, '');
+      const text = slice.replace(/<[^>]+>/g, '').trim();
+      if (text.length > 300) return `<div>${slice}</div>`;
+    }
+  } catch { /* fall through */ }
+  return bodyGeneric(url, 'body');
+}
+
+// --- Quanben (quanben.io): the app's proxy routes barely answer this host
+// (direct fetches work instantly). Book pages are shells; the list page
+// shows head+tail chapter blocks and the URLs are purely sequential
+// /n/{slug}/{n}.html, so synthesize the middle from the tail's max.
+async function tocQuanben(startUrl) {
+  const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+  const u = new URL(startUrl);
+  const slug = u.pathname.match(/\/n\/([a-z0-9-]+)/i)?.[1];
+  if (!slug) return [];
+  const r = await fetch(`${u.origin}/n/${slug}/list.html`, { headers: { 'User-Agent': UA } });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const html = await r.text();
+  const titled = new Map();
+  let max = 0;
+  for (const item of regexLinks(html, u.origin, /\.html$/)) {
+    const n = parseInt(item.url.match(new RegExp(`/n/${slug}/(\\d+)\\.html$`))?.[1] || '0', 10);
+    if (n) { titled.set(n, item); if (n > max) max = n; }
+  }
+  if (!max) return [...titled.values()];
+  const out = [];
+  for (let n = 1; n <= max; n++) out.push(titled.get(n) || { url: `${u.origin}/n/${slug}/${n}.html`, title: `Chapter ${n}` });
+  return out;
+}
+async function bodyQuanben(url) {
+  const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+  try {
+    const r = await fetch(url, { headers: { 'User-Agent': UA } });
+    if (r.ok) {
+      const html = await r.text();
+      const out = extractWithSelector(parseHtml(html), 'div#content, div.articlebody');
+      if (out && out.replace(/<[^>]+>/g, '').trim().length > 200) return out;
+    }
+  } catch { /* fall through */ }
+  return bodyGeneric(url, 'div#content');
+}
+
+
+// --- WoopRead (woopread.com): a Next.js app (not Madara, despite the old
+// routing). The series page's RSC flight payload embeds the complete
+// chapter array as escaped JSON: {"number":N,"slug":"chapter-…",…}.
+async function tocWoopRead(startUrl) {
+  const raw = await smartGetText(startUrl);
+  const html = raw.replaceAll('\\"', '"');
+  const u = new URL(startUrl);
+  const bookPath = u.pathname.replace(/\/$/, '');
+  const byNum = new Map();
+  for (const m of html.matchAll(/"number":\s*(\d+)\s*,\s*"slug":\s*"(chapter-[^"]+)"/g)) {
+    const n = parseInt(m[1], 10);
+    if (!byNum.has(n)) byNum.set(n, { url: `${u.origin}${bookPath}/${m[2]}`, title: `Chapter ${n}` });
+  }
+  // Titles ride along in the same objects when present.
+  for (const m of html.matchAll(/"title":\s*"([^"]{1,120})"\s*,\s*"number":\s*(\d+)/g)) {
+    const it = byNum.get(parseInt(m[2], 10));
+    if (it) it.title = m[1];
+  }
+  return [...byNum.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
+}
+
+
+// --- TomoTranslations (tomotranslations.com): the series page links ALL
+// chapters, but the early ones live on the old tomotranslations.wordpress.com
+// host — the generic sweep's same-host scoping drops them.
+async function tocTomoTranslations(startUrl) {
+  const html = await smartGetText(startUrl);
+  const items = regexLinks(html, startUrl, /\/(19|20)\d{2}\//)
+    .filter((i) => /tomotranslations\.(wordpress\.)?com/.test(i.url) && /chapter/i.test(i.url));
+  return dedupeByUrl(items);
+}
+
+// --- SHMTranslations (shmtranslations.com): the (large) series page links
+// every chapter post; harvest the dated /chapter-{N}-… links, deduped by
+// path (hrefs mix www and bare hosts).
+async function tocShmTranslations(startUrl) {
+  const html = await smartGetText(startUrl);
+  const byPath = new Map();
+  for (const item of regexLinks(html, startUrl, /\/chapter-/)) {
+    const p = new URL(item.url).pathname;
+    if (/\/chapter-\d+/.test(p) && !byPath.has(p)) byPath.set(p, item);
+  }
+  const num = (x) => parseInt(new URL(x.url).pathname.match(/chapter-(\d+)/)?.[1] || '0', 10);
+  return [...byPath.values()].sort((a, b) => num(a) - num(b));
+}
+
+// --- NovelVerseTranslations (novelversetranslations.com): the series page
+// paginates its own list at 20/page via ?lcp_page0={N} (List Category Posts).
+async function tocNovelVerseTranslations(startUrl) {
+  const u = new URL(startUrl);
+  const base = `${u.origin}${u.pathname}`;
+  const byUrl = new Map();
+  const merge = (html) => {
+    let added = 0;
+    for (const item of regexLinks(html, u.origin, /-chapter-\d+\/?$/)) {
+      if (!byUrl.has(item.url)) { byUrl.set(item.url, item); added++; }
+    }
+    return added;
+  };
+  const first = await smartGetText(base);
+  merge(first);
+  let pages = 1;
+  for (const m of first.matchAll(/lcp_page0=(\d+)/g)) pages = Math.max(pages, parseInt(m[1], 10));
+  for (let p = 2; p <= Math.min(pages, 60); p++) {
+    let html;
+    try { html = await smartGetText(`${base}?lcp_page0=${p}`); } catch { break; }
+    if (!merge(html)) break;
+  }
+  const num = (x) => parseInt(x.url.match(/-chapter-(\d+)\/?$/)?.[1] || '0', 10);
+  return [...byUrl.values()].sort((a, b) => num(a) - num(b));
+}
+
+// --- ZirusMusings (zirusmusings.net): only Vol 0 renders as anchors; the
+// full list is an embedded JSON blob (volumes[].chapters[] with string ids
+// like "119" for main chapters and "0-01" for omake).
+async function tocZirusMusings(startUrl) {
+  const html = await smartGetText(startUrl);
+  const u = new URL(startUrl);
+  const series = u.pathname.split('/').filter(Boolean).pop();
+  const out = [];
+  const seen = new Set();
+  // The page embeds every series on the site — scope to this series' slug.
+  const scoped = new RegExp(`"series":\\s*"${series}","volume":\\s*\\d+,\\s*"chapter":\\s*"([0-9]+(?:-[0-9]+)?)"`, 'g');
+  for (const m of html.matchAll(scoped)) {
+    const id = m[1];
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push({ url: `${u.origin}/series/${series}/${id}`, title: id.startsWith('0-') ? `Omake ${id}` : `Chapter ${id}` });
+  }
+  const key = (x) => {
+    const id = x.url.split('/').pop();
+    return id.includes('-') ? parseFloat('0.' + id.split('-')[1]) : parseInt(id, 10);
+  };
+  return out.sort((a, b) => key(a) - key(b));
+}
+
+
+// --- PawRead (pawread.com): the full chapter list IS in the book page, but
+// as onclick divs (goC('id')), not anchors — only "Latest Release" is a link.
+// Extract the ids + titles from #chapter-list-1 and synthesize reader URLs.
+async function tocPawRead(startUrl) {
+  const html = await smartGetText(startUrl);
+  const u = new URL(startUrl);
+  const slug = u.pathname.split('/').filter(Boolean).pop();
+  const out = [];
+  const region = html.slice(html.indexOf('chapter-list-1'));
+  for (const m of region.matchAll(/onclick="goC\('(\d+)'\);?"[\s\S]{0,400}?<span class="c_title">([^<]+)<\/span>/g)) {
+    out.push({ url: `${u.origin}/novel/${slug}/${m[1]}.html`, title: m[2].trim() });
+  }
+  return out;
+}
+
+// --- Teanovel (teanovel.com): book pages embed only the latest chapter;
+// the full list is a first-party JSON endpoint keyed by the book slug.
+async function tocTeanovel(startUrl) {
+  const u = new URL(startUrl);
+  const slug = u.pathname.split('/').filter(Boolean).pop();
+  const r = await fetch(`${u.origin}/api/novel/chapter-list?slug=${encodeURIComponent(slug)}`, { headers: { ...DEFAULT_HEADERS, Accept: 'application/json' } });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const j = await r.json();
+  const rows = Array.isArray(j?.data) ? j.data : [];
+  return rows
+    .slice()
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .map((c) => ({ url: `${u.origin}/novel/${slug}/${c.order}`, title: c.title || `Chapter ${c.order}` }));
+}
+
+// --- WeTriedTLS (wetriedtls.com): a Next.js front over an external API at
+// api.wetriedtls.com. The series page's payload carries series_id; chapters
+// come from /chapters/{id} (free) plus /chapters/{id}/paid.
+async function tocWeTriedTls(startUrl) {
+  const u = new URL(startUrl);
+  let html = await smartGetText(startUrl);
+  let seriesId = html.match(/series_id[^0-9]{0,8}(\d+)/)?.[1];
+  if (!seriesId) {
+    try {
+      const r = await fetch(startUrl, { headers: DEFAULT_HEADERS });
+      if (r.ok) { html = await r.text(); seriesId = html.match(/series_id[^0-9]{0,8}(\d+)/)?.[1]; }
+    } catch { /* fall through */ }
+  }
+  if (!seriesId) return [];
+  const api = 'https://api.wetriedtls.com';
+  const get = async (path) => {
+    const r = await fetch(`${api}${path}`, { headers: { ...DEFAULT_HEADERS, Accept: 'application/json' } });
+    if (!r.ok) return null;
+    return r.json();
+  };
+  const byIndex = new Map();
+  const addRows = (rows) => {
+    for (const c of rows || []) {
+      const idx = c.index != null ? parseFloat(c.index) : parseInt(String(c.chapter_name).replace(/\D+/g, ''), 10);
+      if (c.chapter_slug && !byIndex.has(idx)) byIndex.set(idx, { url: `${u.origin}${u.pathname.replace(/\/$/, '')}/${c.chapter_slug}`, title: c.chapter_title || c.chapter_name || 'Chapter' });
+    }
+  };
+  const first = await get(`/chapters/${seriesId}?page=1&perPage=100&query=&order=asc`);
+  addRows(first?.data);
+  const lastPage = first?.meta?.last_page || 1;
+  for (let p = 2; p <= lastPage; p++) addRows((await get(`/chapters/${seriesId}?page=${p}&perPage=100&query=&order=asc`))?.data);
+  addRows((await get(`/chapters/${seriesId}/paid?query=&order=asc`))?.data);
+  return [...byIndex.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
+}
+
+
+// --- CkandaWrites (ckandawrites.online): WP series pages server-render the
+// complete episode list inside .eplister (newest-first). Scope collection
+// to that block (the generic sweep also catches ~0.5% foreign furniture
+// links) and reverse into reading order.
+async function tocCkandaWrites(startUrl) {
+  const html = await smartGetText(startUrl);
+  const start = html.indexOf('eplister');
+  if (start < 0) return [];
+  const end = html.indexOf('</ul>', start);
+  const region = html.slice(start, end > start ? end : start + 400000);
+  const items = regexLinks(region, startUrl, /chapter|\-\d+\-\d+\/?$/);
+  return dedupeByUrl(items).reverse();
+}
+
+// --- SnoutAndCo (snoutandco.ca): the JS directory is backed by a static
+// JSON index per book: /{folder}/chapters.json; chapter prose lives in
+// plain-text files at /{folder}/chapters/{filename}.
+async function tocSnoutAndCo(startUrl) {
+  const u = new URL(startUrl);
+  const folder = u.searchParams.get('folder');
+  if (!folder) return [];
+  const r = await fetch(`${u.origin}/${folder}/chapters.json`, { headers: DEFAULT_HEADERS });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const j = await r.json();
+  return (j.chapters || []).map((c) => ({ url: `${u.origin}/${folder}/chapters/${c.filename}`, title: c.title || c.filename }));
+}
+async function bodySnoutAndCo(url) {
+  const r = await fetch(url, { headers: DEFAULT_HEADERS });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const text = await r.text();
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const paras = text.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+  return `<div>${paras.map((p) => `<p>${esc(p)}</p>`).join('')}</div>`;
+}
+
+
+// --- Metanovel (m.metanovel.org): the book page embeds only a latest-10
+// block plus the head of the list; the complete ascending list paginates
+// at /book/{id}/chapters/{n} (200 per page, page count linked on page 1).
+// The site also prepends a sequential "\u7b2c{seq}\u7ae0 " to each original
+// chapter title (which usually carries its own Chinese-numeral heading),
+// producing doubled headings — strip the prepended prefix.
+async function tocMetanovel(startUrl) {
+  const u = new URL(startUrl);
+  const id = u.pathname.match(/\/book\/(\d+)/)?.[1];
+  if (!id) return [];
+  const pageItems = (html) => regexLinks(html, u.origin, /\/chapter\/\d+\/?$/)
+    .filter((i) => i.url.includes(`/book/${id}/chapter/`))
+    .map((i) => ({ ...i, title: (i.title || '').replace(/^\u7b2c\s*\d+\s*\u7ae0\s*/, '') || i.title }));
+  const first = await smartGetText(`${u.origin}/book/${id}/chapters/1`);
+  let maxPage = 1;
+  for (const mm of first.matchAll(/\/chapters\/(\d+)/g)) maxPage = Math.max(maxPage, parseInt(mm[1], 10));
+  const pages = new Map([[1, pageItems(first)]]);
+  const queue = [];
+  for (let n = 2; n <= Math.min(maxPage, 100); n++) queue.push(n);
+  let qi = 0;
+  const worker = async () => {
+    while (qi < queue.length) {
+      const n = queue[qi++];
+      try { pages.set(n, pageItems(await smartGetText(`${u.origin}/book/${id}/chapters/${n}`))); } catch { /* skip page */ }
+    }
+  };
+  await Promise.all(Array.from({ length: 6 }, worker));
+  const byUrl = new Map();
+  for (let n = 1; n <= Math.min(maxPage, 100); n++) for (const it of pages.get(n) || []) if (!byUrl.has(it.url)) byUrl.set(it.url, it);
+  return [...byUrl.values()];
+}
+
+
+// --- Konkon (konkon.ink, the new home of Zetro Translations): a Nuxt front
+// over a public API at api-k.konkon.ink. The SSR series page exposes only a
+// slice of the chapters and the chapter page renders "not found" while
+// loading via the API, so both TOC and content come from the API.
+const KONKON_API = 'https://api-k.konkon.ink/api/public';
+async function konkonGet(path) {
+  const r = await fetch(`${KONKON_API}${path}`, { headers: { ...DEFAULT_HEADERS, Accept: 'application/json' } });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+async function tocKonkon(startUrl) {
+  const u = new URL(startUrl);
+  const slug = u.pathname.match(/^\/read\/([a-z0-9-]+)\/?$/i)?.[1];
+  if (!slug) return [];
+  const byId = new Map();
+  const collect = (j) => {
+    for (const vol of j?.data?.volumes || []) {
+      const chs = [...(vol.chapters || [])].sort((a, b) => (a.sort_order ?? a.order ?? 0) - (b.sort_order ?? b.order ?? 0));
+      for (const c of chs) {
+        if (!byId.has(c.id)) byId.set(c.id, { url: `https://konkon.ink/read/chapter/${c.id}/${c.slug}`, title: c.title || `Chapter ${c.order ?? ''}`.trim() });
+      }
+    }
+  };
+  const first = await konkonGet(`/novels/${encodeURIComponent(slug)}`);
+  collect(first);
+  const lastPage = first?.data?.chapters_pagination?.last_page || 1;
+  for (let p = 2; p <= Math.min(lastPage, 50); p++) {
+    collect(await konkonGet(`/novels/${encodeURIComponent(slug)}?page=${p}`));
+  }
+  return [...byId.values()];
+}
+async function bodyKonkon(chapterUrl) {
+  const id = new URL(chapterUrl).pathname.match(/\/read\/chapter\/(\d+)/)?.[1];
+  if (!id) return bodyGeneric(chapterUrl, 'article');
+  const j = await konkonGet(`/chapters/${id}`);
+  const content = j?.data?.content;
+  if (typeof content === 'string' && content.trim()) return content;
+  // Coin-locked chapters return no content field at all (paywall by design).
+  throw new Error('Chapter is locked on konkon.ink (no public content)');
+}
+
+
+// --- JonaxxStories (jonaxxstories.com): a book's landing page carries no
+// full chapter list; the chapters are dated WP posts filed under
+// /category/{book-slug}/ (10 per archive page, newest-first).
+async function tocJonaxxStories(startUrl) {
+  const u = new URL(startUrl);
+  const bookSlug = u.pathname.split('/').filter(Boolean).pop();
+  if (!bookSlug) return [];
+  const postRe = new RegExp(`/\\d{4}/\\d{2}/\\d{2}/${bookSlug}-`);
+  const byUrl = new Map();
+  const merge = (html) => {
+    let added = 0;
+    for (const item of regexLinks(html, u.origin, postRe)) {
+      const clean = item.url.split('#')[0];
+      if (!byUrl.has(clean)) { byUrl.set(clean, { ...item, url: clean }); added++; }
+    }
+    return added;
+  };
+  const first = await smartGetText(`${u.origin}/category/${bookSlug}/`);
+  merge(first);
+  let pages = 1;
+  for (const m of first.matchAll(new RegExp(`/category/${bookSlug}/page/(\\d+)`, 'g'))) pages = Math.max(pages, parseInt(m[1], 10));
+  for (let p = 2; p <= Math.min(pages, 60); p++) {
+    let html;
+    try { html = await smartGetText(`${u.origin}/category/${bookSlug}/page/${p}/`); } catch { break; }
+    if (!merge(html)) break;
+  }
+  const num = (x) => {
+    const k = x.url.match(/-kabanata-(\d+)/);
+    if (k) return parseInt(k[1], 10);
+    if (/wakas|epilog/i.test(x.url)) return Number.MAX_SAFE_INTEGER; // "Wakas" = finale
+    return 0; // prologue/special posts sort first, in path order among themselves
+  };
+  return [...byUrl.values()].sort((a, b) => num(a) - num(b) || a.url.localeCompare(b.url));
+}
+
+
+// --- TigerTranslations (tigertranslations.org): the config's div.the-content
+// selector is dead (the theme changed); the series page's div.entry-content
+// holds plain runs of chapter anchors. Slice that region and keep the
+// series' own dated/short chapter posts, sorted by chapter number.
+async function tocTigerTranslations(startUrl) {
+  const html = await smartGetText(startUrl);
+  const start = html.indexOf('entry-content');
+  const region = start >= 0 ? html.slice(start, start + 600000) : html;
+  const items = regexLinks(region, startUrl, /\/(\d{4}\/\d{2}\/\d{2}\/)?[a-z0-9-]+-?\d+\/?$/)
+    .filter((i) => /chapter\s*\d/i.test(i.title) || /-\d+\/?$/.test(new URL(i.url).pathname));
+  const num = (x) => parseInt((x.title.match(/chapter\s*(\d+)/i) || x.url.match(/-(\d+)\/?$/))?.[1] || '0', 10);
+  return dedupeByUrl(items).sort((a, b) => num(a) - num(b));
+}
+
+// --- UniversalNovel (universalnovel.com): /series/{slug}/ pages work via
+// the eplister config, but a pasted CHAPTER URL has no eplister and the
+// sweep harvests the comments widget. Normalize any input to the series
+// page and read its eplister.
+async function tocUniversalNovel(startUrl) {
+  const u = new URL(startUrl);
+  let slug = u.pathname.match(/^\/series\/([a-z0-9-]+)\/?$/i)?.[1];
+  if (!slug) slug = u.pathname.match(/^\/([a-z0-9-]+?)-chapter-\d+(?:-\d+)?\/?$/i)?.[1];
+  if (!slug) return [];
+  const html = await smartGetText(`${u.origin}/series/${slug}/`);
+  const start = html.indexOf('eplister');
+  if (start < 0) return [];
+  const end = html.indexOf('</ul>', start);
+  const region = html.slice(start, end > start ? end : start + 400000);
+  return dedupeByUrl(regexLinks(region, u.origin, /-chapter-/));
+}
+
+// --- WtNovels (wtnovels.com): book pages embed only first+latest links;
+// the complete list is server-rendered at /novels/{slug}/chapters/.
+async function tocWtNovels(startUrl) {
+  const u = new URL(startUrl);
+  const slug = u.pathname.match(/\/novels\/([a-z0-9-]+)/i)?.[1];
+  if (!slug) return [];
+  const html = await smartGetText(`${u.origin}/novels/${slug}/chapters/`);
+  const items = regexLinks(html, u.origin, new RegExp(`/novels/${slug}/[^/]+-chapter-\\d+-`));
+  const num = (x) => parseInt(x.url.match(/-chapter-(\d+)-/)?.[1] || '0', 10);
+  return dedupeByUrl(items).sort((a, b) => num(a) - num(b));
+}
+
+// --- Twkan (twkan.com): /book/{id}/index.html renders only a preview
+// (first 15 + latest ~21); the page's LoadMore() pulls the complete list
+// from /ajax_novels/chapterlist/{id}.html as an HTML fragment.
+async function tocTwkan(startUrl) {
+  const u = new URL(startUrl);
+  const id = u.pathname.match(/\/book\/(\d+)/i)?.[1];
+  if (!id) return [];
+  const html = await smartGetText(`${u.origin}/ajax_novels/chapterlist/${id}.html`);
+  return regexLinks(html, u.origin, new RegExp(`/txt/${id}/`));
+}
+
+
+// --- Novel543 (novel543.com): book pages show Ch 1 + latest 12; the full
+// list is the book's /{id}/dir page (single fetch, any length). Chapters
+// are /{bookId}/8096_{n}.html; chapter TEXT is split across continuation
+// pages 8096_{n}_2.html, _3… which the body parser stitches back together.
+async function tocNovel543(startUrl) {
+  const u = new URL(startUrl);
+  const id = u.pathname.split('/').filter(Boolean)[0];
+  if (!/^\d+$/.test(id || '')) return [];
+  const html = await smartGetText(`${u.origin}/${id}/dir`);
+  const items = dedupeByUrl(regexLinks(html, u.origin, /\/\d+_\d+\.html$/));
+  const num = (x) => parseInt(x.url.match(/_(\d+)\.html$/)?.[1] || '0', 10);
+  return items.sort((a, b) => num(a) - num(b));
+}
+async function bodyNovel543(url) {
+  const parts = [];
+  const first = await bodyGeneric(url, 'div.chapter-content');
+  if (first) parts.push(first);
+  for (let n = 2; n <= 6; n++) {
+    const cont = url.replace(/\.html$/, `_${n}.html`);
+    try {
+      const html = await bodyGeneric(cont, 'div.chapter-content');
+      if (html && html.replace(/<[^>]+>/g, '').trim().length > 100) { parts.push(html); continue; }
+    } catch { /* no more parts */ }
+    break;
+  }
+  return parts.join('\n');
+}
+
+// --- Novelingua (novelingua.com): hand-maintained SitePad series pages.
+// Most series are complete on one page (what exists is all the site hosts);
+// the newest tail of long series lives on a sibling /{series}-front/ page
+// linked as "Next Chapters". Merge both, sorted numerically.
+async function tocNovelingua(startUrl) {
+  const u = new URL(startUrl);
+  const byUrl = new Map();
+  const merge = (html) => {
+    for (const item of regexLinks(html, u.origin, /-chapter-/)) if (!byUrl.has(item.url)) byUrl.set(item.url, item);
+  };
+  const first = await smartGetText(startUrl);
+  merge(first);
+  const front = first.match(/href="(?:https?:\/\/[^"/]+)?(\/[a-z0-9-]+-front\/?)"/i)?.[1];
+  if (front) {
+    try { merge(await smartGetText(u.origin + front)); } catch { /* tail stays partial */ }
+  }
+  const num = (x) => {
+    const m = x.url.match(/-chapter-(\d+)/);
+    return m ? parseInt(m[1], 10) : -1; // extras (side stories, α) first
+  };
+  return [...byUrl.values()].sort((a, b) => num(a) - num(b));
+}
+
+// --- SciFiStories (scifistories.com): storyInfo.php?id=N is metadata only
+// (no chapter links at all). It links a reader index at /s/{id}/{slug} (or
+// /n/… for novels) listing every chapter at /s|n/{id}/{slug}/{n}.
+// NOTE: anonymous chapter text is truncated mid-chapter by the site
+// ("To read the complete story you need to be logged in") — preview-only
+// by design; the TOC is the fixable part.
+async function tocScifiStories(startUrl) {
+  const html = await smartGetText(startUrl);
+  const u = new URL(startUrl);
+  const idx = html.match(new RegExp(`href="(/(?:s|n)/\\d+/[^"]+)"`))?.[1];
+  if (!idx) return [];
+  const indexHtml = await smartGetText(u.origin + idx);
+  const items = regexLinks(indexHtml, u.origin, new RegExp(`${idx.replace(/[.*+?^${'{}'}()|[\]\\]/g, '\\$&')}/\\d+$`));
+  return items.sort((a, b) => parseInt(a.url.split('/').pop(), 10) - parseInt(b.url.split('/').pop(), 10));
+}
+
+// --- OnTimeStory (ontimestory.eu): the series page holds the complete
+// list in ONE fetch; the app's generic pagination then invents hundreds of
+// templated page URLs from furniture numbers and hangs. Collect the dated
+// chapter posts directly, sorted by their slug numbers.
+async function tocOntimestory(startUrl) {
+  const html = await smartGetText(startUrl);
+  const series = new URL(startUrl).pathname.split('/').filter(Boolean).pop();
+  const items = regexLinks(html, startUrl, new RegExp(`${series}-chapter-[\\d]`))
+    .map((i) => ({ ...i, url: i.url.split('#')[0] })); // drop #comment- furniture variants
+  const key = (x) => (x.url.match(/-chapter-([\d-]+)\/?$/)?.[1] || '0').split('-').map((n) => parseInt(n, 10));
+  return dedupeByUrl(items).sort((a, b) => {
+    const ka = key(a);
+    const kb = key(b);
+    for (let i = 0; i < Math.max(ka.length, kb.length); i++) {
+      const d = (ka[i] || 0) - (kb[i] || 0);
+      if (d) return d;
+    }
+    return 0;
+  });
+}
+
+// --- Asianovel (asianovel.net): story pages server-render the complete
+// list and www works end-to-end; the bare-domain form returns TOC 0
+// because every chapter href is an absolute www URL and the sweep drops
+// cross-origin links. Normalize the input to www and collect here.
+async function tocAsianovel(startUrl) {
+  const u = new URL(startUrl.replace('://asianovel.net', '://www.asianovel.net'));
+  const html = await smartGetText(u.toString());
+  const start = html.indexOf('chapter-group__list');
+  if (start < 0) return [];
+  const region = html.slice(start, start + 500000);
+  return dedupeByUrl(regexLinks(region, u.origin, /\/chapter\//));
+}
+
+
+// --- Sonako wiki (sonako.fandom.com / sonako.wikia.com): series pages are
+// MediaWiki project pages; the sweep harvests wiki furniture. The series
+// page's WIKITEXT (via the MW API) is the authoritative ordered chapter
+// listing — filter it to the series' own prose pages, drop illustration
+// pages, bare volume compilations and redlinks, order by volume.
+async function tocSonako(startUrl) {
+  const u = new URL(startUrl);
+  const origin = 'https://sonako.fandom.com';
+  const series = decodeURIComponent(u.pathname.split('/wiki/')[1] || '').replace(/_/g, ' ').trim();
+  if (!series) return [];
+  const api = async (params) => {
+    const r = await fetch(`${origin}/api.php?${params}`, { headers: { ...DEFAULT_HEADERS, Accept: 'application/json' } });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  };
+  const j = await api(`action=parse&page=${encodeURIComponent(series)}&prop=wikitext&format=json`);
+  const wikitext = j?.parse?.wikitext?.['*'] || '';
+  const seen = new Set();
+  const entries = [];
+  for (const m of wikitext.matchAll(/\[\[([^\]|#]+)(?:\|[^\]]*)?\]\]/g)) {
+    const title = m[1].replace(/_/g, ' ').trim();
+    if (!title || seen.has(title)) continue;
+    if (/^(category|file|image|mediawiki|template|help|special|sonako|user|talk)/i.test(title)) continue;
+    const low = title.toLowerCase();
+    const sLow = series.toLowerCase();
+    if (!(low === sLow || low.startsWith(sLow + ':') || low.startsWith(sLow + ' '))) continue;
+    if (low === sLow) continue;
+    if (/minh h[ọo]a/i.test(title)) continue; // illustration pages
+    if (new RegExp(`^${series.replace(/[.*+?^${'{}'}()|[\]\\]/g, '\\$&')} (tập|vol\\.?|volume) \\d+(\\.\\d+)?$`, 'i').test(title)) continue; // bare volume compilations
+    seen.add(title);
+    entries.push(title);
+  }
+  // Existence filter — drop redlinks in batches of 40.
+  const existing = new Set();
+  for (let i = 0; i < entries.length; i += 40) {
+    const batch = entries.slice(i, i + 40);
+    const q = await api(`action=query&titles=${batch.map(encodeURIComponent).join('%7C')}&format=json`);
+    const pages = q?.query?.pages || {};
+    const normalized = new Map((q?.query?.normalized || []).map((n) => [n.from, n.to]));
+    const validTitles = new Set(Object.values(pages).filter((pg) => !('missing' in pg)).map((pg) => pg.title));
+    for (const t of batch) {
+      const norm = normalized.get(t) || t;
+      if (validTitles.has(norm) || validTitles.has(t)) existing.add(t);
+    }
+  }
+  const kept = entries.filter((t) => existing.has(t));
+  const volOf = (t) => {
+    const m = t.match(/(?:tập|vol\.?|volume)\s*(\d+(?:\.\d+)?)/i);
+    return m ? parseFloat(m[1]) : Number.MAX_SAFE_INTEGER;
+  };
+  return kept
+    .map((t, i) => ({ t, i }))
+    .sort((a, b) => (volOf(a.t) - volOf(b.t)) || (a.i - b.i))
+    .map(({ t }) => ({ url: `${origin}/vi/wiki/${encodeURIComponent(t.replace(/ /g, '_')).replace(/%3A/gi, ':')}`, title: t }));
+}
+
+
+// --- Readingpia (readingpia.me): prose is server-rendered but interleaved
+// with decoy blocks carrying inline display:none styles and garbage text.
+// Strip every display:none element inside the chapter container, then
+// extract as usual.
+async function bodyReadingpia(url) {
+  const html = await smartGetText(url);
+  const doc = parseHtml(html);
+  doc.querySelectorAll('[style*="display:none"], [style*="display: none"]').forEach((el) => el.remove());
+  const out = extractWithSelector(doc, 'div#chapter-body, div.chapter-body, main, article');
+  if (out && out.replace(/<[^>]+>/g, '').trim().length > 200) return out;
+  return bodyGeneric(url, 'div#chapter-body, div.chapter-body, main, article');
+}
+
+// --- Neobook (neobook.org): book and reader pages embed a full state
+// object (`var data = {...}`) — the chapters array lists every chapter,
+// and the reader page's copy has the requested chapter's complete HTML in
+// its entry (loaded:"1"). Parse the embedded JSON; there is no API.
+function neobookData(html) {
+  const start = html.indexOf('var data = ');
+  if (start < 0) return null;
+  const open = html.indexOf('{', start);
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  for (let i = open; i < html.length; i++) {
+    const ch = html[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+    } else if (ch === '"') inStr = true;
+    else if (ch === '{') depth++;
+    else if (ch === '}') { depth--; if (!depth) {
+      try { return JSON.parse(html.slice(open, i + 1)); } catch { return null; }
+    } }
+  }
+  return null;
+}
+async function tocNeobook(startUrl) {
+  const u = new URL(startUrl);
+  const book = u.pathname.match(/\/book\/([^/]+)/)?.[1] || u.searchParams.get('book');
+  if (!book) return [];
+  const data = neobookData(await smartGetText(startUrl));
+  const chapters = data?.chapters || [];
+  return chapters
+    .slice()
+    .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0))
+    .map((c) => ({ url: `${u.origin}/reader/?book=${book}&chapter=${c.token}`, title: c.title || `Chapter ${c.sort}` }));
+}
+async function bodyNeobook(url) {
+  const u = new URL(url);
+  const token = u.searchParams.get('chapter');
+  const data = neobookData(await smartGetText(url));
+  const entry = (data?.chapters || []).find((c) => c.token === token && String(c.loaded) === '1' && (c.data?.html || c.html));
+  if (entry) return entry.data?.html || entry.html;
+  return bodyGeneric(url, 'div.book-text, article');
+}
+
+// --- TruyenNhabo (truyennhabo.com): a Blogger blog; each series is a
+// label. Derive the series label from a chapter post (reader nav carries
+// data-label), then enumerate the label feed (newest-first JSON), keeping
+// the "Chapter NN" posts in numeric order.
+async function tocTruyenNhabo(startUrl) {
+  const u = new URL(startUrl);
+  let label = u.pathname.match(/\/search\/label\/([^/]+)/)?.[1] ? decodeURIComponent(u.pathname.match(/\/search\/label\/([^/]+)/)[1]) : null;
+  if (!label) {
+    const html = await smartGetText(startUrl);
+    label = html.match(/data-label=['"]([^'"]+)['"]/)?.[1]
+      || html.match(/<title>([^<]+?)\s*-\s*Chapter/i)?.[1]?.trim()
+      || null;
+  }
+  if (!label) return [];
+  const out = [];
+  for (let startIndex = 1; startIndex <= 2000; startIndex += 500) {
+    const r = await fetch(`https://www.truyennhabo.com/feeds/posts/default/-/${encodeURIComponent(label)}?alt=json&max-results=500&start-index=${startIndex}`, { headers: { ...DEFAULT_HEADERS, Accept: 'application/json' } });
+    if (!r.ok) break;
+    const j = await r.json();
+    const entries = j?.feed?.entry || [];
+    if (!entries.length) break;
+    for (const e of entries) {
+      const title = e.title?.$t || '';
+      const href = (e.link || []).find((l) => l.rel === 'alternate')?.href;
+      const num = title.match(/chapter\s*(\d+)/i)?.[1];
+      if (href && num) out.push({ url: href, title, n: parseInt(num, 10) });
+    }
+    if (entries.length < 500) break;
+  }
+  return out.sort((a, b) => a.n - b.n).map(({ url, title }) => ({ url, title }));
+}
+
+// --- ixdzs8.com: chapter pages sit behind a JS browser-verification stub
+// ("let token = ...; location = ?challenge=<token>") that also sets session
+// cookies. Replay the redirect manually in one session to get the real page.
+async function bodyIxdzs8(url) {
+  const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+  try {
+    const r1 = await fetch(url, { headers: { 'User-Agent': UA }, redirect: 'follow' });
+    let html = await r1.text();
+    const token = html.match(/let token\s*=\s*"([^"]+)"/)?.[1];
+    if (token && html.length < 3000) {
+      const cookies = (r1.headers.getSetCookie?.() || []).map((c) => c.split(';')[0]).join('; ');
+      const sep = url.includes('?') ? '&' : '?';
+      const r2 = await fetch(`${url}${sep}challenge=${encodeURIComponent(token)}`, {
+        headers: { 'User-Agent': UA, ...(cookies ? { Cookie: cookies } : {}) },
+        redirect: 'follow',
+      });
+      const h2 = await r2.text();
+      if (h2.length > html.length) html = h2;
+    }
+    if (html.length >= 3000) return extractWithSelector(parseHtml(html), 'article.page-content > section, section');
+  } catch { /* fall through */ }
+  return bodyGeneric(url, 'section');
 }
 
 async function body69shuba(url) {
@@ -3612,11 +4888,48 @@ const MAJOR_BODY_SELECTORS = {
   kakuyomu: ".widget-episodeBody, .js-episode-body, article.widget-episodeBody",
   wuxiaworld_co: ".chapter-content, #chapter-content, .text-chapter",
   wuxiaworld_eu: "#chapter-content, .reader-text",
+  alphapolis: "div#novelBody",
+  libread: "div#article, div.txt",
+  naver: "div.viewer_container",
+  novelceo: "#chr-content, #chapter-content, div.chapter-content, .chapter-c",
+  nineheavens: "article.chapter__article",
+  lnmtl: "div.chapter-body",
+  novelbinmirror: "#chr-content, #chapter-content, div.chapter-content, .chapter-c, #chapterContent",
+  ttshu8: "div.content",
+  wuxiaclick: "#chapterText",
+  xpaoshuba: "div#content, div.content",
+  tigertl: "div.entry-content",
+  universalnovel: ".entry-content",
+  wtnovels: "div.entry-content, div.post-content",
+  twkan: "#txtcontent0",
+  novel543: "div.chapter-content",
+  novelingua: ".entry-content, article",
+  scifistories: "article",
+  ontimestory: "div.post-content, div.entry-content",
+  asianovel: "#chapter-content",
+  sonako: "div.mw-content-ltr",
+  readingpia: "div#chapter-body, div.chapter-body",
+  neobook: "div.book-text, article",
+  skydemon: "#chapter-content",
+  truyennhabo: "article.blog, article",
+  ilwxsm: "div.content",
+  piaotia: "body",
+  quanben: "div#content",
+  woopread: "div[id^='chapter']",
+  tomotranslations: "section.entry, .entry-content",
+  shmtranslations: "article .entry-content, .entry-content",
+  novelversetl: "article .entry-content, .entry-content",
+  zirusmusings: "article, .chapter-content, main",
+  metanovel: "#content",
+  pawread: "#chapter_item",
+  teanovel: "div.prose",
+  wetriedtls: "div.entry-content, #chaptercontent, article, main",
   bakatsuki: ".mw-parser-output",
   xenforo: "article.message-body .bbWrapper, .message-body .bbWrapper, .message-userContent",
   creativenovels: ".entry-content, .chapter-content, article .post-content",
   nextjs: ".chapter-content, .reader-content, main article",
   novelhi: "#chr-content, #chapter-content, div.chapter-content",
+  foxteller: "article",
   lightnovelpub: "#chapter-content, .chapter-content, .chapter-body",
   asianfanfics: ".story-body, .chapter-text, .container .text",
   jjwxc: "div.noveltext, #noveltext, .readtxt",
@@ -3653,6 +4966,38 @@ const MAJOR_SITES = [
     /(^|\.)(lightnovelworld\.(com|co)|lightnovelcave\.com|lightnovelpub\.(com|fan)|novelpub\.com|webnovelpub\.(com|pro)|pandanovel\.co|novelbob\.org|lightnovelstranslations\.com)$/,
     "lightnovelworld",
   ],
+  [/(^|\.)mvlempyr\.(com|io)$/, "mvlempyr"],
+  [/(^|\.)timotxt\.com$/, "timotxt"],
+  [/(^|\.)wuxia\.click$/, "wuxiaclick"],
+  [/(^|\.)piaotia\.com$/, "piaotia"],
+  [/(^|\.)ptwxz\.com$/, "piaotia"],
+  [/(^|\.)quanben\.io$/, "quanben"],
+  [/(^|\.)woopread\.com$/, "woopread"],
+  [/(^|\.)konkon\.ink$/, "konkon"],
+  [/(^|\.)tomotranslations\.com$/, "tomotranslations"],
+  [/(^|\.)shmtranslations\.com$/, "shmtranslations"],
+  [/(^|\.)novelversetranslations\.com$/, "novelversetl"],
+  [/(^|\.)zirusmusings\.net$/, "zirusmusings"],
+  [/(^|\.)pawread\.com$/, "pawread"],
+  [/(^|\.)teanovel\.com$/, "teanovel"],
+  [/(^|\.)wetriedtls\.com$/, "wetriedtls"],
+  [/(^|\.)ckandawrites\.online$/, "ckanda"],
+  [/(^|\.)snoutandco\.ca$/, "snoutandco"],
+  [/(^|\.)jonaxxstories\.com$/, "jonaxx"],
+  [/(^|\.)tigertranslations\.org$/, "tigertl"],
+  [/(^|\.)universalnovel\.com$/, "universalnovel"],
+  [/(^|\.)wtnovels\.com$/, "wtnovels"],
+  [/(^|\.)twkan\.com$/, "twkan"],
+  [/(^|\.)novel543\.com$/, "novel543"],
+  [/(^|\.)novelingua\.com$/, "novelingua"],
+  [/(^|\.)scifistories\.com$/, "scifistories"],
+  [/(^|\.)ontimestory\.eu$/, "ontimestory"],
+  [/(^|\.)asianovel\.net$/, "asianovel"],
+  [/(^|\.)sonako\.(fandom\.com|wikia\.com)$/, "sonako"],
+  [/(^|\.)readingpia\.me$/, "readingpia"],
+  [/(^|\.)neobook\.org$/, "neobook"],
+  [/(^|\.)skydemonorder\.com$/, "skydemon"],
+  [/(^|\.)truyennhabo\.com$/, "truyennhabo"],
   [/(^|\.)ranobes\.(top|net|com)$/, "ranobes"],
   [/(^|\.)webnovel\.com$/, "webnovel"],
   [/(^|\.)mtlnovel\.(com|net|org)$/, "mtlnovel"],
@@ -3674,6 +5019,18 @@ const MAJOR_SITES = [
   [/(^|\.)baka-tsuki\.org$/, "bakatsuki"],
   [/(^|\.)asianfanfics\.com$/, "asianfanfics"],
   [/(^|\.)forums?\.spacebattles\.com$/, "xenforo"],
+  [/(^|\.)alternatehistory\.com$/, "xenforo"],
+  [/(^|\.)alphapolis\.co\.jp$/, "alphapolis"],
+  [/(^|\.)libread\.com$/, "libread"],
+  [/(^|\.)novel\.naver\.com$/, "naver"],
+  [/(^|\.)novelceo\.com$/, "novelceo"],
+  [/(^|\.)noveldrama\.org$/, "novelceo"],
+  [/(^|\.)nineheavens\.org$/, "nineheavens"],
+  [/(^|\.)ixdzs8\.com$/, "ixdzs8"],
+  [/(^|\.)lnmtl\.com$/, "lnmtl"],
+  [/(^|\.)novel-bin\.(com|net)$/, "novelbinmirror"],
+  [/(^|\.)ttshu8\.com$/, "ttshu8"],
+  [/(^|\.)xpaoshuba\.com$/, "xpaoshuba"],
   [/(^|\.)forums?\.sufficientvelocity\.com$/, "xenforo"],
   [/(^|\.)forum\.questionablequesting\.com$/, "xenforo"],
   [/(^|\.)creative-novels\.com$/, "creativenovels"],
@@ -3725,6 +5082,10 @@ function siteKey(hostname) {
   if (host.includes("wtr-lab.com")) return "wtrlab";
   if (host.includes("wattpad.com")) return "wattpad";
   if (host.includes("novelhi.com") || host.includes("novelgate.")) return "novelhi";
+  if (host.includes("foxteller.com")) return "foxteller";
+  if (host === "m.88xiaoshuo.net") return "xpaoshuba";
+  if (host === "m.ilwxs.com") return "ilwxsm";
+  if (host === "m.metanovel.org") return "metanovel";
   if (host.includes("lightnovelpub.") || host.includes("novelpub.")) return "lightnovelpub";
   if (host.includes("creative-novels.com")) return "creativenovels";
   if (host.includes("readnovelmtl.com")) return "readnovelmtl";
@@ -3754,9 +5115,32 @@ function siteKey(hostname) {
 
 
 
+// --- JonaxxStories (jonaxxstories.com): WordPress comment machinery leaks
+// into the swept TOC — the a.comment-reply-link "Reply" anchor
+// (?replytocom={id}#respond, plus bare #respond self-links), #comment-
+// permalinks, ?share= links, and
+// /amp/ + /feed/ self-variants of a post URL. Filter them from whatever
+// route produced the list (cleanup only; the book landing page carries no
+// fuller list to walk).
+function cleanJonaxxToc(items) {
+  const seen = new Set();
+  const out = [];
+  for (const item of items || []) {
+    let url = item.url || '';
+    if (!url) continue;
+    if (url.includes('replytocom') || url.includes('#comment-') || url.includes('#respond') || url.includes('?share=')) continue;
+    url = url.replace(/\/(amp|feed)\/?$/, '/');
+    if (seen.has(url)) continue;
+    seen.add(url);
+    out.push({ ...item, url });
+  }
+  return out;
+}
+
 /** Returns [{ url, title }]. */
 export async function fetchChapterLinks(tocUrl, linkSelector = "") {
   const key = siteKey(new URL(tocUrl).hostname);
+  const isJonaxx = new URL(tocUrl).hostname.includes("jonaxxstories.com");
   const dedicated = async () => {
     switch (key) {
       case "novelhall":
@@ -3841,6 +5225,84 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         return tocWuxiaWorldEu(tocUrl);
       case "bakatsuki":
         return tocBakaTsuki(tocUrl);
+      case "alphapolis":
+        return tocAlphapolis(tocUrl);
+      case "libread":
+        return tocLibread(tocUrl);
+      case "naver":
+        return tocNaver(tocUrl);
+      case "novelceo":
+        return tocNovelCeo(tocUrl);
+      case "nineheavens":
+        return tocNineHeavens(tocUrl);
+      case "lnmtl":
+        return tocLnmtl(tocUrl);
+      case "novelbinmirror":
+        return tocNovelBinMirror(tocUrl);
+      case "ttshu8":
+        return tocTtshu8(tocUrl);
+      case "xpaoshuba":
+        return tocXpaoshuba(tocUrl);
+      case "ilwxsm":
+        return tocIlwxsMobile(tocUrl);
+      case "quanben":
+        return tocQuanben(tocUrl);
+      case "woopread":
+        return tocWoopRead(tocUrl);
+      case "metanovel":
+        return tocMetanovel(tocUrl);
+      case "konkon":
+        return tocKonkon(tocUrl);
+      case "tomotranslations":
+        return tocTomoTranslations(tocUrl);
+      case "shmtranslations":
+        return tocShmTranslations(tocUrl);
+      case "novelversetl":
+        return tocNovelVerseTranslations(tocUrl);
+      case "zirusmusings":
+        return tocZirusMusings(tocUrl);
+      case "pawread":
+        return tocPawRead(tocUrl);
+      case "teanovel":
+        return tocTeanovel(tocUrl);
+      case "wetriedtls":
+        return tocWeTriedTls(tocUrl);
+      case "ckanda":
+        return tocCkandaWrites(tocUrl);
+      case "snoutandco":
+        return tocSnoutAndCo(tocUrl);
+      case "jonaxx":
+        return tocJonaxxStories(tocUrl);
+      case "tigertl":
+        return tocTigerTranslations(tocUrl);
+      case "universalnovel":
+        return tocUniversalNovel(tocUrl);
+      case "wtnovels":
+        return tocWtNovels(tocUrl);
+      case "twkan":
+        return tocTwkan(tocUrl);
+      case "novel543":
+        return tocNovel543(tocUrl);
+      case "novelingua":
+        return tocNovelingua(tocUrl);
+      case "scifistories":
+        return tocScifiStories(tocUrl);
+      case "ontimestory":
+        return tocOntimestory(tocUrl);
+      case "asianovel":
+        return tocAsianovel(tocUrl);
+      case "sonako":
+        return tocSonako(tocUrl);
+      case "neobook":
+        return tocNeobook(tocUrl);
+      case "truyennhabo":
+        return tocTruyenNhabo(tocUrl);
+      case "mvlempyr":
+        return tocMvlempyr(tocUrl);
+      case "timotxt":
+        return tocTimotxt(tocUrl);
+      case "wuxiaclick":
+        return tocWuxiaClick(tocUrl);
       case "xenforo":
         return tocXenForo(tocUrl);
       case "creativenovels":
@@ -3909,7 +5371,7 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
   if (key !== "generic") {
     try {
       const items = await dedicated();
-      if (items?.length) return items;
+      if (items?.length) return isJonaxx ? cleanJonaxxToc(items) : items;
     } catch (e) {
       // A proven bot wall applies to every fallback too — don't re-churn.
       if (e?.blocked) throw e;
@@ -3924,9 +5386,10 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
     if (e?.blocked) throw e;
     return [];
   });
-  if (items.length) return items;
+  if (items.length) return isJonaxx ? cleanJonaxxToc(items) : items;
   const doc = parseHtml(await getText(tocUrl));
-  return collectTocLinks(doc, tocUrl, [linkSelector || "a[href]"]);
+  const swept = collectTocLinks(doc, tocUrl, [linkSelector || "a[href]"]);
+  return isJonaxx ? cleanJonaxxToc(swept) : swept;
 }
 
 
@@ -3995,6 +5458,26 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
         return bodyLiterotica(chapterUrl);
       case "69shuba":
         return body69shuba(chapterUrl);
+      case "ixdzs8":
+        return bodyIxdzs8(chapterUrl);
+      case "novelhi":
+        return bodyNovelHi(chapterUrl);
+      case "foxteller":
+        return bodyFoxteller(chapterUrl);
+      case "piaotia":
+        return bodyPiaotia(chapterUrl);
+      case "quanben":
+        return bodyQuanben(chapterUrl);
+      case "konkon":
+        return bodyKonkon(chapterUrl);
+      case "snoutandco":
+        return bodySnoutAndCo(chapterUrl);
+      case "novel543":
+        return bodyNovel543(chapterUrl);
+      case "readingpia":
+        return bodyReadingpia(chapterUrl);
+      case "neobook":
+        return bodyNeobook(chapterUrl);
       case "uukanshu":
         return bodyUukanshu(chapterUrl);
       case "novelight":
