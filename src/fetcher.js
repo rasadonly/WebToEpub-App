@@ -278,6 +278,8 @@ async function httpGet(url, extra = {}, timeoutMs = 7000) {
       if (st) return htmlResponse(st);
     }
     for (let attempt = 0; attempt < 3; attempt++) {
+      let responded = 0;
+      let challenged = 0;
       for (const proxy of proxyOrderFor(host)) {
         if (!proxy && blockedHosts.has(host)) continue;
         const ctrl = new AbortController();
@@ -302,11 +304,13 @@ async function httpGet(url, extra = {}, timeoutMs = 7000) {
             signal: ctrl.signal,
             redirect: "follow",
           });
+          responded++;
           if (r.ok) {
             const ct = r.headers.get("content-type") || "";
             if (/html|text\/plain/i.test(ct)) {
               const text = await r.text();
               if (looksLikeChallenge(text)) {
+                challenged++;
                 if (!proxy) blockedHosts.add(host);
                 lastErr = new Error("Cloudflare challenge");
                 continue; // this route is blocked — try the next one
@@ -322,6 +326,16 @@ async function httpGet(url, extra = {}, timeoutMs = 7000) {
           }
           if (!proxy && (r.status === 403 || r.status === 401 || r.status === 429)) {
             blockedHosts.add(host);
+          }
+          if (r.status === 401 || r.status === 403 || r.status === 502) {
+            // Bot walls often serve the challenge page WITH the error status,
+            // and some proxies report the origin's wall in their own words.
+            try {
+              const body = await r.text();
+              if (looksLikeChallenge(body) || /blocked by anti-bot|anti-bot protection/i.test(body.slice(0, 5000))) challenged++;
+            } catch {
+              /* body unreadable — not evidence either way */
+            }
           }
           lastErr = new Error(`HTTP ${r.status}`);
           lastErr.status = r.status;
@@ -340,6 +354,17 @@ async function httpGet(url, extra = {}, timeoutMs = 7000) {
         } finally {
           clearTimeout(timer);
         }
+      }
+      // Three or more independent routes served a bot wall (e.g. NovelHall
+      // from datacenter IPs): more sweeps with rotated UAs will not get
+      // through, so fail fast with a clear error instead of churning through
+      // every fallback for minutes.
+      if (challenged >= 3) {
+        lastErr = new Error(
+          "Site is blocked by anti-bot protection (Cloudflare challenge) on all routes"
+        );
+        lastErr.blocked = true;
+        break;
       }
       // All proxies failed this round — back off before the next sweep.
       if (attempt < 2) await sleep(800 * Math.pow(2, attempt) + Math.random() * 400);
