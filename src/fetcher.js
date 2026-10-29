@@ -1054,23 +1054,91 @@ async function tocNovGo(url) {
   return out;
 }
 
+async function novelBuddyTitleId(url) {
+  // New-style: /titles/{id}-{slug} -> id is the part before the first '-'.
+  // Old-style: /novel/{slug} -> resolve the slug through the API.
+  const u = new URL(url);
+  const parts = u.pathname.split("/").filter(Boolean);
+  if (parts[0] === "titles" && parts[1]) return parts[1].split("-")[0];
+  const slug = parts.includes("novel") ? parts[parts.indexOf("novel") + 1] : parts[parts.length - 1];
+  const lookup = await getJson(`https://api.novelbuddy.me/titles/by-slug/${slug}`);
+  const newUrl = lookup?.data?.new_url || "";
+  const id = newUrl.split("/titles/")[1]?.split("-")[0];
+  if (!id) throw new Error("NovelBuddy: title id not found for slug " + slug);
+  return id;
+}
+
 async function tocNovelBuddy(url) {
-  const doc = parseHtml(await getText(url));
-  const nextData = doc.querySelector("script#__NEXT_DATA__");
-  if (!nextData?.textContent) throw new Error("NovelBuddy: __NEXT_DATA__ missing");
-  const pageProps = JSON.parse(nextData.textContent)?.props?.pageProps || {};
-  const apiUrl = pageProps?.siteConfig?.apiUrl;
-  const mangaId = pageProps?.manga?.id || pageProps?.item?.id || pageProps?.data?.id;
-  if (!apiUrl || !mangaId) throw new Error("NovelBuddy: apiUrl/mangaId missing");
-  const listJson = await getJson(`${apiUrl.replace(/\/$/, "")}/titles/${mangaId}/chapters`);
+  // The redesigned site (novelbuddy.me, /titles/{id}-{slug}) no longer embeds
+  // __NEXT_DATA__, but its underlying API is unchanged — and the book page
+  // itself is Cloudflare-walled for server fetches, so resolve through the
+  // API first and only fall back to parsing the page.
+  let apiUrl = "https://api.novelbuddy.me";
+  let mangaId = null;
+  try {
+    mangaId = await novelBuddyTitleId(url);
+  } catch {
+    try {
+      const doc = parseHtml(await getText(url));
+      const nextData = doc.querySelector("script#__NEXT_DATA__");
+      if (nextData?.textContent) {
+        const pageProps = JSON.parse(nextData.textContent)?.props?.pageProps || {};
+        apiUrl = pageProps?.siteConfig?.apiUrl || apiUrl;
+        mangaId = pageProps?.manga?.id || pageProps?.item?.id || pageProps?.data?.id || null;
+      }
+    } catch {
+      /* rethrow below */
+    }
+  }
+  if (!mangaId) throw new Error("NovelBuddy: title id not found");
+  const base = apiUrl.replace(/\/$/, "");
+  const listJson = await getJson(`${base}/titles/${mangaId}/chapters`);
   const chaps = listJson?.data?.chapters || [];
   return chaps
     .slice()
     .reverse()
     .map((c, i) => ({
-      url: `${apiUrl.replace(/\/$/, "")}/titles/${mangaId}/chapters/${c.id || c._id}`,
+      url: `${base}/titles/${mangaId}/chapters/${c.id || c._id}`,
       title: c.name || c.title || `Chapter ${i + 1}`,
     }));
+}
+
+// --- CrescentMoon: the TOC is prose, not a chapter list. Headings read
+// "Chapter N : title" and are followed by Part links (or, for single-part
+// chapters, the heading itself is the link). The generic sweep returned
+// 84 links titled only "Part 1"/"Part 2" starting mid-book, so walk
+// .entry-content in document order, naming each link from its heading.
+async function tocCrescentMoon(url) {
+  const doc = parseHtml(await getText(url));
+  const root = doc.querySelector(".entry-content") || doc;
+  const out = [];
+  const seen = new Set();
+  let heading = "";
+  // Order-preserving pass over block elements in document order.
+  root.querySelectorAll("p, li, h1, h2, h3, h4").forEach((el) => {
+    const text = (el.textContent || "").replace(/\s+/g, " ").trim();
+    if (/^Chapter\s+\d+\b/.test(text)) {
+      heading = text;
+      const direct = el.querySelector("a[href]");
+      if (direct && !el.querySelector("ul")) {
+        const abs = absoluteUrl(url, direct.getAttribute("href"));
+        if (!seen.has(abs)) {
+          seen.add(abs);
+          out.push({ url: abs, title: heading });
+        }
+      }
+      return;
+    }
+    el.querySelectorAll("a[href]").forEach((a) => {
+      const abs = absoluteUrl(url, a.getAttribute("href"));
+      if (seen.has(abs)) return;
+      if (!/\/(20\d{2}\/\d{2}\/\d{2}\/|chapter|bmhs|bhms)/i.test(abs)) return;
+      seen.add(abs);
+      const part = (a.textContent || "").replace(/\s+/g, " ").trim();
+      out.push({ url: abs, title: heading ? `${heading} (${part})` : part });
+    });
+  });
+  return out;
 }
 
 async function tocNovelArrow(url) {
@@ -1889,6 +1957,8 @@ export function supportedDomains() {
     "novelfire.net",
     "novgo.me",
     "novelbuddy.com",
+    "novelbuddy.me",
+    "crescentmoon.blog",
     "novelarrow.com",
     "novelfull.com",
     "novelfull.net",
@@ -2231,8 +2301,10 @@ async function tocTapas(url) {
   const html = await getText(url);
   const doc = parseHtml(html);
   const seriesId =
-    doc.querySelector("meta[property='al:android:url']")?.getAttribute("content")?.split("/").pop() ||
-    html.match(/series[\\/_-]?id["':\s]+(\d+)/i)?.[1];
+    doc.querySelector("meta[property='al:android:url']")?.getAttribute("content")?.match(/series\/(\d+)/)?.[1] ||
+    doc.querySelector("meta[property='al:ios:url']")?.getAttribute("content")?.match(/series\/(\d+)/)?.[1] ||
+    html.match(/series[\\/_-]?id["':\s]+(\d+)/i)?.[1] ||
+    url.match(/\/series\/(\d+)(?:\/|$)/)?.[1];
   if (!seriesId) throw new Error("Tapas: series id not found");
   const out = [];
   for (let page = 1; page <= 100; page++) {
@@ -2458,12 +2530,17 @@ async function tocReadNovelFull(url) {
   const html = await getText(url);
   const origin = new URL(url).origin;
   let items = linksFrom(html, url, "ul.list-chapter a, .list-chapter a");
-  if (!items.length) {
-    const novelId =
-      html.match(/data-novel-id=["'](\d+)["']/)?.[1] || html.match(/novelId["'\s:=]+(\d+)/)?.[1];
-    if (novelId) {
-      const ajax = await tryText(`${origin}/ajax/chapter-archive?novelId=${novelId}`);
-      items = linksFrom(ajax, origin, "a[href]");
+  // The book page embeds only the first page of chapters (~30); the archive
+  // endpoint returns the complete list. Prefer it whenever it has more.
+  const novelId =
+    html.match(/data-novel-id=["'](\d+)["']/)?.[1] || html.match(/novelId["'\s:=]+(\d+)/)?.[1];
+  if (novelId) {
+    const ajax = await tryText(`${origin}/ajax/chapter-archive?novelId=${novelId}`);
+    if (ajax) {
+      const ajaxItems = linksFrom(ajax, origin, "a[href]").filter((i) =>
+        i.url.includes("/chapter-")
+      );
+      if (ajaxItems.length > items.length) items = ajaxItems;
     }
   }
   return dedupeByUrl(items);
@@ -2850,6 +2927,91 @@ async function tocGravityTales(url) {
   const items = linksFrom(html, origin, 'table.tablepress a[href], .chapter-list a[href], .entry-content a[href]')
     .filter(i => /chapter|chap|ch[-_]?\d|\d+-\d+/i.test(i.title + i.url));
   return dedupeByUrl(items);
+}
+
+// --- WuxiaWorld.eu (Next.js): the book page's __NEXT_DATA__ carries the first
+// 100 TOC items plus the page ranges; the remaining pages come from the
+// /_next/data/<buildId>/novel/<slug>.json?page=N routes. Chapter pages live at
+// /chapter/<slug>-<number> and server-render their text into #chapter-content.
+async function tocWuxiaWorldEu(startUrl) {
+  const u = new URL(startUrl);
+  const slug = (u.pathname.match(/\/novel\/([^/?#]+)/) || [])[1];
+  if (!slug) return [];
+  const doc = parseHtml(await getText(startUrl));
+  const ndText = doc.querySelector("script#__NEXT_DATA__")?.textContent;
+  if (!ndText) return [];
+  let nd;
+  try { nd = JSON.parse(ndText); } catch { return []; }
+  const pp = nd?.props?.pageProps || {};
+  const buildId = nd?.buildId;
+  const pages = Array.isArray(pp?.toc?.ranges) ? pp.toc.ranges.length : 1;
+  const byNumber = new Map();
+  const addItems = (items) => {
+    for (const it of items || []) {
+      const n = Number(it?.number);
+      if (!Number.isFinite(n) || n <= 0 || byNumber.has(n)) continue;
+      byNumber.set(n, {
+        title: String(it?.title || `Chapter ${n}`).trim(),
+        url: `${u.origin}/chapter/${slug}-${n}`,
+      });
+    }
+  };
+  addItems(pp?.toc?.items);
+  if (buildId && pages > 1) {
+    const rest = [];
+    for (let p = 2; p <= pages; p++) rest.push(p);
+    for (let i = 0; i < rest.length; i += 6) {
+      await Promise.all(rest.slice(i, i + 6).map(async (p) => {
+        try {
+          const j = JSON.parse(await getText(`${u.origin}/_next/data/${buildId}/novel/${slug}.json?page=${p}`));
+          addItems(j?.pageProps?.toc?.items);
+        } catch { /* keep the pages that did load */ }
+      }));
+    }
+  }
+  return [...byNumber.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
+}
+
+// --- Baka-Tsuki (MediaWiki): a series page links its chapter subpages
+// "<Series>:Volume<N>_<Part>" in reading order inside .mw-parser-output.
+// The compiled ":Volume_N" full-text pages and illustration/registration
+// subpages are excluded; without this the generic sweep drowns in wiki links.
+async function tocBakaTsuki(startUrl) {
+  const u = new URL(startUrl);
+  const series = (u.searchParams.get("title") || "").trim();
+  if (!series) return [];
+  const doc = parseHtml(await getText(startUrl));
+  const root = doc.querySelector(".mw-parser-output") || doc;
+  const seen = new Set();
+  const out = [];
+  root.querySelectorAll("a[href]").forEach((a) => {
+    // Routes that come back through a rewriting proxy carry proxy-wrapped
+    // hrefs; unwrap before matching (the decoded target also has "&amp;"
+    // from the proxy's double-encoding normalized by the URL parser below).
+    const href = unwrapProxyUrl(a.getAttribute("href") || "").replace(/&amp;/g, "&");
+    if (!href.includes("index.php?title=")) return;
+    let abs, t;
+    try {
+      const x = new URL(href, u.origin);
+      if (x.searchParams.has("action")) return;
+      t = x.searchParams.get("title") || "";
+      abs = x.href;
+    } catch { return; }
+    if (!t.startsWith(series + ":")) return;
+    if (/:Volume_?\d+$/.test(t)) return; // compiled full-text page duplicates its chapters
+    if (/Illustrations|Registration|Guideline/i.test(t)) return;
+    const label = (a.textContent || "").trim();
+    if (/^full text$/i.test(label)) return;
+    if (seen.has(abs)) return;
+    seen.add(abs);
+    const sub = t.slice(series.length + 1);
+    const vm = sub.match(/^Volume_?(\d+)_(.+)$/);
+    const title = vm
+      ? `Volume ${vm[1]} – ${label || vm[2].replace(/_/g, " ")}`
+      : (label || sub.replace(/_/g, " "));
+    out.push({ title, url: abs });
+  });
+  return out;
 }
 
 // --- WuxiaWorld.com: gRPC-web binary chapter list decoder ---
@@ -3449,6 +3611,8 @@ const MAJOR_BODY_SELECTORS = {
   novel18: "#novel_honbun, .p-novel__body, div#novel_color",
   kakuyomu: ".widget-episodeBody, .js-episode-body, article.widget-episodeBody",
   wuxiaworld_co: ".chapter-content, #chapter-content, .text-chapter",
+  wuxiaworld_eu: "#chapter-content, .reader-text",
+  bakatsuki: ".mw-parser-output",
   xenforo: "article.message-body .bbWrapper, .message-body .bbWrapper, .message-userContent",
   creativenovels: ".entry-content, .chapter-content, article .post-content",
   nextjs: ".chapter-content, .reader-content, main article",
@@ -3506,6 +3670,8 @@ const MAJOR_SITES = [
   [/(^|\.)novelcool\.com$/, "novelcool"],
   [/(^|\.)allnovelfull\.(com|net)$/, "allnovelfull"],
   [/(^|\.)wuxiaworld\.co$/, "wuxiaworld_co"],
+  [/(^|\.)wuxiaworld\.eu$/, "wuxiaworld_eu"],
+  [/(^|\.)baka-tsuki\.org$/, "bakatsuki"],
   [/(^|\.)asianfanfics\.com$/, "asianfanfics"],
   [/(^|\.)forums?\.spacebattles\.com$/, "xenforo"],
   [/(^|\.)forums?\.sufficientvelocity\.com$/, "xenforo"],
@@ -3548,8 +3714,10 @@ function siteKey(hostname) {
   if (host.includes("kanunu8.com") || host.includes("kanunu.")) return "kanunu";
   if (host.includes("tianyabooks.com")) return "tianya";
   if (host.includes("readthedrama.com")) return "readthedrama";
-  if (host.includes("novelbuddy.com")) return "novelbuddy";
+  if (host.includes("novelbuddy.")) return "novelbuddy";
+  if (host.includes("crescentmoon.blog") || host.includes("ikigainovels.wordpress.com")) return "crescentmoon";
   if (host.includes("novelarrow.com")) return "novelarrow";
+  if (host.includes("readnovelfull.")) return "readnovelfull";
   if (host.includes("novelfull.net")) return "novelfullnet";
   if (host.includes("novelfull.com")) return "novelfullcom";
   if (host.includes("novelfull.")) return "novelfull";
@@ -3607,6 +3775,8 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         return tocNovGo(tocUrl);
       case "novelbuddy":
         return tocNovelBuddy(tocUrl);
+      case "crescentmoon":
+        return tocCrescentMoon(tocUrl);
       case "novelarrow":
         return tocNovelArrow(tocUrl);
       case "novelfullnet":
@@ -3667,6 +3837,10 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         return tocKakuyomu(tocUrl);
       case "wuxiaworld_co":
         return tocWuxiaWorldCo(tocUrl);
+      case "wuxiaworld_eu":
+        return tocWuxiaWorldEu(tocUrl);
+      case "bakatsuki":
+        return tocBakaTsuki(tocUrl);
       case "xenforo":
         return tocXenForo(tocUrl);
       case "creativenovels":
@@ -3782,6 +3956,8 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
         return bodyNovGo(chapterUrl);
       case "novelbuddy":
         return bodyNovelBuddy(chapterUrl);
+      case "crescentmoon":
+        return bodyGeneric(chapterUrl, ".entry-content");
       case "novelarrow":
         return bodyNovelArrow(chapterUrl);
       case "wattpad":
@@ -3922,6 +4098,30 @@ export async function fetchBookMeta(tocUrl) {
           author: novel.author_name || "",
           cover: novel.cover_image || "",
           description: String(novel.synopsis || "")
+            .replace(/<[^>]+>/g, " ")
+            .replace(/\s+/g, " ")
+            .trim(),
+        };
+      }
+    }
+  } catch {
+    /* fall through to HTML scraping */
+  }
+  // NovelBuddy pages are client-side shells with no book meta in the HTML;
+  // take the meta from the same API the TOC parser uses.
+  try {
+    const host = new URL(tocUrl).hostname;
+    if (host.includes("novelbuddy.")) {
+      const id = await novelBuddyTitleId(tocUrl);
+      const titleJson = await getJson(`https://api.novelbuddy.me/titles/${id}`);
+      const t = titleJson?.data?.title || {};
+      const authors = [...new Set((t.authors || []).map((a) => a.name).filter(Boolean))];
+      if (t.name) {
+        return {
+          title: t.name,
+          author: authors.join(", "),
+          cover: t.cover || "",
+          description: String(t.summary || "")
             .replace(/<[^>]+>/g, " ")
             .replace(/\s+/g, " ")
             .trim(),
