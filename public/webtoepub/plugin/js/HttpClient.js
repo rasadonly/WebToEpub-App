@@ -245,8 +245,10 @@ class HttpClient {
             let activeProxyUrl = HttpClient.corsProxyUrl;
             const targetHostname = new URL(url).hostname;
 
-            // Try active proxy first
-            if (activeProxyUrl && 
+            // Try active proxy first — unless it was just marked stale
+            // (blocked mid-session), in which case go straight to the race.
+            let activeStale = Date.now() < (HttpClient.activeProxyStaleUntil || 0);
+            if (activeProxyUrl && !activeStale &&
                 !BlockedHostNames.has(new URL(activeProxyUrl).hostname) && 
                 !(targetHostname === "ko-fi.com" && activeProxyUrl.includes("corsproxy.io"))) {
                 
@@ -280,14 +282,17 @@ class HttpClient {
                         
                         if (!proxyWrapOptions.parser?.isCustomError(ret)) {
                             if (HttpClient.isUsableResult(ret, proxyWrapOptions)) {
+                                HttpClient.noteProxySuccess();
                                 return ret;
                             }
+                            HttpClient.noteActiveProxyFailure();
                             console.warn(`[WebToEpub] Active proxy ${activeProxyUrl} returned an unusable (non-HTML) response. Falling back to proxy discovery.`);
                         }
                     } else {
                         throw new Error(`status: ${response.status}`);
                     }
                 } catch (err) {
+                    HttpClient.noteActiveProxyFailure();
                     console.warn(`[WebToEpub] Active proxy ${activeProxyUrl} failed or timed out: ${err.message}. Fallback to discovery race.`);
                 }
             }
@@ -363,8 +368,33 @@ class HttpClient {
                             if (HttpClient.isCloudflareBlock(text)) throw new Error("Cloudflare block page");
                             if (HttpClient.isGarbledResponse(text)) throw new Error("Garbled response");
                         }
-                        
-                        resolve({ response, proxyUrl });
+
+                        // Page consumers: only a proxy whose payload actually
+                        // parses into a document may win the race — a fast
+                        // error body must lose to a slower working proxy.
+                        // Probe with a throwaway handler over a clone (the
+                        // original response stays untouched); the winner
+                        // reuses the probed result instead of parsing twice.
+                        // Raw/text/JSON consumers don't read responseXML, so
+                        // they keep the plain first-answer-wins race.
+                        let probedRet = null;
+                        let raceHandler = wrapOptions.responseHandler;
+                        let isPageConsumer = !(raceHandler instanceof FetchBinaryResponseHandler ||
+                            raceHandler instanceof FetchTextResponseHandler ||
+                            raceHandler instanceof FetchJsonResponseHandler);
+                        if (isPageConsumer) {
+                            let probeOptions = Object.assign({}, wrapOptions, {
+                                responseHandler: new FetchResponseHandler(),
+                                isProxyAttempt: true,
+                                isFinalProxyAttempt: true
+                            });
+                            probedRet = await HttpClient.checkResponseAndGetData(url, probeOptions, response.clone());
+                            if (!HttpClient.isUsableResult(probedRet, probeOptions)) {
+                                throw new Error("Unusable (non-HTML) response");
+                            }
+                        }
+
+                        resolve({ response, proxyUrl, ret: probedRet });
                     } catch (err) {
                         clearTimeout(tid);
                         reject(err);
@@ -375,7 +405,7 @@ class HttpClient {
 
             try {
                 if (racePromises.length === 0) throw new Error("No race proxies available");
-                const { response, proxyUrl: winnerUrl } = await Promise.any(racePromises);
+                const { response, proxyUrl: winnerUrl, ret: probedRet } = await Promise.any(racePromises);
 
                 // Abort losing requests
                 for (const [pUrl, ctrl] of controllerMap) {
@@ -389,7 +419,7 @@ class HttpClient {
                     isFinalProxyAttempt: true
                 });
 
-                let ret = await HttpClient.checkResponseAndGetData(url, proxyWrapOptions, response);
+                let ret = probedRet ?? await HttpClient.checkResponseAndGetData(url, proxyWrapOptions, response);
 
                 // Body read, abort winner
                 try { controllerMap.get(winnerUrl)?.abort(); } catch (_) {}
@@ -405,24 +435,12 @@ class HttpClient {
                 }
 
                 if (!HttpClient.isUsableResult(ret, proxyWrapOptions)) {
-                    // The race winner answered first but not with a readable
-                    // page. Automatically walk the remaining proxies in list
-                    // order until one returns a usable page.
-                    console.warn("[WebToEpub] Race winner returned an unusable (non-HTML) response. Trying remaining proxies.");
-                    let recovered = await HttpClient.tryRemainingProxies(
-                        url, wrapOptions, proxiesToTry.filter(u => u !== winnerUrl && u !== renderProxyUrl));
-                    if (!recovered) {
-                        throw new Error("No proxy returned a readable page");
-                    }
-                    if (HttpClient.corsProxyUrl !== recovered.proxyUrl) {
-                        console.log(`[WebToEpub] Switching to working proxy: ${recovered.proxyUrl}`);
-                        HttpClient.corsProxyUrl = recovered.proxyUrl;
-                        HttpClient.updateCorsProxyUi();
-                    }
-                    raceResolvers.resolve();
-                    HttpClient.proxyRacePromise = null;
-                    return recovered.ret;
+                    // Should not happen (racers probe usability before they
+                    // may win) — treat as a lost race and fall through to the
+                    // Render/direct fallbacks.
+                    throw new Error("No proxy returned a readable page");
                 }
+                HttpClient.noteProxySuccess();
 
                 if (HttpClient.corsProxyUrl !== winnerUrl) {
                     console.log(`[WebToEpub] Switching to winning proxy: ${winnerUrl}`);
@@ -467,6 +485,7 @@ class HttpClient {
                         if (!HttpClient.isUsableResult(ret, proxyWrapOptions)) {
                             throw new Error("Render proxy returned an unusable (non-HTML) response");
                         }
+                        HttpClient.noteProxySuccess();
 
                         if (HttpClient.corsProxyUrl !== renderProxyUrl) {
                             console.log(`[WebToEpub] Switching to winning proxy: ${renderProxyUrl}`);
@@ -739,47 +758,22 @@ class HttpClient {
         return ret.responseXML != null;
     }
 
-    // Sequentially try the given proxies until one returns a usable result.
-    // Used when the race winner answered first but with an unusable payload:
-    // a fast error body must not beat a slower working proxy.
-    static async tryRemainingProxies(url, wrapOptions, proxyUrls) {
-        for (let proxyUrl of proxyUrls) {
-            const ctrl = new AbortController();
-            const tid = setTimeout(() => ctrl.abort(), 8000);
-            try {
-                let fetchUrl = proxyUrl + encodeURIComponent(url.trim());
-                if (proxyUrl.includes("lovable.app") && wrapOptions.fetchOptions && wrapOptions.fetchOptions.headers) {
-                    try {
-                        fetchUrl += "&headers=" + encodeURIComponent(JSON.stringify(wrapOptions.fetchOptions.headers));
-                    } catch (e) {}
-                }
-                const fetchOpts = Object.assign({}, wrapOptions.fetchOptions, {
-                    credentials: "omit",
-                    signal: ctrl.signal
-                });
-                let response = await fetch(fetchUrl, fetchOpts);
-                clearTimeout(tid);
-                if (!response.ok) continue;
-                try {
-                    let text = await response.clone().text();
-                    if (HttpClient.isCloudflareBlock(text)) continue;
-                } catch (e) { /* binary payloads: let the handler judge */ }
-                let proxyWrapOptions = Object.assign({}, wrapOptions, {
-                    isProxyAttempt: true,
-                    isFinalProxyAttempt: true
-                });
-                let ret = await HttpClient.checkResponseAndGetData(url, proxyWrapOptions, response);
-                try { ctrl.abort(); } catch (_) {}
-                if (proxyWrapOptions.parser?.isCustomError(ret)) continue;
-                if (HttpClient.isUsableResult(ret, proxyWrapOptions)) {
-                    return { ret, proxyUrl };
-                }
-            } catch (err) {
-                clearTimeout(tid);
-                console.warn(`[WebToEpub] Proxy ${proxyUrl} unusable for ${url}: ${err.message}`);
-            }
+    // Mid-session proxy health: when the sticky proxy starts failing
+    // (blocked mid-download), count the failures; after 2, mark it stale
+    // for 30s so new fetches skip the doomed first attempt and go straight
+    // to a fresh proxy race, which re-picks a working proxy. Any success
+    // clears the state; when the stale window expires the proxy gets
+    // retried and can recover.
+    static noteActiveProxyFailure() {
+        HttpClient.activeProxyFailures = (HttpClient.activeProxyFailures || 0) + 1;
+        if (HttpClient.activeProxyFailures >= 2) {
+            HttpClient.activeProxyStaleUntil = Date.now() + 30000;
         }
-        return null;
+    }
+
+    static noteProxySuccess() {
+        HttpClient.activeProxyFailures = 0;
+        HttpClient.activeProxyStaleUntil = 0;
     }
 
     static isGarbledResponse(text) {
