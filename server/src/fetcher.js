@@ -277,6 +277,7 @@ async function httpGet(url, extra = {}, timeoutMs = 7000) {
       const st = await stealthGet(url, effTimeout);
       if (st) return htmlResponse(st);
     }
+    let wallSweeps = 0;
     for (let attempt = 0; attempt < 3; attempt++) {
       let responded = 0;
       let challenged = 0;
@@ -355,11 +356,13 @@ async function httpGet(url, extra = {}, timeoutMs = 7000) {
           clearTimeout(timer);
         }
       }
-      // Three or more independent routes served a bot wall (e.g. NovelHall
-      // from datacenter IPs): more sweeps with rotated UAs will not get
-      // through, so fail fast with a clear error instead of churning through
-      // every fallback for minutes.
-      if (challenged >= 3) {
+      // Bot-wall evidence (e.g. NovelHall from datacenter IPs): if two sweeps
+      // in a row each saw 2+ routes serve a challenge page — or a single
+      // sweep saw 4+ — more retries will not get through. Fail fast with a
+      // clear error instead of churning through every fallback for minutes.
+      if (challenged >= 2) wallSweeps++;
+      else wallSweeps = 0;
+      if (wallSweeps >= 2 || challenged >= 4) {
         lastErr = new Error(
           "Site is blocked by anti-bot protection (Cloudflare challenge) on all routes"
         );
@@ -3734,6 +3737,8 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
       const items = await dedicated();
       if (items?.length) return items;
     } catch (e) {
+      // A proven bot wall applies to every fallback too — don't re-churn.
+      if (e?.blocked) throw e;
       console.warn("[fetcher] dedicated TOC parser failed", key, e?.message || e);
     }
   }
@@ -3741,7 +3746,10 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
   // Unknown site, or the dedicated parser came back empty: config selectors,
   // then AI-detected selectors, then a raw same-origin link sweep.
   const config = lookupSiteConfig(new URL(tocUrl).hostname);
-  const items = await tocFromConfig(tocUrl, config, linkSelector);
+  const items = await tocFromConfig(tocUrl, config, linkSelector).catch((e) => {
+    if (e?.blocked) throw e;
+    return [];
+  });
   if (items.length) return items;
   const doc = parseHtml(await getText(tocUrl));
   return collectTocLinks(doc, tocUrl, [linkSelector || "a[href]"]);
@@ -3844,7 +3852,8 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
         if (textLen(html) > textLen(last)) last = html;
         if (++thinTries >= 2) break;
       }
-    } catch {
+    } catch (e) {
+      if (e?.blocked) throw e; // bot wall — retrying cannot help
       /* retry */
     }
     if (i < maxAttempts - 1) await new Promise((r) => setTimeout(r, 400 * (i + 1)));
