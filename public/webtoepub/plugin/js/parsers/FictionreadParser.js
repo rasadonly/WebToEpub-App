@@ -81,7 +81,7 @@ class FictionreadParser extends Parser { // eslint-disable-line no-unused-vars
             headers: headers,
         };
     
-        const contentResponse = await HttpClient.wrapFetch(url, { fetchOptions: fetchOptions });
+        const contentResponse = await HttpClient.wrapFetch(url, { fetchOptions: fetchOptions, responseHandler: new FetchBinaryResponseHandler() });
         const stringifier = contentResponse.makeTextDecoder(contentResponse.response);
         const bytes = new Uint8Array(contentResponse.arrayBuffer);
 

@@ -219,7 +219,7 @@ class NullTranslationParser extends Parser {
 
         const chapterResponse = await HttpClient.wrapFetch(
             `${NullTranslationParser.BASE_URL}/book/${bookId}/chapter/${chapterId}`,
-            { fetchOptions: { headers: { RSC: "1" } } },
+            { fetchOptions: { headers: { RSC: "1" } }, responseHandler: new FetchBinaryResponseHandler() },
         );
         if (!chapterResponse?.arrayBuffer) {
             throw new Error(

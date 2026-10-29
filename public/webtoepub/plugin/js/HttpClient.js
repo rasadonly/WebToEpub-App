@@ -279,7 +279,10 @@ class HttpClient {
                         try { ctrl.abort(); } catch (_) {}
                         
                         if (!proxyWrapOptions.parser?.isCustomError(ret)) {
-                            return ret;
+                            if (HttpClient.isUsableResult(ret, proxyWrapOptions)) {
+                                return ret;
+                            }
+                            console.warn(`[WebToEpub] Active proxy ${activeProxyUrl} returned an unusable (non-HTML) response. Falling back to proxy discovery.`);
                         }
                     } else {
                         throw new Error(`status: ${response.status}`);
@@ -401,6 +404,26 @@ class HttpClient {
                     );
                 }
 
+                if (!HttpClient.isUsableResult(ret, proxyWrapOptions)) {
+                    // The race winner answered first but not with a readable
+                    // page. Automatically walk the remaining proxies in list
+                    // order until one returns a usable page.
+                    console.warn("[WebToEpub] Race winner returned an unusable (non-HTML) response. Trying remaining proxies.");
+                    let recovered = await HttpClient.tryRemainingProxies(
+                        url, wrapOptions, proxiesToTry.filter(u => u !== winnerUrl && u !== renderProxyUrl));
+                    if (!recovered) {
+                        throw new Error("No proxy returned a readable page");
+                    }
+                    if (HttpClient.corsProxyUrl !== recovered.proxyUrl) {
+                        console.log(`[WebToEpub] Switching to working proxy: ${recovered.proxyUrl}`);
+                        HttpClient.corsProxyUrl = recovered.proxyUrl;
+                        HttpClient.updateCorsProxyUi();
+                    }
+                    raceResolvers.resolve();
+                    HttpClient.proxyRacePromise = null;
+                    return recovered.ret;
+                }
+
                 if (HttpClient.corsProxyUrl !== winnerUrl) {
                     console.log(`[WebToEpub] Switching to winning proxy: ${winnerUrl}`);
                     HttpClient.corsProxyUrl = winnerUrl;
@@ -439,6 +462,10 @@ class HttpClient {
                                 CustomErrorResponse.response,
                                 CustomErrorResponse.errorMessage
                             );
+                        }
+
+                        if (!HttpClient.isUsableResult(ret, proxyWrapOptions)) {
+                            throw new Error("Render proxy returned an unusable (non-HTML) response");
                         }
 
                         if (HttpClient.corsProxyUrl !== renderProxyUrl) {
@@ -696,6 +723,65 @@ class HttpClient {
      * @param {Error|any} err The error to analyze
      * @returns {boolean} True if the proxy should be blacklisted
      */
+    // A fetch result is usable when the consumer actually got what it reads:
+    // page consumers (the default and HTML handlers) read ret.responseXML,
+    // which stays undefined when a proxy answers 200 with a non-HTML payload
+    // (e.g. a JSON error body for a blocked request). Raw-byte / text / JSON
+    // consumers asked for their payload explicitly and don't read responseXML.
+    static isUsableResult(ret, wrapOptions) {
+        if (ret == null) return false;
+        let handler = wrapOptions?.responseHandler;
+        if (handler instanceof FetchBinaryResponseHandler ||
+            handler instanceof FetchTextResponseHandler ||
+            handler instanceof FetchJsonResponseHandler) {
+            return true;
+        }
+        return ret.responseXML != null;
+    }
+
+    // Sequentially try the given proxies until one returns a usable result.
+    // Used when the race winner answered first but with an unusable payload:
+    // a fast error body must not beat a slower working proxy.
+    static async tryRemainingProxies(url, wrapOptions, proxyUrls) {
+        for (let proxyUrl of proxyUrls) {
+            const ctrl = new AbortController();
+            const tid = setTimeout(() => ctrl.abort(), 8000);
+            try {
+                let fetchUrl = proxyUrl + encodeURIComponent(url.trim());
+                if (proxyUrl.includes("lovable.app") && wrapOptions.fetchOptions && wrapOptions.fetchOptions.headers) {
+                    try {
+                        fetchUrl += "&headers=" + encodeURIComponent(JSON.stringify(wrapOptions.fetchOptions.headers));
+                    } catch (e) {}
+                }
+                const fetchOpts = Object.assign({}, wrapOptions.fetchOptions, {
+                    credentials: "omit",
+                    signal: ctrl.signal
+                });
+                let response = await fetch(fetchUrl, fetchOpts);
+                clearTimeout(tid);
+                if (!response.ok) continue;
+                try {
+                    let text = await response.clone().text();
+                    if (HttpClient.isCloudflareBlock(text)) continue;
+                } catch (e) { /* binary payloads: let the handler judge */ }
+                let proxyWrapOptions = Object.assign({}, wrapOptions, {
+                    isProxyAttempt: true,
+                    isFinalProxyAttempt: true
+                });
+                let ret = await HttpClient.checkResponseAndGetData(url, proxyWrapOptions, response);
+                try { ctrl.abort(); } catch (_) {}
+                if (proxyWrapOptions.parser?.isCustomError(ret)) continue;
+                if (HttpClient.isUsableResult(ret, proxyWrapOptions)) {
+                    return { ret, proxyUrl };
+                }
+            } catch (err) {
+                clearTimeout(tid);
+                console.warn(`[WebToEpub] Proxy ${proxyUrl} unusable for ${url}: ${err.message}`);
+            }
+        }
+        return null;
+    }
+
     static isGarbledResponse(text) {
         if (!text || text.length < 500) return false;
         let replacementChars = (text.match(/\uFFFD/g) || []).length;

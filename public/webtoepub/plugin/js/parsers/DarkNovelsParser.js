@@ -33,7 +33,7 @@ class DarkNovelsParser extends Parser {
             credentials: "include",
             body: formData
         };
-        let xhr = await HttpClient.wrapFetch(fetchUrl, {fetchOptions: options});
+        let xhr = await HttpClient.wrapFetch(fetchUrl, {fetchOptions: options, responseHandler: new FetchBinaryResponseHandler()});
         return DarkNovelsParser.buildContentHtml(xhr, fetchUrl);
     }
 
