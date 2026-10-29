@@ -181,6 +181,11 @@ function looksLikeChallenge(text) {
   const head = String(text || "").slice(0, 5000);
   return (
     /<title>\s*Just a moment/i.test(head) ||
+    // Cloudflare block pages ("Attention Required! | Cloudflare" / "Sorry,
+    // you have been blocked") can be returned with HTTP 200 by rewriting
+    // proxies — they must be treated as a block, not as page content.
+    /<title>\s*Attention Required/i.test(head) ||
+    /Sorry, you have been blocked|Why have I been blocked/i.test(head) ||
     /cf-browser-verification|challenge-platform|cf_chl_opt|Checking your browser before/i.test(head) ||
     /Enable JavaScript and cookies to continue/i.test(head)
   );
@@ -433,11 +438,18 @@ async function tocNovelhall(url) {
     const href = a.getAttribute("href");
     if (href) out.push({ url: absoluteUrl(url, href), title: (a.textContent || "").trim() });
   });
-  return out;
+  // NovelHall's page leads with a short "latest chapters" block (newest
+  // first) before the full ascending catalog. Dedupe keeping the LAST
+  // occurrence so the catalog copies win and reading order survives.
+  const items = dedupeByUrl([...out].reverse()).reverse();
+  return items;
 }
 
 async function tocFreeWebNovel(url) {
-  const base = url.split("?")[0].replace(/\/$/, "");
+  let base = url.split("?")[0].replace(/\/$/, "");
+  // FreeWebNovel restructured book URLs from /{slug}.html to /novel/{slug};
+  // the old .html URLs now 404. Rewrite so saved/old links keep working.
+  base = base.replace(/^(https?:\/\/[^/]+\/)([a-z0-9-]+)\.html$/i, "$1novel/$2");
   const html = await getText(base);
   const doc = parseHtml(html);
   const out = [];
@@ -940,6 +952,9 @@ async function bodySnowyTranslations(url) {
 
 async function tocNovelFire(url) {
   let base = url.replace(/\/$/, "");
+  // NovelFire restructured book URLs from /novel/{slug} to /book/{slug};
+  // the old /novel/ URLs now 404. Rewrite so saved/old links keep working.
+  base = base.replace(/\/novel\//, "/book/");
   if (base.endsWith("/chapters")) base = base.slice(0, -"/chapters".length);
   const chaptersUrl = `${base}/chapters`;
   const firstHtml = await getText(chaptersUrl);
@@ -950,9 +965,19 @@ async function tocNovelFire(url) {
       .querySelectorAll(".chapter-list li a, #chapter-list li a")
       .forEach((a) => {
         const href = a.getAttribute("href");
+        // Rendering proxies rewrite hrefs as ?url=<encoded target>, which
+        // hides the "/chapter-" marker — test the unwrapped URL instead.
+        const clean = href ? unwrapProxyUrl(href) : "";
         // Only include actual chapter URLs, not nav/latest links
-        if (href && href.includes('/chapter-'))
-          items.push({ url: absoluteUrl(chaptersUrl, href), title: (a.textContent || "").trim() });
+        if (clean.includes('/chapter-')) {
+          // Anchor text concatenates number + title + "x ago" update time;
+          // the clean title lives on .chapter-title / the title attribute.
+          const t =
+            a.querySelector?.(".chapter-title")?.textContent?.trim() ||
+            a.getAttribute("title") ||
+            (a.textContent || "").trim();
+          items.push({ url: absoluteUrl(chaptersUrl, clean), title: t });
+        }
       });
     return items;
   };
@@ -2260,6 +2285,38 @@ async function tocAo3(url) {
   return dedupeByUrl(items);
 }
 
+// --- Parahumans (Worm): the /table-of-contents/ page links chapters in two
+// URL styles — category paths for the early arcs
+// (/category/stories-arcs-1-10/arc-1-gestation/1-01/) and dated permalinks
+// for the rest (/2012/06/30/plague-12-2/). The generic link sweep only
+// clusters one style and returns a small slice, so collect both, in
+// document order, from the page's .entry-content.
+async function tocParahumans(url) {
+  const html = await getText(url);
+  const doc = parseHtml(html);
+  const root = doc.querySelector(".entry-content") || doc;
+  const seen = new Set();
+  const out = [];
+  root.querySelectorAll("a[href]").forEach((a) => {
+    const href = a.getAttribute("href") || "";
+    let abs;
+    try {
+      abs = new URL(href, url).href;
+    } catch {
+      return;
+    }
+    if (!/parahumans\.wordpress\.com\/(category\/stories|20\d{2}\/)/.test(abs)) return;
+    if (seen.has(abs)) return;
+    seen.add(abs);
+    const title =
+      (a.textContent || "").replace(/\s+/g, " ").trim() ||
+      abs.split("/").filter(Boolean).pop() ||
+      "";
+    out.push({ url: abs, title });
+  });
+  return out;
+}
+
 // --- LightNovelWorld family: /chapters?page=N ---
 async function tocLightNovelWorld(url) {
   const base = url.split("?")[0].replace(/\/$/, "").replace(/\/chapters$/, "");
@@ -2314,13 +2371,32 @@ async function tocMadara(url) {
   const base = url.split("?")[0].replace(/\/$/, "") + "/";
   const origin = new URL(url).origin;
   const pick = (h) => linksFrom(h, base, "li.wp-manga-chapter a:not([title]), li.wp-manga-chapter a");
-  // 1. Modern theme: POST-free AJAX endpoint on the series URL.
+  // 1. Modern theme: AJAX endpoint on the series URL. Some themes serve the
+  // chapter list only to POST — a GET returns the book page itself (which
+  // has no chapter list), so fall back to POST when GET yields nothing.
   let items = [];
+  const ajaxUrl = `${base}ajax/chapters/`;
   try {
-    const res = await httpGet(`${base}ajax/chapters/`, { "X-Requested-With": "XMLHttpRequest" });
+    const res = await httpGet(ajaxUrl, { "X-Requested-With": "XMLHttpRequest" });
     items = pick(await res.text());
   } catch {
     /* fall through */
+  }
+  if (!items.length) {
+    for (const proxy of PROXIES) {
+      try {
+        const res = await fetch(buildUrl(proxy, ajaxUrl), {
+          method: "POST",
+          headers: { ...DEFAULT_HEADERS, "X-Requested-With": "XMLHttpRequest" },
+          signal: AbortSignal.timeout(30000),
+        });
+        if (!res.ok) continue;
+        items = pick(await res.text());
+        if (items.length) break;
+      } catch {
+        /* try next route */
+      }
+    }
   }
   // 2. Older theme: admin-ajax with the numeric post id.
   if (!items.length) {
@@ -3326,6 +3402,7 @@ const MAJOR_DOMAINS = [
 
 /** Chapter-body selectors for the dedicated sites, tried in order. */
 const MAJOR_BODY_SELECTORS = {
+  parahumans: ".entry-content",
   royalroad: "div.chapter-inner, div.chapter-content, .page-content-wrapper",
   scribblehub: "div#chp_raw, div.chp_raw, div.fic_row",
   tapas: "#viewport, article.viewer__body, article",
@@ -3377,6 +3454,7 @@ const MAJOR_SITES = [
   [/(^|\.)tapas\.io$/, "tapas"],
   [/(^|\.)novelupdates\.com$/, "novelupdates"],
   [/(^|\.)(fanfiction|fictionpress)\.net$/, "fanfiction"],
+  [/(^|\.)parahumans\.wordpress\.com$/, "parahumans"],
   [/(^|\.)fictionpress\.com$/, "fanfiction"],
   [/(^|\.)archiveofourown\.org$/, "ao3"],
   [
@@ -3533,6 +3611,8 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         return tocNovelUpdates(tocUrl);
       case "fanfiction":
         return tocFanFiction(tocUrl);
+      case "parahumans":
+        return tocParahumans(tocUrl);
       case "ao3":
         return tocAo3(tocUrl);
       case "lightnovelworld":
@@ -3827,10 +3907,31 @@ export async function fetchBookMeta(tocUrl) {
       }
       return "";
     };
+    const pickSrc = (sels) => {
+      for (const s of sels) {
+        const el = doc.querySelector(s);
+        const v = (
+          el?.getAttribute?.("content") ||
+          el?.getAttribute?.("src") ||
+          el?.getAttribute?.("data-src") ||
+          ""
+        ).trim();
+        if (v) {
+          try {
+            return new URL(v, tocUrl).href;
+          } catch {
+            return v;
+          }
+        }
+      }
+      return "";
+    };
     return {
-      title: pick(['meta[property="og:title"]', "h1", "title"]),
-      author: pick(['meta[property="og:novel:author"]', '[itemprop="author"]', ".author a", ".author"]),
-      cover: pick(['meta[property="og:image"]', ".book-img img", ".novel-cover img", "img.cover"]),
+      // NovelFull-family pages have no og:title and their first <h1> is the
+      // genre link (e.g. "Action"), while the real title is <h3 class="title">.
+      title: pick(['meta[property="og:title"]', 'meta[name="twitter:title"]', ".desc h3.title", "h3.title", "h1", "title"]),
+      author: pick(['meta[property="og:novel:author"]', '[itemprop="author"]', ".author a", 'a[href*="/author/"]', ".author"]),
+      cover: pickSrc(['meta[property="og:image"]', ".book img", ".book-img img", ".novel-cover img", "img.cover"]),
       description: pick(['meta[property="og:description"]', 'meta[name="description"]']),
     };
   } catch {
