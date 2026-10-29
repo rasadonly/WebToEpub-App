@@ -8,6 +8,9 @@ class ReadnovelmtlParser extends Parser {
     }
 
     async getChapterUrls(dom) {
+        if (!dom) {
+            return [];
+        }
         let menu = dom.querySelector("#chapters") ? dom.querySelector("#chapters").parentElement : dom.querySelector(".accordion");
         return util.hyperlinksToChapterList(menu);
     }

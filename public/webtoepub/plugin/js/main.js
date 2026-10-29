@@ -333,6 +333,19 @@ var main = (function() {
     }
 
     async function populateControlsWithDom(url, dom) {
+        // Guard: some CORS proxies answer 200 with a non-HTML payload (e.g. a
+        // JSON error body), so the response handler never parses the page and
+        // responseXML is undefined. Marching on would crash the site parser
+        // with "Cannot read properties of undefined (reading 'querySelector')"
+        // — fail with a readable message instead (mirrors the chapter-fetch
+        // guard in Parser.fetchWebPageContent).
+        if (dom == null) {
+            throw new Error(
+                "Could not load the page: every fetch route returned an unreadable response. " +
+                "The site may be blocking automated access (e.g. Cloudflare). " +
+                "Try again in a moment, or try a different proxy in the CORS PROXY selector."
+            );
+        }
         initialWebPage = dom;
         setUiFieldToValue("startingUrlInput", url);
 
