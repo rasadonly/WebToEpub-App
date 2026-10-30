@@ -27,15 +27,10 @@ class SiteSearchEngine {
      * whose parsers were individually verified (TOC + chapter content).
      */
     static WORKING_HOSTS = new Set([
-            "69shuba.com",
             "aerialrain.com",
             "akknovel.com",
             "alicesw.com",
-            "alphapolis.co.jp",
-            "alternatehistory.com",
             "asianhobbyist.com",
-            "asianovel.net",
-            "b.faloo.com",
             "bakapervert.wordpress.com",
             "betwixtedbutterfly.com",
             "biquge.tw",
@@ -46,24 +41,16 @@ class SiteSearchEngine {
             "crescentmoon.blog",
             "crushnovelpo.blog",
             "czbooks.net",
-            "dasuitl.com",
             "dummynovels.com",
             "emberlib731.xyz",
             "exiledrebelsscanlations.com",
-            "fanfiction.net",
             "fanmtl.com",
             "fannovel.com",
             "fannovels.com",
             "fansmtl.com",
             "ffxs8.com",
-            "fictionpress.com",
-            "ficwad.com",
-            "fimfiction.net",
             "flyonthewalls.blog",
-            "forum.questionablequesting.com",
-            "foxteller.com",
             "freewebnovel.com",
-            "frostfire10.wordpress.com",
             "goldennovel.com",
             "hiraethtranslation.com",
             "hoxionia.com",
@@ -71,24 +58,14 @@ class SiteSearchEngine {
             "ilwxs.com",
             "indowebnovel.id",
             "indratranslations.com",
-            "inkitt.com",
-            "isotls.com",
-            "ixdzs.tw",
-            "ixdzs8.com",
             "japtem.com",
-            "jjwxc.net",
-            "jobnib.com",
             "jonaxxstories.com",
             "kakuyomu.jp",
             "karistudio.com",
             "lazygirltranslations.com",
             "leafstudio.site",
             "libread.com",
-            "lightnovelstranslations.com",
-            "literotica.com",
             "ln.hako.vn",
-            "lnmtl.com",
-            "lorenovels.com",
             "m.88xiaoshuo.net",
             "m.ilwxs.com",
             "m.metanovel.org",
@@ -96,10 +73,6 @@ class SiteSearchEngine {
             "m.tapas.io",
             "m.ttshu8.com",
             "m.xpaoshuba.com",
-            "madnovel.com",
-            "mcstories.com",
-            "mvlempyr.com",
-            "mvlempyr.io",
             "mydramanovel.com",
             "mznovels.com",
             "ncode.syosetu.com",
@@ -112,64 +85,45 @@ class SiteSearchEngine {
             "novel.naver.com",
             "novel543.com",
             "novelarrow.com",
-            "novelbuddy.com",
-            "novelbuddy.io",
-            "novelbuddy.me",
-            "novelcool.com",
             "noveldrama.org",
             "novelfire.net",
             "novelfull.com",
             "novelfull.net",
             "novelhi.com",
             "novelib.com",
-            "novelight.net",
             "novelingua.com",
-            "novelnice.com",
-            "novelsquare.blog",
-            "novelversetranslations.com",
             "novgo.me",
             "novgo.net",
             "nyantl.wordpress.com",
-            "ontimestory.eu",
             "pandanovel.co",
-            "pawread.com",
             "peachpitting.com",
             "peachpuff.in",
             "piaotia.com",
-            "pienovels.com",
             "powanjuan.cc",
             "ptwxz.com",
             "quanben.io",
             "quanben5.io",
             "questionablequesting.com",
             "ranobes.com",
-            "re-library.com",
             "readhive.org",
             "readingpia.me",
             "readnovelfull.com",
-            "readnovelmtl.com",
             "readwn.com",
             "rtd.moe",
             "rubymaybetranslations.com",
             "sasakitomyiano.wordpress.com",
             "scifistories.com",
             "scribblehub.com",
-            "secondlifetranslations.com",
             "shalvationtranslations.wordpress.com",
             "shanghaifantasy.com",
-            "shikkakutranslations.org",
             "shintranslations.com",
-            "shmtranslations.com",
-            "skydemonorder.com",
             "snoutandco.ca",
             "snowycodex.com",
             "snowytranslations.com",
-            "sonako.fandom.com",
             "sonicmtl.com",
             "storiesonline.net",
             "taffygirl13.wordpress.com",
             "teanovel.com",
-            "teenfic.net",
             "tianyabooks.com",
             "tigertranslations.org",
             "timotxt.com",
@@ -198,7 +152,6 @@ class SiteSearchEngine {
             "wuxiaworld.eu",
             "wuxiaworld.site",
             "xbanxia.cc",
-            "xiaxuenovels.xyz",
             "xpaoshuba.com",
             "yeduge.com",
             "zhenhunxiaoshuo.com",
@@ -370,12 +323,12 @@ class SiteSearchEngine {
                 searchUrl: (q) => `https://novgo.net/search?keyword=${encodeURIComponent(q)}`,
                 parseResults: (dom) => {
                     let results = [];
-                    let items = dom.querySelectorAll(".list-novel .novel-item, .update-item, .novel-item, .post-item");
+                    let items = dom.querySelectorAll(".list-novel .novel-item, .update-item, .novel-item, .post-item, .li-row");
                     for (let item of items) {
-                        let a = item.querySelector("h3 a, .novel-title a, .post-title a, a");
+                        let a = item.querySelector("h3 a, .novel-title a, .post-title a, a[title], a");
                         if (a) {
                             results.push({
-                                title: a.textContent.trim(),
+                                title: (a.getAttribute("title") || a.textContent).trim(),
                                 url: SiteSearchEngine.resolveUrl("https://novgo.net", a.getAttribute("href")),
                                 snippet: "",
                                 source: "BoxNovel"
@@ -650,13 +603,18 @@ class SiteSearchEngine {
 
     static parseWordpressStyle(dom, baseUrl, sourceName) {
         let results = [];
-        let items = dom.querySelectorAll("article, .post-item, .latest-post, .entry");
+        let items = dom.querySelectorAll("article, .post-item, .latest-post, .entry, .flexbox2-item");
         for (let item of items) {
             let a = item.querySelector(".entry-title a, .post-title a, h2 a") || item.querySelector("a");
             if (a && a.href) {
                 let snippet = item.querySelector(".entry-summary, .post-excerpt, p");
+                // flexbox2 grid themes (e.g. indowebnovel) put the clean
+                // title in the first span of .flexbox2-title; the link's
+                // own text would concatenate title + studio tag.
+                let title = item.querySelector(".flexbox2-title span")?.textContent?.trim()
+                    || a.textContent.trim();
                 results.push({
-                    title: a.textContent.trim(),
+                    title: title,
                     url: SiteSearchEngine.resolveUrl(baseUrl, a.getAttribute("href")),
                     snippet: snippet ? snippet.textContent.trim().substring(0, 150) : "",
                     source: sourceName
