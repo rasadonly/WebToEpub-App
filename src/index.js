@@ -10,6 +10,7 @@ import crypto from "node:crypto";
 import {
   fetchChapterLinks,
   fetchChapterContent,
+  fetchWholePage,
   fetchBookMeta,
   mapPool,
   supportedDomains,
@@ -669,12 +670,18 @@ async function convertJob(job, { tocUrl, providedChapters, metadata, options, se
   // differs IS the chapter content. The detected selector is then used
   // for every chapter in this job. Best-effort: any failure falls back
   // to the normal per-chapter path.
+  // The main URL is chapter 1 on undefined-parser hosts, but it is a
+  // landing page, not a chapter page - never compare it, and never apply
+  // a chapter selector to it (it downloads whole, with no selector).
+  const normJobUrl = (u) => String(u || "").split("#")[0].replace(/\/$/, "");
+  const isMainUrl = (u) => normJobUrl(u) === normJobUrl(tocUrl);
+  const realChapters = list.filter((c) => !isMainUrl(c.url));
   let detectedSelector = "";
-  if (!selector && list.length >= 2) {
+  if (!selector && realChapters.length >= 2) {
     try {
-      const host = new URL(list[0].url).hostname;
+      const host = new URL(realChapters[0].url).hostname;
       if (siteKey(host) === "generic") {
-        const detected = await detectChapterSelectors(list[0].url, list[1].url);
+        const detected = await detectChapterSelectors(realChapters[0].url, realChapters[1].url);
         if (detected?.content) {
           detectedSelector = detected.content;
           job.phase = `Detected chapter selector: ${detectedSelector}`;
@@ -712,7 +719,9 @@ async function convertJob(job, { tocUrl, providedChapters, metadata, options, se
       }
       const saved = await chapterPool.run(async () => {
         if (stopped()) return false;
-        const content = await fetchChapterContent(c.url, selector || detectedSelector);
+        const content = isMainUrl(c.url)
+          ? await fetchWholePage(c.url)
+          : await fetchChapterContent(c.url, selector || detectedSelector);
         if (stopped()) return false;
         await writeChapterFile(file, { title: c.title || `Chapter ${i + 1}`, content });
         return true;
