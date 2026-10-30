@@ -22,6 +22,195 @@ class SiteSearchEngine {
     /** Timeout per proxy attempt in ms */
     static PROXY_TIMEOUT_MS = 4000;
 
+    /**
+     * The verified-working sites (2026-10-30 prune): search only covers sites
+     * whose parsers were individually verified (TOC + chapter content).
+     */
+    static WORKING_HOSTS = new Set([
+            "69shuba.com",
+            "aerialrain.com",
+            "akknovel.com",
+            "alicesw.com",
+            "alphapolis.co.jp",
+            "alternatehistory.com",
+            "asianhobbyist.com",
+            "asianovel.net",
+            "b.faloo.com",
+            "bakapervert.wordpress.com",
+            "betwixtedbutterfly.com",
+            "biquge.tw",
+            "cclawtranslations.home.blog",
+            "chosentwofanfic.com",
+            "chyoa.com",
+            "ckandawrites.online",
+            "crescentmoon.blog",
+            "crushnovelpo.blog",
+            "czbooks.net",
+            "dasuitl.com",
+            "dummynovels.com",
+            "emberlib731.xyz",
+            "exiledrebelsscanlations.com",
+            "fanfiction.net",
+            "fanmtl.com",
+            "fannovel.com",
+            "fannovels.com",
+            "fansmtl.com",
+            "ffxs8.com",
+            "fictionpress.com",
+            "ficwad.com",
+            "fimfiction.net",
+            "flyonthewalls.blog",
+            "forum.questionablequesting.com",
+            "foxteller.com",
+            "freewebnovel.com",
+            "frostfire10.wordpress.com",
+            "goldennovel.com",
+            "hiraethtranslation.com",
+            "hoxionia.com",
+            "hui3r.wordpress.com",
+            "ilwxs.com",
+            "indowebnovel.id",
+            "indratranslations.com",
+            "inkitt.com",
+            "isotls.com",
+            "ixdzs.tw",
+            "ixdzs8.com",
+            "japtem.com",
+            "jjwxc.net",
+            "jobnib.com",
+            "jonaxxstories.com",
+            "kakuyomu.jp",
+            "karistudio.com",
+            "lazygirltranslations.com",
+            "leafstudio.site",
+            "libread.com",
+            "lightnovelstranslations.com",
+            "literotica.com",
+            "ln.hako.vn",
+            "lnmtl.com",
+            "lorenovels.com",
+            "m.88xiaoshuo.net",
+            "m.ilwxs.com",
+            "m.metanovel.org",
+            "m.sjks88.com",
+            "m.tapas.io",
+            "m.ttshu8.com",
+            "m.xpaoshuba.com",
+            "madnovel.com",
+            "mcstories.com",
+            "mvlempyr.com",
+            "mvlempyr.io",
+            "mydramanovel.com",
+            "mznovels.com",
+            "ncode.syosetu.com",
+            "neobook.org",
+            "nhvnovels.com",
+            "nineheavens.org",
+            "nobadnovel.com",
+            "novel-bin.com",
+            "novel-bin.net",
+            "novel.naver.com",
+            "novel543.com",
+            "novelarrow.com",
+            "novelbuddy.com",
+            "novelbuddy.io",
+            "novelbuddy.me",
+            "novelcool.com",
+            "noveldrama.org",
+            "novelfire.net",
+            "novelfull.com",
+            "novelfull.net",
+            "novelhi.com",
+            "novelib.com",
+            "novelight.net",
+            "novelingua.com",
+            "novelnice.com",
+            "novelsquare.blog",
+            "novelversetranslations.com",
+            "novgo.me",
+            "novgo.net",
+            "nyantl.wordpress.com",
+            "ontimestory.eu",
+            "pandanovel.co",
+            "pawread.com",
+            "peachpitting.com",
+            "peachpuff.in",
+            "piaotia.com",
+            "pienovels.com",
+            "powanjuan.cc",
+            "ptwxz.com",
+            "quanben.io",
+            "quanben5.io",
+            "questionablequesting.com",
+            "ranobes.com",
+            "re-library.com",
+            "readhive.org",
+            "readingpia.me",
+            "readnovelfull.com",
+            "readnovelmtl.com",
+            "readwn.com",
+            "rtd.moe",
+            "rubymaybetranslations.com",
+            "sasakitomyiano.wordpress.com",
+            "scifistories.com",
+            "scribblehub.com",
+            "secondlifetranslations.com",
+            "shalvationtranslations.wordpress.com",
+            "shanghaifantasy.com",
+            "shikkakutranslations.org",
+            "shintranslations.com",
+            "shmtranslations.com",
+            "skydemonorder.com",
+            "snoutandco.ca",
+            "snowycodex.com",
+            "snowytranslations.com",
+            "sonako.fandom.com",
+            "sonicmtl.com",
+            "storiesonline.net",
+            "taffygirl13.wordpress.com",
+            "teanovel.com",
+            "teenfic.net",
+            "tianyabooks.com",
+            "tigertranslations.org",
+            "timotxt.com",
+            "tomotranslations.com",
+            "translationchicken.com",
+            "truyennhabo.com",
+            "trxs.cc",
+            "ttshu8.com",
+            "twkan.com",
+            "universalnovel.com",
+            "unlimitednovelfailures.mangamatters.com",
+            "velvet-reverie.org",
+            "wanderertl130.id",
+            "wanderinginn.com",
+            "watashiwasugoidesu.com",
+            "wattpad.com",
+            "webnovel.com",
+            "wetriedtls.com",
+            "woopread.com",
+            "wtnovels.com",
+            "wtr-lab.com",
+            "wuxia.city",
+            "wuxia.click",
+            "wuxiabox.com",
+            "wuxiaspot.com",
+            "wuxiaworld.com",
+            "wuxiaworld.eu",
+            "wuxiaworld.site",
+            "xbanxia.cc",
+            "xiaxuenovels.xyz",
+            "xpaoshuba.com",
+            "yeduge.com",
+            "zhenhunxiaoshuo.com",
+            "zirusmusings.net"
+    ]);
+
+    static _isWorkingHost(hostname) {
+        let h = String(hostname || "").toLowerCase().replace(/^www\./, "");
+        return SiteSearchEngine.WORKING_HOSTS.has(h);
+    }
+
     // ─── Site Configurations (cached) ────────────────────────────────────
 
     static _primarySites = null;
@@ -29,14 +218,16 @@ class SiteSearchEngine {
 
     static get PRIMARY_SITES() {
         if (!SiteSearchEngine._primarySites) {
-            SiteSearchEngine._primarySites = SiteSearchEngine._buildPrimarySites();
+            SiteSearchEngine._primarySites = SiteSearchEngine._buildPrimarySites()
+                .filter(s => SiteSearchEngine._isWorkingHost(s.hostname));
         }
         return SiteSearchEngine._primarySites;
     }
 
     static get SECONDARY_SITES() {
         if (!SiteSearchEngine._secondarySites) {
-            SiteSearchEngine._secondarySites = SiteSearchEngine._buildSecondarySites();
+            SiteSearchEngine._secondarySites = SiteSearchEngine._buildSecondarySites()
+                .filter(s => SiteSearchEngine._isWorkingHost(s.hostname));
         }
         return SiteSearchEngine._secondarySites;
     }
@@ -90,28 +281,6 @@ class SiteSearchEngine {
                 }
             },
             {
-                name: "RoyalRoad",
-                hostname: "royalroad.com",
-                searchUrl: (q) => `https://www.royalroad.com/fictions/search?title=${encodeURIComponent(q)}`,
-                parseResults: (dom) => {
-                    let results = [];
-                    let items = dom.querySelectorAll(".fiction-list-item");
-                    for (let item of items) {
-                        let a = item.querySelector("h2.fiction-title a") || item.querySelector("a.font-red-sunglo") || item.querySelector("a");
-                        if (a && a.href) {
-                            let snippet = item.querySelector(".margin-bottom-10 p") || item.querySelector(".hidden-content");
-                            results.push({
-                                title: a.textContent.trim(),
-                                url: SiteSearchEngine.resolveUrl("https://www.royalroad.com", a.getAttribute("href")),
-                                snippet: snippet ? snippet.textContent.trim().substring(0, 150) : "",
-                                source: "RoyalRoad"
-                            });
-                        }
-                    }
-                    return results;
-                }
-            },
-            {
                 name: "FreeWebNovel",
                 hostname: "freewebnovel.com",
                 searchUrl: (q) => `https://freewebnovel.com/search/?searchkey=${encodeURIComponent(q)}`,
@@ -128,27 +297,6 @@ class SiteSearchEngine {
                                 url: SiteSearchEngine.resolveUrl("https://freewebnovel.com", a.getAttribute("href")),
                                 snippet: snippet ? snippet.textContent.trim().substring(0, 150) : "",
                                 source: "FreeWebNovel"
-                            });
-                        }
-                    }
-                    return results;
-                }
-            },
-            {
-                name: "NovelHall",
-                hostname: "novelhall.com",
-                searchUrl: (q) => `https://www.novelhall.com/index.php?s=so&module=book&keyword=${encodeURIComponent(q)}`,
-                parseResults: (dom) => {
-                    let results = [];
-                    let items = dom.querySelectorAll(".section3 table tr");
-                    for (let item of items) {
-                        let a = item.querySelector("td:nth-child(2) a");
-                        if (a && a.href) {
-                            results.push({
-                                title: a.textContent.trim(),
-                                url: SiteSearchEngine.resolveUrl("https://www.novelhall.com", a.getAttribute("href")),
-                                snippet: "",
-                                source: "NovelHall"
                             });
                         }
                     }
@@ -271,28 +419,6 @@ class SiteSearchEngine {
                 }
             },
             {
-                name: "NovelGo",
-                hostname: "novelgo.id",
-                searchUrl: (q) => `https://novelgo.id/?post_type=novel&s=${encodeURIComponent(q)}`,
-                parseResults: (dom) => {
-                    let results = [];
-                    let items = dom.querySelectorAll(".novel-item, article, .bs");
-                    for (let item of items) {
-                        let a = item.querySelector("a[href*='/novel/'], a[href*='/book/']");
-                        if (a) {
-                            let titleEl = item.querySelector(".novel-item-title, .novel-title, .tt, .ntitle, h3, h2") || a;
-                            results.push({
-                                title: titleEl.textContent.trim(),
-                                url: SiteSearchEngine.resolveUrl("https://novelgo.id", a.getAttribute("href")),
-                                snippet: "",
-                                source: "NovelGo"
-                            });
-                        }
-                    }
-                    return results;
-                }
-            },
-            {
                 name: "BoxNovel",
                 hostname: "novgo.net",
                 searchUrl: (q) => `https://novgo.net/search?keyword=${encodeURIComponent(q)}`,
@@ -342,12 +468,6 @@ class SiteSearchEngine {
     static _buildSecondarySites() {
         let sites = [
             {
-                name: "NovelNext",
-                hostname: "novelnext.com",
-                searchUrl: (q) => `https://novelnext.com/search?keyword=${encodeURIComponent(q)}`,
-                parseResults: (dom) => SiteSearchEngine.parseNovelFullStyle(dom, "https://novelnext.com", "NovelNext")
-            },
-            {
                 name: "FanFiction.net",
                 hostname: "www.fanfiction.net",
                 searchUrl: (q) => `https://www.fanfiction.net/search/?keywords=${encodeURIComponent(q)}&type=story`,
@@ -392,6 +512,7 @@ class SiteSearchEngine {
         ]);
 
         const addIfNew = (h, config) => {
+            if (!SiteSearchEngine._isWorkingHost(h)) return;
             let lh = h.toLowerCase();
             if (!existingHosts.has(lh)) {
                 existingHosts.add(lh);
@@ -400,7 +521,7 @@ class SiteSearchEngine {
         };
 
         // NovelFull Engine
-        const novelFullHosts = ["all-novelfull.net","allnovel.org","allnovelfull.com","allnovelfull.net","allnovelnext.com","boxnovel.org","fastnovel.net","novel-bin.com","novel-bin.net","novelbin.net","noveldrama.org","novelfull.com","novelfull.net","novelgate.net","novelgreat.net","novelmax.net","novelnext.com","novelnext.net","novelnextz.com","novelonlinefree.info","noveltop1.org","novgo.net","novlove.com","readnovelfull.me","thenovelbin.org","topnovelfull.com","wuxia-world.online","novelnice.com"];
+        const novelFullHosts = ["all-novelfull.net","allnovel.org","allnovelfull.com","allnovelfull.net","allnovelnext.com","boxnovel.org","fastnovel.net","novel-bin.com","novel-bin.net","novelbin.net","noveldrama.org","novelfull.com","novelfull.net","novelgate.net","novelgreat.net","novelmax.net","novelnext.com","novelnext.net","novelnextz.com","novelonlinefree.info","noveltop1.org","novgo.net","novlove.com","readnovelfull.me","thenovelbin.org","topnovelfull.com","wuxia-world.online","novelnice.com","novgo.me",];
         for (let h of novelFullHosts) {
             addIfNew(h, {
                 name: h, hostname: h,
@@ -410,7 +531,7 @@ class SiteSearchEngine {
         }
 
         // Madara Engine
-        const madaraHosts = ["greenztl2.com","indratranslations.com","kdtnovels.com","mangaread.co","mangasushi.net","manhwaden.com","manhwatop.com","readwebnovel.xyz","vipnovel.com","wuxiaworld.site","hiraethtranslation.com","novelmic.com","sonicmtl.com","zetrotranslation.com"];
+        const madaraHosts = ["greenztl2.com","indratranslations.com","kdtnovels.com","mangaread.co","mangasushi.net","manhwaden.com","manhwatop.com","readwebnovel.xyz","vipnovel.com","wuxiaworld.site","hiraethtranslation.com","novelmic.com","sonicmtl.com","zetrotranslation.com","crescentmoon.blog",];
         for (let h of madaraHosts) {
             addIfNew(h, {
                 name: h, hostname: h,
@@ -430,7 +551,7 @@ class SiteSearchEngine {
         }
 
         // Wordpress Engine
-        const wpHosts = ["aerialrain.com","asianhobbyist.com","bakapervert.wordpress.com","bookswithqianya.com","cangji.net","cclawtranslations.home.blog","cherrymist.cafe","chickengege.org","chrysanthemumgarden.com","ckandawrites.online","creativenovels.com","crimsonmagic.me","cyborg-tl.com","dasuitl.com","emberlib731.xyz","exiledrebelsscanlations.com","flyonthewalls.blog","frostfire10.wordpress.com","gravitynovels.com","gravitytales.com","hiscension.com","hui3r.wordpress.com","isekaicyborg.wordpress.com","jonaxxstories.com","knoxt.space","lazygirltranslations.com","lightnovelfr.com","lightnovelstranslations.com","lilyonthevalley.com","lorenovels.com","midnightrambles.in","moonbunnycafe.com","my-novel.online","nhvnovels.com","novelhall.com","novelib.com","novelingua.com","novelmao.com","novelsknight.punchmanga.online","novelversetranslations.com","nyantl.wordpress.com","ontimestory.eu","pienovels.com","re-library.com","requiemtls.com","rtenzo.net","rubymaybetranslations.com","sasakitomyiano.wordpress.com","secondlifetranslations.com","shalvationtranslations.wordpress.com","shinningnoveltranslations.com","shinsori.com","shmtranslations.com","snowycodex.com","soafp.com","soverse.com","springofromance.com","taffygirl13.wordpress.com","translationchicken.com","unlimitednovelfailures.mangamatters.com","wanderertl130.id","wanderinginn.com","whitemoonlightnovels.com","wtnovels.com","xiaxuenovels.xyz","zenithnovels.com","nocturnetranslations.com"];
+        const wpHosts = ["aerialrain.com","asianhobbyist.com","bakapervert.wordpress.com","bookswithqianya.com","cangji.net","cclawtranslations.home.blog","cherrymist.cafe","chickengege.org","chrysanthemumgarden.com","ckandawrites.online","creativenovels.com","crimsonmagic.me","cyborg-tl.com","dasuitl.com","emberlib731.xyz","exiledrebelsscanlations.com","flyonthewalls.blog","frostfire10.wordpress.com","gravitynovels.com","gravitytales.com","hiscension.com","hui3r.wordpress.com","isekaicyborg.wordpress.com","jonaxxstories.com","knoxt.space","lazygirltranslations.com","lightnovelfr.com","lightnovelstranslations.com","lilyonthevalley.com","lorenovels.com","midnightrambles.in","moonbunnycafe.com","my-novel.online","nhvnovels.com","novelhall.com","novelib.com","novelingua.com","novelmao.com","novelsknight.punchmanga.online","novelversetranslations.com","nyantl.wordpress.com","ontimestory.eu","pienovels.com","re-library.com","requiemtls.com","rtenzo.net","rubymaybetranslations.com","sasakitomyiano.wordpress.com","secondlifetranslations.com","shalvationtranslations.wordpress.com","shinningnoveltranslations.com","shinsori.com","shmtranslations.com","snowycodex.com","soafp.com","soverse.com","springofromance.com","taffygirl13.wordpress.com","translationchicken.com","unlimitednovelfailures.mangamatters.com","wanderertl130.id","wanderinginn.com","whitemoonlightnovels.com","wtnovels.com","xiaxuenovels.xyz","zenithnovels.com","nocturnetranslations.com","snowytranslations.com",];
         for (let h of wpHosts) {
             addIfNew(h, {
                 name: h, hostname: h,
@@ -460,7 +581,7 @@ class SiteSearchEngine {
         }
 
         // General / Other Sites (~400 sites)
-        const generalHosts = ["230book.net","38xs.com","69shuba.tw","88xiaoshuo.net","aerialrain.com","alicesw.com","alphapolis.co.jp","alternatehistory.com","api.mangadex.org","app.yoru.world","asianfanfics.com","asianhobbyist.com","asianovel.net","b.faloo.com","babelnovel.com","baka-tsuki.org","bednovel.com","betwixtedbutterfly.com","biquge.tw","book18.org","bookswithqianya.com","botitranslation.com","boxnovel.net","boylove.cc","brightnovels.com","brittanypage43.com","buntls.com","cangji.net","cherrymist.cafe","chickengege.org","chosentwofanfic.com","chrysanthemumgarden.com","chyoa.com","ckandawrites.online","comics.8muses.com","creativenovels.com","crimsontranslations.com","crushnovelpo.blog","cyborg-tl.com","czbooks.net","dao-divine-tl.com","dark-novels.ru","dasuitl.com","ddxs.com","deviantart.com","dummynovels.com","edanglarstranslations.com","emberlib731.xyz","empirenovel.com","erofus.com","estar.jp","exiledrebelsscanlations.com","fanfiction.com.br","fanfictionero.com","fanficus.com","fastnovel.net","fenrirealm.com","ffxs8.com","fic.fan","ficador.com","ficbook.net","fictionhunt.com","fictionmania.tv","fictionzone.net","ficwad.com","fimfiction.net","findnovel.net","finestories.com","flying-lines.com","flyonthewalls.blog","forum.questionablequesting.com","forums.nrvnqsr.com","forums.spacebattles.com","forums.sufficientvelocity.com","foxteller.com","freewebnovel.com","fuhuzz.pro","gamefaqs.gamespot.com","genesistudio.com","global.novelpia.com","goldennovel.com","goodnovel.com","graverobbertl.site","gravitynovels.com","gravitytales.com","gunnerkrigg.com","gutenberg.spiegel.de","helioscans.com","hentai-foundry.com","hiscension.com","hostednovel.com","hui3r.wordpress.com","idleturtle-translations.com","ilwxs.com","imgur.com","indowebnovel.id","indratranslations.com","inkitt.com","inoveltranslation.com","isotls.com","ixdzs.tw","ixdzs8.com","jadescrolls.com","japtem.com","jjwxc.net","jonaxxstories.com","jpmtl.com","kakuyomu.jp","karistudio.com","kaystls.site","kdtnovels.com","knoxt.space","ko-fi.com","lanry.space","lazygirltranslations.com","leafstudio.site","libread.com","libri7.com","lightnovelasia.com","lightnovelfr.com","lightnovels.live","lightnovelstranslations.com","lilyonthevalley.com","literotica.com","lnmtl.com","lorenovels.com","m.38xs.com","m.88xiaoshuo.net","m.bqg225.com","m.ilwxs.com","m.metanovel.org","m.qbxsw.com","m.shuhaige.net","m.sjks88.com","m.tapas.io","m.ttshu8.com","m.xpaoshuba.com","madnovel.com","magic.wizards.com","mangadex.org","mangakakalot.com","manganelo.com","mangaread.co","manhwaden.com","marx2mao.com","marxists.org","mcstories.com","meionovel.id","midnightrambles.in","mimihui.com","mistminthaven.com","moonquill.com","mottruyen.vn","mvlempyr.com","mvlempyr.io","my-novel.online","mydramanovel.com","mystorywave.com","myxls.net","mznovels.com","nanomashin.online","ncode.syosetu.com","neobook.org","nhvnovels.com","nineheavens.org","nobadnovel.com","novel.babelchain.org","novel.naver.com","novel18.syosetu.com","novel543.com","novelbuddy.com","novelbuddy.io","novelcool.com","novelebook.com","novelfever.com","novelfire.net","novelgate.net","novelgo.id","novelgreat.net","novelhall.com","novelhi.com","novelib.com","novelight.net","novelingua.com","novellive.app","novellive.com","novellive.net","novelmania.com.br","novelmao.com","novelmedium.com","novelonlinefree.info","novelonomicon.com","novelpassion.com","novels.pl","novelsect.com","novelshub.org","novelsknight.punchmanga.online","novelsonline.net","novelsonline.org","novelsquare.blog","noveltoon.mobi","novelupdates.cc","novelupdates.com","novelversetranslations.com","ntruyen.vn","nyantl.wordpress.com","old.ranobelib.me","ontimestory.eu","panda-novel.com","pandasnovel.com","patreon.com","pawread.com","peachblossomcodex.com","peachpitting.com","peachpuff.in","peachygardens.blogspot.com","piaotia.com","pienovels.com","pindangscans.com","powanjuan.cc","puretl.com","qbxsw.com","quanben.io","quanben5.io","queenrosenovel.blogspot.com","questionablequesting.com","quotev.com","rainofsnow.com","randomtranslator.com","ranobelib.me","ranobes.com","ranobes.net","ranobes.top","re-library.com","readernovel.net","readhive.org","readingpia.me","readlightnovel.cc","readnovelfull.org","readnovelmtl.com","readwn.org","reddit.com","requiemtls.com","royalroad.com","royalroadl.com","rtd.moe","rtenzo.net","rubymaybetranslations.com","ruvers.ru","sangtacviet.com","sangtacviet.vip","scifistories.com","scribblehub.com","secondlifetranslations.com","semprot.com","sexstories.com","shanghaifantasy.com","shikkakutranslations.org","shinningnoveltranslations.com","shinsori.com","shintranslations.com","shmtranslations.com","shubaow.net","shubaowb.com","shuhaige.net","sites.google.com","sjks88.com","skydemonorder.com","snoutandco.ca","snowycodex.com","soafp.com","sonako.fandom.com","sonako.wikia.com","soverse.com","spiritfanfiction.com","springofromance.com","sspai.com","starlightstream.net","storiesonline.net","storyseedling.com","taffygirl13.wordpress.com","tapas.io","tapread.com","teanovel.com","teenfic.net","tigertranslations.org","timotxt.com","tl.rulate.ru","toctruyen.net","tomotranslations.com","tongrenshe.cc","translationchicken.com","truyenfull.vision","truyenfull.vn","truyennhabo.com","truyenyy.com","trxs.cc","trxs.me","ttshu8.com","twkan.com","uaa.com","velvet-reverie.org","volarenovels.com","vynovel.com","wanderertl130.id","wanderinginn.com","watashiwasugoidesu.com","wattpad.com","wattpad.com.vn","webnovel.com","webnovelonline.com","wenku8.net","wetriedtls.com","wfxs.tw","whitemoonlightnovels.com","wnmtl.com","wnmtl.org","woopread.com","wordexcerpt.com","wtnovels.com","wtr-lab.com","wuxia-world.online","wuxia.city","wuxia.click","wuxiaworld.com","wuxiaworld.eu","www.8muses.com","www.dudushuge.com","www.fanfiction.net","www.fictionpress.com","www.mangahere.cc","wxscs.com","xbanxia.cc","xiaoshubao.net","xiaxuenovels.xyz","xpaoshuba.com","yeduge.com","zenithnovels.com","zenithtls.com","zeonic-republic.net","zhenhunxiaoshuo.com","zirusmusings.net","asuracomic.net","bixiange.me","fictionlog.co","novelhold.com","novelmt.com","ptwxz.com","69shuba.com","uukanshu.com","webnovelworld.org"];
+        const generalHosts = ["230book.net","38xs.com","69shuba.tw","88xiaoshuo.net","aerialrain.com","alicesw.com","alphapolis.co.jp","alternatehistory.com","api.mangadex.org","app.yoru.world","asianfanfics.com","asianhobbyist.com","asianovel.net","b.faloo.com","babelnovel.com","baka-tsuki.org","bednovel.com","betwixtedbutterfly.com","biquge.tw","book18.org","bookswithqianya.com","botitranslation.com","boxnovel.net","boylove.cc","brightnovels.com","brittanypage43.com","buntls.com","cangji.net","cherrymist.cafe","chickengege.org","chosentwofanfic.com","chrysanthemumgarden.com","chyoa.com","ckandawrites.online","comics.8muses.com","creativenovels.com","crimsontranslations.com","crushnovelpo.blog","cyborg-tl.com","czbooks.net","dao-divine-tl.com","dark-novels.ru","dasuitl.com","ddxs.com","deviantart.com","dummynovels.com","edanglarstranslations.com","emberlib731.xyz","empirenovel.com","erofus.com","estar.jp","exiledrebelsscanlations.com","fanfiction.com.br","fanfictionero.com","fanficus.com","fastnovel.net","fenrirealm.com","ffxs8.com","fic.fan","ficador.com","ficbook.net","fictionhunt.com","fictionmania.tv","fictionzone.net","ficwad.com","fimfiction.net","findnovel.net","finestories.com","flying-lines.com","flyonthewalls.blog","forum.questionablequesting.com","forums.nrvnqsr.com","forums.spacebattles.com","forums.sufficientvelocity.com","foxteller.com","freewebnovel.com","fuhuzz.pro","gamefaqs.gamespot.com","genesistudio.com","global.novelpia.com","goldennovel.com","goodnovel.com","graverobbertl.site","gravitynovels.com","gravitytales.com","gunnerkrigg.com","gutenberg.spiegel.de","helioscans.com","hentai-foundry.com","hiscension.com","hostednovel.com","hui3r.wordpress.com","idleturtle-translations.com","ilwxs.com","imgur.com","indowebnovel.id","indratranslations.com","inkitt.com","inoveltranslation.com","isotls.com","ixdzs.tw","ixdzs8.com","jadescrolls.com","japtem.com","jjwxc.net","jonaxxstories.com","jpmtl.com","kakuyomu.jp","karistudio.com","kaystls.site","kdtnovels.com","knoxt.space","ko-fi.com","lanry.space","lazygirltranslations.com","leafstudio.site","libread.com","libri7.com","lightnovelasia.com","lightnovelfr.com","lightnovels.live","lightnovelstranslations.com","lilyonthevalley.com","literotica.com","lnmtl.com","lorenovels.com","m.38xs.com","m.88xiaoshuo.net","m.bqg225.com","m.ilwxs.com","m.metanovel.org","m.qbxsw.com","m.shuhaige.net","m.sjks88.com","m.tapas.io","m.ttshu8.com","m.xpaoshuba.com","madnovel.com","magic.wizards.com","mangadex.org","mangakakalot.com","manganelo.com","mangaread.co","manhwaden.com","marx2mao.com","marxists.org","mcstories.com","meionovel.id","midnightrambles.in","mimihui.com","mistminthaven.com","moonquill.com","mottruyen.vn","mvlempyr.com","mvlempyr.io","my-novel.online","mydramanovel.com","mystorywave.com","myxls.net","mznovels.com","nanomashin.online","ncode.syosetu.com","neobook.org","nhvnovels.com","nineheavens.org","nobadnovel.com","novel.babelchain.org","novel.naver.com","novel18.syosetu.com","novel543.com","novelbuddy.com","novelbuddy.io","novelcool.com","novelebook.com","novelfever.com","novelfire.net","novelgate.net","novelgo.id","novelgreat.net","novelhall.com","novelhi.com","novelib.com","novelight.net","novelingua.com","novellive.app","novellive.com","novellive.net","novelmania.com.br","novelmao.com","novelmedium.com","novelonlinefree.info","novelonomicon.com","novelpassion.com","novels.pl","novelsect.com","novelshub.org","novelsknight.punchmanga.online","novelsonline.net","novelsonline.org","novelsquare.blog","noveltoon.mobi","novelupdates.cc","novelupdates.com","novelversetranslations.com","ntruyen.vn","nyantl.wordpress.com","old.ranobelib.me","ontimestory.eu","panda-novel.com","pandasnovel.com","patreon.com","pawread.com","peachblossomcodex.com","peachpitting.com","peachpuff.in","peachygardens.blogspot.com","piaotia.com","pienovels.com","pindangscans.com","powanjuan.cc","puretl.com","qbxsw.com","quanben.io","quanben5.io","queenrosenovel.blogspot.com","questionablequesting.com","quotev.com","rainofsnow.com","randomtranslator.com","ranobelib.me","ranobes.com","ranobes.net","ranobes.top","re-library.com","readernovel.net","readhive.org","readingpia.me","readlightnovel.cc","readnovelfull.org","readnovelmtl.com","readwn.org","reddit.com","requiemtls.com","royalroad.com","royalroadl.com","rtd.moe","rtenzo.net","rubymaybetranslations.com","ruvers.ru","sangtacviet.com","sangtacviet.vip","scifistories.com","scribblehub.com","secondlifetranslations.com","semprot.com","sexstories.com","shanghaifantasy.com","shikkakutranslations.org","shinningnoveltranslations.com","shinsori.com","shintranslations.com","shmtranslations.com","shubaow.net","shubaowb.com","shuhaige.net","sites.google.com","sjks88.com","skydemonorder.com","snoutandco.ca","snowycodex.com","soafp.com","sonako.fandom.com","sonako.wikia.com","soverse.com","spiritfanfiction.com","springofromance.com","sspai.com","starlightstream.net","storiesonline.net","storyseedling.com","taffygirl13.wordpress.com","tapas.io","tapread.com","teanovel.com","teenfic.net","tigertranslations.org","timotxt.com","tl.rulate.ru","toctruyen.net","tomotranslations.com","tongrenshe.cc","translationchicken.com","truyenfull.vision","truyenfull.vn","truyennhabo.com","truyenyy.com","trxs.cc","trxs.me","ttshu8.com","twkan.com","uaa.com","velvet-reverie.org","volarenovels.com","vynovel.com","wanderertl130.id","wanderinginn.com","watashiwasugoidesu.com","wattpad.com","wattpad.com.vn","webnovel.com","webnovelonline.com","wenku8.net","wetriedtls.com","wfxs.tw","whitemoonlightnovels.com","wnmtl.com","wnmtl.org","woopread.com","wordexcerpt.com","wtnovels.com","wtr-lab.com","wuxia-world.online","wuxia.city","wuxia.click","wuxiaworld.com","wuxiaworld.eu","www.8muses.com","www.dudushuge.com","www.fanfiction.net","www.fictionpress.com","www.mangahere.cc","wxscs.com","xbanxia.cc","xiaoshubao.net","xiaxuenovels.xyz","xpaoshuba.com","yeduge.com","zenithnovels.com","zenithtls.com","zeonic-republic.net","zhenhunxiaoshuo.com","zirusmusings.net","asuracomic.net","bixiange.me","fictionlog.co","novelhold.com","novelmt.com","ptwxz.com","69shuba.com","uukanshu.com","webnovelworld.org","novelbuddy.me",];
         for (let h of generalHosts) {
             let searchUrl = (q) => `https://${h}/?s=${encodeURIComponent(q)}`;
             let getFetchOptions = null;

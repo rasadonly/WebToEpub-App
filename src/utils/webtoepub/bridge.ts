@@ -2,6 +2,7 @@ import { CORS_PROXY_LIST } from '../localWorker';
 import { getBackendUrl } from '@/utils/backend';
 import { getDownHosts } from '../siteHealth';
 import { getRecentDownloads } from '@/utils/recentDownloads';
+import { SUPPORTED_HOST_SET } from '../supportedHosts';
 
 /**
  * Bridge to the vendored WebToEpub engine (public/webtoepub/index.html).
@@ -758,11 +759,11 @@ export async function engineSearch(
   const myToken = ++searchCancelToken;
   const isLive = () => myToken === searchCancelToken;
 
-  // Iterate ALL sites (primary + secondary). WTR-LAB and Ranobes
-  // support was removed, so they are never searched even though the engine still lists them.
-  const removedHosts = new Set(['wtr-lab.com', 'ranobes.top', 'ranobes.net']);
+  // Search only the verified-working sites (the 2026-10-30 prune set).
+  // The engine's lists are already filtered to this set; this allowlist is
+  // a second guard so results can never come from a non-working site.
   const allSites: any[] = [...(SSE.PRIMARY_SITES || []), ...(SSE.SECONDARY_SITES || [])]
-    .filter((s: any) => !removedHosts.has(String(s.hostname || '').toLowerCase()));
+    .filter((s: any) => SUPPORTED_HOST_SET.has(String(s.hostname || '').toLowerCase().replace(/^www\./, '')));
 
   // Non-blocking down-hosts check: grab local cache instantly without waiting for network/Supabase
   let downHosts = new Set<string>();
