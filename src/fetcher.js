@@ -1337,6 +1337,139 @@ async function bodyWattpad(url) {
 }
 
 /** Last-resort heuristic: the block element with the most paragraph text. */
+// ---------------------------------------------------------------------------
+// Differential chapter-selector detection. Page furniture (nav, header,
+// footer, ads, sidebars) is IDENTICAL on every chapter page of a site;
+// only the chapter content and the chapter title actually differ between
+// two chapters. So: fetch two chapters, walk down from <body> always
+// descending into the child that accounts for nearly all of the parent's
+// differing text, and stop at the container where no single child
+// dominates. That container IS the chapter content element, and the
+// differing h1 is the title. No AI, no guessing from class names - the
+// pages themselves vote. Results are cached per host (successes only).
+// ---------------------------------------------------------------------------
+const detectedSelectorCache = new Map(); // host -> { content, title }
+
+function diffTextOf(el) {
+  return (el?.textContent || "").replace(/\s+/g, " ").trim();
+}
+
+/** Words present in A but not in B - the "differing text" of a node. */
+function diffWordCount(textA, textB) {
+  const a = textA ? textA.split(" ") : [];
+  if (!a.length) return 0;
+  const setB = new Set(textB ? textB.split(" ") : []);
+  let n = 0;
+  for (const w of new Set(a)) if (!setB.has(w)) n++;
+  return n;
+}
+
+function counterpartIn(childA, parentB) {
+  if (!parentB) return null;
+  const tag = childA.tagName?.toLowerCase() || "";
+  if (!tag) return null;
+  const sibs = [...parentB.children].filter((c) => c.tagName?.toLowerCase() === tag);
+  if (!sibs.length) return null;
+  const sibsA = [...childA.parentElement.children].filter((c) => c.tagName?.toLowerCase() === tag);
+  const idx = sibsA.indexOf(childA);
+  return sibs[Math.min(idx, sibs.length - 1)] || null;
+}
+
+function selectorForElement(el, doc) {
+  const tag = el.tagName?.toLowerCase() || "div";
+  const id = el.getAttribute?.("id") || "";
+  if (id && /^[A-Za-z_][\w-]*$/.test(id)) {
+    const sel = `#${id}`;
+    try {
+      if (doc.querySelector(sel)?.textContent === el.textContent) return sel;
+    } catch {
+      /* fall through */
+    }
+  }
+  const classes = (el.getAttribute?.("class") || "").split(/\s+/).filter((c) => /^[A-Za-z_][\w-]*$/.test(c));
+  for (const cls of classes) {
+    const sel = `${tag}.${cls}`;
+    try {
+      if (doc.querySelector(sel)?.textContent === el.textContent) return sel;
+    } catch {
+      /* next class */
+    }
+  }
+  const parts = [];
+  let cur = el;
+  while (cur && cur.tagName && cur.tagName.toLowerCase() !== "body") {
+    const t = cur.tagName.toLowerCase();
+    const parent = cur.parentElement;
+    if (!parent) break;
+    const sibs = [...parent.children].filter((c) => c.tagName === cur.tagName);
+    parts.unshift(sibs.length > 1 ? `${t}:nth-of-type(${sibs.indexOf(cur) + 1})` : t);
+    cur = parent;
+  }
+  return ["body", ...parts].join(" > ");
+}
+
+export async function detectChapterSelectors(urlA, urlB) {
+  let host = "";
+  try {
+    host = new URL(urlA).hostname.replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+  if (host && detectedSelectorCache.has(host)) return detectedSelectorCache.get(host);
+  let result = null;
+  try {
+    const [htmlA, htmlB] = await Promise.all([
+      smartGetText(urlA, 15000, 45000),
+      smartGetText(urlB, 15000, 45000),
+    ]);
+    const docA = parseHtml(htmlA);
+    const docB = parseHtml(htmlB);
+    for (const doc of [docA, docB]) {
+      doc.querySelectorAll("script, style, noscript, svg, template").forEach((n) => n.remove());
+    }
+    // Title: a differing h1 (then h2/h3) with short text.
+    let title = "";
+    for (const tag of ["h1", "h2", "h3"]) {
+      const tA = docA.querySelector(tag);
+      const tB = docB.querySelector(tag);
+      const txtA = diffTextOf(tA);
+      const txtB = diffTextOf(tB);
+      if (tA && txtA && txtA !== txtB && txtA.length <= 200) {
+        title = selectorForElement(tA, docA);
+        break;
+      }
+    }
+    // Content: descend from <body> into the child holding nearly all of
+    // the parent's differing text; stop where no child dominates.
+    let nodeA = docA.body;
+    let nodeB = docB.body;
+    for (let depth = 0; depth < 12 && nodeA && nodeB; depth++) {
+      const kidsA = [...nodeA.children].filter((c) => c.tagName);
+      if (!kidsA.length) break;
+      const scored = kidsA
+        .map((childA) => {
+          const childB = counterpartIn(childA, nodeB);
+          if (!childB) return null;
+          return { childA, childB, diff: diffWordCount(diffTextOf(childA), diffTextOf(childB)), len: diffTextOf(childA).length };
+        })
+        .filter(Boolean);
+      const total = scored.reduce((s, c) => s + c.diff, 0);
+      if (!total) break;
+      scored.sort((a, b) => b.diff - a.diff);
+      const top = scored[0];
+      if (top.diff < 0.7 * total || top.len < 300) break;
+      nodeA = top.childA;
+      nodeB = top.childB;
+    }
+    const content = nodeA && nodeA !== docA.body ? selectorForElement(nodeA, docA) : "";
+    if (content) result = { content, title };
+  } catch {
+    result = null;
+  }
+  if (result && host) detectedSelectorCache.set(host, result);
+  return result;
+}
+
 function bodyByDensity(doc) {
   let best = null;
   let bestScore = 0;
@@ -4299,7 +4432,7 @@ const MAJOR_SITES = [
   [/(^|\.)69shuba\.com$/, "69shuba"],
 ];
 
-function siteKey(hostname) {
+export function siteKey(hostname) {
   const host = String(hostname || "").toLowerCase().replace(/^www\./, "");
   if (host.includes("freewebnovel.com")) return "freewebnovel";
   if (host.includes("novelfire.") || host.includes("novelcake.") || host.includes("readfromhome.")) return "novelfire";
