@@ -21,11 +21,21 @@ class _88xiaoshuoParser extends Parser {
         if (changedomurl != dom.baseURI) {
             dom = (await HttpClient.fetchHtml(changedomurl)).responseXML;
         }
-        return this.getChapterUrlsFromMultipleTocPages(dom,
+        let chapters = await this.getChapterUrlsFromMultipleTocPages(dom,
             this.extractPartialChapterList,
             this.getUrlsOfTocPages,
             chapterUrlsUI
         );
+        // Backend tocXpaoshuba: the desktop catalog serves newest-first
+        // with a latest block ahead of it; when (nearly) all titles carry
+        // 第N章 numbers, sort ascending outright. The 90% guard leaves
+        // correctly ordered mobile lists untouched.
+        let chapNo = (t) => parseInt((String(t).match(/第\s*(\d+)\s*章/) || [])[1] || "0", 10);
+        let numbered = chapters.filter(c => chapNo(c.title) > 0).length;
+        if (numbered >= Math.max(10, chapters.length * 0.9)) {
+            chapters.sort((a, b) => chapNo(a.title) - chapNo(b.title));
+        }
+        return chapters;
     }
 
     getUrlsOfTocPages(dom) {

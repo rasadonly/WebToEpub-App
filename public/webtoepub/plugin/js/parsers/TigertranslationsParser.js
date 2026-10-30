@@ -8,13 +8,27 @@ class TigertranslationsParser extends Parser {
     }
 
     async getChapterUrls(dom) {
-        let menu = dom.querySelector("div.the-content");
+        // Backend tocTigerTranslations: div.the-content is dead (theme
+        // changed); slice div.entry-content, keep chapter-like links,
+        // sort by chapter number.
+        let menu = dom.querySelector("div.entry-content") || dom.querySelector("div.the-content");
+        if (menu == null) {
+            return [];
+        }
         this.cleanInitialDom(menu);
-        return util.hyperlinksToChapterList(menu);
+        let links = util.hyperlinksToChapterList(menu)
+            .filter(c => /chapter\s*\d/i.test(c.title || "")
+                || /-\d+\/?$/.test(new URL(c.sourceUrl).pathname));
+        let num = (c) => {
+            let m = (c.title || "").match(/chapter\s*(\d+)/i)
+                || (c.sourceUrl || "").match(/-(\d+)\/?$/);
+            return m ? parseInt(m[1], 10) : 0;
+        };
+        return links.sort((a, b) => num(a) - num(b));
     }
 
     findContent(dom) {
-        return dom.querySelector("div.the-content");
+        return dom.querySelector("div.entry-content") || dom.querySelector("div.the-content");
     }
 
     extractTitleImpl(dom) {

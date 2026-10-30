@@ -25,6 +25,39 @@ class NovelhiParser extends Parser {
         };
     }
 
+    async fetchChapter(url) {
+        let dom = (await HttpClient.wrapFetch(url)).responseXML;
+        // Backend bodyNovelHi: the chapter page is a "Loading chapter..."
+        // shell; the prose comes from a tokenized JSON endpoint, ROT13'd.
+        // Fetch it and plant the decoded prose where findContent looks.
+        try {
+            let pathEl = dom.querySelector("#chapterContentPath");
+            let tokenEl = dom.querySelector("#chapterContentToken");
+            let path = pathEl?.value || pathEl?.getAttribute("value");
+            let token = tokenEl?.value || tokenEl?.getAttribute("value");
+            if (path && token) {
+                let ep = new URL(path, url).href + (path.includes("?") ? "&" : "?")
+                    + "token=" + encodeURIComponent(token);
+                let data = await HttpClient.fetchJson(ep);
+                let content = data?.data?.content;
+                if (content) {
+                    let target = dom.querySelector("#readcontent #showReading")
+                        || dom.querySelector("#showReading")
+                        || dom.querySelector("#readcontent");
+                    if (target) {
+                        target.innerHTML = NovelhiParser.rot13(content);
+                    }
+                }
+            }
+        } catch (e) { /* fall through to the shell */ }
+        return dom;
+    }
+
+    static rot13(s) {
+        return s.replace(/[a-zA-Z]/g, c =>
+            String.fromCharCode((c <= "Z" ? 90 : 122) >= (c = c.charCodeAt(0) + 13) ? c : c - 26));
+    }
+
     findContent(dom) {
         return dom.querySelector("#readcontent #showReading");
     }

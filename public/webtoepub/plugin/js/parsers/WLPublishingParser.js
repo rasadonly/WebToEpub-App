@@ -20,6 +20,39 @@ class WLPublishingParser extends Parser {
     async getChapterUrls(dom) {
         let index = dom.querySelector("div#index-list");
         if (index === null) {
+            // Backend tocScifiStories: storyInfo.php is metadata-only; its
+            // /(s|n)/{id}/{slug} reader-index link leads to the numeric
+            // chapter links. Follow it when present.
+            let idxPath = null;
+            for (let a of dom.querySelectorAll("a")) {
+                try {
+                    let p = new URL(a.href, dom.baseURI).pathname;
+                    if (/^\/(s|n)\/\d+\//.test(p)) {
+                        idxPath = p;
+                        break;
+                    }
+                } catch (e) { /* ignore */ }
+            }
+            if (idxPath) {
+                try {
+                    let origin = new URL(dom.baseURI).origin;
+                    let idxDom = (await HttpClient.wrapFetch(origin + idxPath)).responseXML;
+                    let escaped = idxPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+                    let re = new RegExp(escaped + "/\\d+$");
+                    let out = [];
+                    for (let a of idxDom.querySelectorAll("a")) {
+                        let href = a.href || "";
+                        if (re.test(href)) {
+                            out.push(util.hyperLinkToChapter(a));
+                        }
+                    }
+                    out.sort((a, b) => parseInt(a.sourceUrl.split("/").pop(), 10)
+                        - parseInt(b.sourceUrl.split("/").pop(), 10));
+                    if (0 < out.length) {
+                        return out;
+                    }
+                } catch (e) { /* fall through */ }
+            }
             let baseUrl = this.getBaseUrl(dom);
             return this.singleChapterStory(baseUrl, dom);
         }

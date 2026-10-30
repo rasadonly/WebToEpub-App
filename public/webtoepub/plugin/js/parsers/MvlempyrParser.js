@@ -10,6 +10,71 @@ class MvlempyrParser extends Parser {
     }
 
     async getChapterUrls(dom) {
+        // Backend tocMvlempyr: the Webflow book page carries only
+        // #novel-code; chapters live in a backend WordPress whose tag id
+        // is 7^code mod 1999999997 (the site's own JS computes it the same
+        // way). Try the API first; fall back to the legacy synthesis.
+        let code = null;
+        let codeEl = dom.querySelector("#novel-code");
+        if (codeEl) {
+            code = codeEl.textContent.match(/^\s*(\d+)/)?.[1] || null;
+        }
+        if (!code) {
+            for (let s of dom.querySelectorAll("script")) {
+                let m = s.textContent.match(/novel-code[^0-9]{0,20}(\d{3,})/);
+                if (m) {
+                    code = m[1];
+                    break;
+                }
+            }
+        }
+        if (code) {
+            try {
+                let list = await this.fetchMvlempyrChapters(dom, code);
+                if (0 < list.length) {
+                    return list;
+                }
+            } catch (e) { /* fall through to legacy */ }
+        }
+        return this.legacyChapterUrls(dom);
+    }
+
+    async fetchMvlempyrChapters(dom, code) {
+        let tag = 1n;
+        const base = 7n;
+        const mod = 1999999997n;
+        let exp = BigInt(code);
+        let b = base % mod;
+        while (exp > 0n) {
+            if (exp & 1n) {
+                tag = (tag * b) % mod;
+            }
+            b = (b * b) % mod;
+            exp >>= 1n;
+        }
+        let origin = new URL(dom.baseURI).origin;
+        let byNum = new Map();
+        for (let page = 1; page <= 12; ++page) {
+            let data = await HttpClient.fetchJson(
+                `https://chap.heliosarchive.online/wp-json/wp/v2/posts?tags=${tag}&per_page=500&page=${page}`);
+            if (!Array.isArray(data) || 0 === data.length) {
+                break;
+            }
+            for (let p of data) {
+                let n = parseInt(p?.acf?.chapter_number ?? "", 10);
+                if (!n) {
+                    continue;
+                }
+                byNum.set(n, {
+                    sourceUrl: `${origin}/chapter/${code}-${n}`,
+                    title: String(p?.acf?.ch_name || `Chapter ${n}`)
+                });
+            }
+        }
+        return [...byNum.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
+    }
+
+    legacyChapterUrls(dom) {
         let imgLink = dom.querySelector("div.novel-image-wrapper img").src;
         let slug = imgLink.split("/").pop().split(".")[0];
         let chapterCount = parseInt(dom.querySelector("div#chapter-count").textContent)?parseInt(dom.querySelector("div#chapter-count").textContent):-1;

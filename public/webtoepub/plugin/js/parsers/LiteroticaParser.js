@@ -22,32 +22,77 @@ class LiteroticaParser extends Parser {
     async getChapterUrls(dom, chapterUrlsUI) {
         let section = LiteroticaParser.getSection(dom.baseURI);
         let isChapterpage = (section=="s");
-        let isOneChapter = false;
         if (isChapterpage) {
             let serieslink = [...dom.querySelectorAll("a")].filter(a => a.href.includes("https://www.literotica.com/series/se/"));
             if (serieslink.length > 0) {
                 dom = (await HttpClient.wrapFetch(serieslink[0].href)).responseXML;
-                section = dom.baseURI.split("//")[1].split("/")[1];
+                section = "series";
             } else {
-                isOneChapter = true;
+                // Single story with no series: one chapter; fetchChapter
+                // walks its ?page=N pagination (backend's page list would
+                // duplicate that walk, so it is not used here).
+                let chapterURL = new URL(dom.baseURI);
+                return [{
+                    sourceUrl: chapterURL.origin + chapterURL.pathname,
+                    title: this.findChapterTitle(dom)?.textContent
+                }];
             }
         }
-        if (isOneChapter) {
-            let chapterURL = new URL(dom.baseURI);
-            return [{ 
-                sourceUrl: chapterURL.origin + chapterURL.pathname,
-                title: this.findChapterTitle(dom)?.textContent
-            }];
-        } else {
-            return this.getChapterUrlsFromMultipleTocPages(
-                dom,
-                this.chaptersFromMemberPage,
-                section === "top"
-                    ? this.getUrlOfTopTocPages
-                    : this.getUrlOfCategoryTocPages,
-                chapterUrlsUI
-            );
+        if (section === "series") {
+            // Backend tocLiterotica: chapters sit in the "Table of
+            // Contents" section; the old ul.series__works selector is dead.
+            let toc = this.tocFromSeriesPage(dom);
+            if (0 < toc.length) {
+                return toc;
+            }
+            // Fall through to the legacy multi-page walk.
         }
+        return this.getChapterUrlsFromMultipleTocPages(
+            dom,
+            this.chaptersFromMemberPage,
+            section === "top"
+                ? this.getUrlOfTopTocPages
+                : this.getUrlOfCategoryTocPages,
+            chapterUrlsUI
+        );
+    }
+
+    tocFromSeriesPage(dom) {
+        let heads = [...dom.querySelectorAll("h1, h2, h3")];
+        let h = heads.find(el => (el.textContent || "").trim().toLowerCase() === "table of contents");
+        if (h) {
+            let node = h;
+            for (let up = 0; up < 4 && node; up++) {
+                node = node.parentElement;
+                if (!node) {
+                    break;
+                }
+                let items = [...node.querySelectorAll('a[href*="/s/"]')].map(a => util.hyperLinkToChapter(a));
+                let cleaned = LiteroticaParser.cleanToc(items);
+                if (0 < cleaned.length) {
+                    return cleaned;
+                }
+            }
+        }
+        // Fallback: page-wide /s/ anchors, cleaned of dialog/comment variants.
+        return LiteroticaParser.cleanToc(
+            [...dom.querySelectorAll('a[href*="/s/"]')].map(a => util.hyperLinkToChapter(a)));
+    }
+
+    // Backend litCleanToc: drop the series URL's own ?dialog=new-story
+    // variant, /comments links, and duplicates.
+    static cleanToc(items) {
+        let seen = new Set();
+        return (items || []).filter(i => {
+            if (!i.sourceUrl || i.sourceUrl.includes("?dialog=") || /\/comments\/?($|\?)/.test(i.sourceUrl)) {
+                return false;
+            }
+            if (seen.has(i.sourceUrl)) {
+                return false;
+            }
+            seen.add(i.sourceUrl);
+            return true;
+        });
     }
 
     async loadEpubMetaInfo(dom) {
@@ -151,7 +196,9 @@ class LiteroticaParser extends Parser {
     }
 
     findContent(dom) {
-        let ret = dom.querySelector("div[itemprop=\"articleBody\"]")
+        // Backend bodyLiterotica selectors first; legacy fallback kept.
+        let ret = dom.querySelector('[class*="article__content"], .aa_ht, .b-story-body-x, #story_text, .story-body')
+            || dom.querySelector("div[itemprop=\"articleBody\"]")
             || dom.querySelector("body div");
         ret.firstChild.style.removeProperty("max-height");
         if (ret.lastChild.innerText == "Report") {

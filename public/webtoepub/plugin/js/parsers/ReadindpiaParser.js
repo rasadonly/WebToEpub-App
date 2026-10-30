@@ -20,9 +20,17 @@ class ReadingpiaParser extends Parser {
     }
 
     findContent(dom) {
-        return dom.querySelector("div#chapter-body") 
+        let el = dom.querySelector("div#chapter-body")
             || dom.querySelector("div.chapter-body")
             || dom.querySelector("main > div:not(.advertisement):not(.promo-container):not(.comments):not([style])");
+        // Backend bodyReadingpia: prose is interleaved with display:none
+        // decoy blocks; strip them inside the container before extraction.
+        if (el) {
+            for (let decoy of el.querySelectorAll('[style*="display:none"], [style*="display: none"]')) {
+                decoy.remove();
+            }
+        }
+        return el;
     }
 
     extractTitleImpl(dom) {
