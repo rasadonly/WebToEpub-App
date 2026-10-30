@@ -5049,7 +5049,7 @@ export async function fetchBookMeta(tocUrl) {
       // NovelFull-family pages have no og:title and their first <h1> is the
       // genre link (e.g. "Action"), while the real title is <h3 class="title">.
       title: pick(['meta[property="og:title"]', 'meta[name="twitter:title"]', ".desc h3.title", "h3.title", "h1", "title"]),
-      author: pick(['meta[property="og:novel:author"]', '[itemprop="author"]', ".author a", 'a[href*="/author/"]', ".author"]),
+      author: pick(['meta[property="og:novel:author"]', '[itemprop="author"]', ".author a", 'a[href*="/author/"]', 'a[href*="author"]', ".author"]),
       cover: pickSrc(['meta[property="og:image"]', ".book img", ".book-img img", ".novel-cover img", "img.cover"]),
       description: pick(['meta[property="og:description"]', 'meta[name="description"]']),
     };
