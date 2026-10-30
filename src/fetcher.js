@@ -1369,7 +1369,7 @@ async function bodyGeneric(url, selector) {
   } catch {
     /* ignore */
   }
-  const rawHtml = await getText(url);
+  const rawHtml = await smartGetText(url, 20000, 75000);
   const doc = parseHtml(rawHtml);
   const candidates = [
     ...(selector ? [selector] : []),
@@ -1393,9 +1393,13 @@ async function bodyGeneric(url, selector) {
   }
 
   // Nothing solid — let the AI work out the selectors for this host (cached),
-  // then fall back to a text-density heuristic.
+  // then fall back to a text-density heuristic. The AI call is raced so a
+  // hanging provider cannot stall the chapter pipeline.
   try {
-    const ai = await aiContentSelectors(rawHtml, url);
+    const ai = await Promise.race([
+      aiContentSelectors(rawHtml, url),
+      new Promise((r) => setTimeout(() => r(null), 20000)),
+    ]);
     if (ai?.content) {
       const html = extractWithSelector(doc, ai.content);
       if (good(html) || (!weak && html)) {
@@ -1615,6 +1619,90 @@ function tocPageUrls(doc, pageUrl) {
   return [...urls];
 }
 
+// ---------------------------------------------------------------------------
+// Generic-path helpers: quality scoring + a deterministic chapter-list
+// heuristic. These run with no AI at all, so an unknown site still converts
+// when the AI providers are down.
+// ---------------------------------------------------------------------------
+const CHAPTERISH_RE = /(chapter|chap|episode|ep|part|ch)[-_/ ]?\d+|\/c\d+[-_/]|\d+\.html?$/i;
+
+function tocSetScore(items) {
+  if (!items?.length) return 0;
+  let chap = 0;
+  for (const i of items) {
+    if (CHAPTERISH_RE.test(i.url) || CHAPTERISH_RE.test(i.title || "")) chap++;
+  }
+  return items.length * 2 + chap;
+}
+
+/** Order a link set by the chapter number in its URL/title when most of the
+ *  set is numbered (fixes newest-first lists); otherwise keep page order. */
+function sortChapterLinks(items) {
+  const numOf = (i) => {
+    const m =
+      /(?:chapter|chap|episode|ep|part|ch)[-_/ ]?(\d+(?:\.\d+)?)/i.exec(i.url) ||
+      /(?:chapter|chap|episode|ep|part)[-_/ ]?(\d+(?:\.\d+)?)/i.exec(i.title || "") ||
+      /(\d+(?:\.\d+)?)\.html?$/i.exec(i.url) ||
+      /[-_/](\d+(?:\.\d+)?)\/?$/.exec(new URL(i.url).pathname);
+    return m ? parseFloat(m[1]) : null;
+  };
+  const decorated = items.map((item, idx) => ({ item, idx, n: numOf(item) }));
+  const numbered = decorated.filter((d) => d.n !== null).length;
+  if (numbered >= Math.max(3, items.length * 0.6)) {
+    decorated.sort((a, b) => (a.n ?? Infinity) - (b.n ?? Infinity) || a.idx - b.idx);
+    return decorated.map((d) => d.item);
+  }
+  return items;
+}
+
+/**
+ * Deterministic TOC extraction: group every same-origin anchor by its URL
+ * path template (digit runs collapsed). A book's chapter list is almost
+ * always the largest template group whose links look like chapters and sit
+ * under the book's own path. Returns [] when no group qualifies.
+ */
+function heuristicTocLinks(doc, pageUrl) {
+  const all = collectTocLinks(doc, pageUrl, ["a[href]"]);
+  if (all.length < 3) return [];
+  let slug = "";
+  try {
+    const segs = new URL(pageUrl).pathname.split("/").filter(Boolean);
+    slug = segs.reduce((a, b) => (b.length > a.length ? b : a), "");
+  } catch {
+    /* ignore */
+  }
+  const groups = new Map();
+  for (const item of all) {
+    let path;
+    try {
+      path = new URL(item.url).pathname;
+    } catch {
+      continue;
+    }
+    const template = path.replace(/\d+/g, "#");
+    if (!groups.has(template)) groups.set(template, []);
+    groups.get(template).push(item);
+  }
+  let best = null;
+  let desperate = null;
+  for (const items of groups.values()) {
+    if (items.length < 3) continue;
+    const chap = items.filter((i) => CHAPTERISH_RE.test(i.url) || CHAPTERISH_RE.test(i.title || "")).length;
+    const chapShare = chap / items.length;
+    const prefixShare = slug
+      ? items.filter((i) => i.url.includes(slug)).length / items.length
+      : 0;
+    const score = tocSetScore(items) * (0.35 + chapShare + prefixShare);
+    if (chapShare >= 0.3 && (!desperate || score > desperate.score)) desperate = { items, score };
+    // Qualified: mostly chapter-like, or mostly under the book's own path.
+    if (chapShare >= 0.5 || prefixShare >= 0.5) {
+      if (!best || score > best.score) best = { items, score };
+    }
+  }
+  const winner = best || desperate;
+  return winner ? sortChapterLinks(winner.items) : [];
+}
+
 /** TOC extraction driven purely by the generated config table. */
 async function tocFromConfig(url, config, linkSelector) {
   const selectors = [
@@ -1628,89 +1716,119 @@ async function tocFromConfig(url, config, linkSelector) {
     "#chapters a",
   ];
   // Many sites keep the chapter list on a dedicated sub-page rather than the
-  // novel landing page, so try those variants when the landing page is empty.
+  // novel landing page, so try those variants when the landing page is weak.
   const clean = url.split(/[?#]/)[0].replace(/\/$/, "");
   const variants = [url];
   if (!/\/(chapters?|toc|chapter-list)$/i.test(clean)) {
     variants.push(`${clean}/chapters`, `${clean}/chapter-list`, `${clean}/toc`);
   }
 
-  let doc = null;
-  let rawHtml = "";
-  let results = [];
-  let sourceUrl = url;
-  for (const candidate of variants) {
-    try {
-      const h = await getText(candidate);
-      const d = parseHtml(h);
-      const items = collectTocLinks(d, candidate, selectors);
-      if (items.length) {
-        doc = d;
-        rawHtml = h;
-        results = items;
-        sourceUrl = candidate;
-        break;
-      }
-      if (!doc) {
-        doc = d;
-        rawHtml = h;
-        sourceUrl = candidate;
-      }
-    } catch {
-      /* try the next variant */
+  // Staged passes per page, best set wins: configured selectors, then the
+  // deterministic heuristic, then AI-detected selectors, then (for the many
+  // unknown sites that are WordPress-Madara) the Madara AJAX probe. A stage
+  // only runs while the best set so far is weak, so known-good config sites
+  // keep their exact old behaviour, and unknown sites always REACH the AI
+  // stage instead of dying on a near-miss selector or a raw link sweep.
+  let best = [];
+  let bestDoc = null;
+  let bestUrl = url;
+  let winSelectors = selectors;
+  // The generic path runs under a soft deadline: an unknown site must
+  // resolve in tens of seconds, not the minutes the old serial variant +
+  // pagination churn could take (the /api/toc endpoint races at 24s and
+  // users read anything past ~45s as "never works").
+  const deadline = Date.now() + 45_000;
+  const timeLeft = () => deadline - Date.now();
+  const consider = (items, doc, pageUrl, sels) => {
+    if (items?.length && tocSetScore(items) > tocSetScore(best)) {
+      best = items;
+      bestDoc = doc;
+      bestUrl = pageUrl;
+      if (sels) winSelectors = sels;
     }
-  }
-  if (!doc) return [];
-  url = sourceUrl;
+  };
+  const STRONG = 10; // ~5 chapter-like links: good enough to stop digging
 
-  // No configured selector matched — ask the AI for this host's TOC selectors
-  // (cached per host) and retry with them.
-  if (!results.length) {
+  for (const candidate of variants) {
+    if (candidate !== url && timeLeft() <= 8_000) break;
+    let html = "";
+    let doc = null;
     try {
-      const ai = await aiTocSelectors(rawHtml, url);
+      // The landing page gets the full fetch treatment; sub-page variants
+      // are speculative, so they run on a short leash.
+      html = candidate === url ? await getText(candidate) : await smartGetText(candidate, 7000, 12000);
+      doc = parseHtml(html);
+    } catch {
+      continue; // sub-page variant missing - try the next one
+    }
+
+    // 1. Configured / built-in selectors.
+    consider(collectTocLinks(doc, candidate, selectors), doc, candidate);
+    if (tocSetScore(best) >= STRONG) break;
+
+    // 2. Deterministic heuristic (no AI needed).
+    consider(heuristicTocLinks(doc, candidate), doc, candidate);
+    if (tocSetScore(best) >= STRONG) break;
+
+    // 3. AI-detected selectors for this host (cached per host in aiParser).
+    // Raced: a provider walk over hanging models must not eat the budget.
+    try {
+      const ai = await Promise.race([
+        aiTocSelectors(html, candidate),
+        new Promise((r) => setTimeout(() => r(null), 20_000)),
+      ]);
       if (ai?.toc?.length) {
-        const items = collectTocLinks(doc, url, ai.toc);
-        if (items.length) {
-          results = items;
-          selectors.unshift(...ai.toc);
-        }
+        consider(collectTocLinks(doc, candidate, ai.toc), doc, candidate, [...ai.toc, ...selectors]);
       }
     } catch (e) {
       console.warn("[fetcher] AI TOC fallback failed", e?.message || e);
     }
+    if (tocSetScore(best) >= STRONG) break;
+
+    // 4. Madara signature in the markup - the chapter list lives behind the
+    // theme's AJAX endpoint, not in the static HTML.
+    if (/wp-manga|madara|manga_id/i.test(html) && timeLeft() > 10_000) {
+      try {
+        const madara = await Promise.race([
+          tocMadara(candidate),
+          new Promise((r) => setTimeout(() => r([]), 25_000)),
+        ]);
+        consider(madara, doc, candidate);
+      } catch {
+        /* not actually Madara */
+      }
+      if (tocSetScore(best) >= STRONG) break;
+    }
   }
+  if (!bestDoc) return [];
 
-  // Still nothing: take every same-origin link that looks like a chapter.
-  if (!results.length) {
-    results = collectTocLinks(doc, url, ["body"]).filter((r) =>
-      /(chapter|chap|ch-|\/c\d|episode|part)[-_/]?\d|\d+\.html?$/i.test(r.url)
-    );
-  }
-
-
-
-
-  const pages = tocPageUrls(doc, url);
+  // Pagination merge from the winning page. Capped: the generic path used
+  // to fan out to as many as 300 page fetches here.
+  // The merge is NOT under the staging deadline: once a set has won, its
+  // pagination is part of the answer, however many pages it spans. The
+  // protections here are the page cap and a per-page deadline (the old
+  // code could fan out to 300 unbounded fetches).
+  const pages = tocPageUrls(bestDoc, bestUrl).slice(0, 60);
   if (pages.length) {
     const htmls = await mapPool(pages, 8, async (u) => {
       try {
-        return await getText(u);
+        return await smartGetText(u, 12000, 30000);
       } catch {
         return "";
       }
     });
-    const seen = new Set(results.map((r) => r.url));
+    const seen = new Set(best.map((r) => r.url));
     htmls.forEach((h) => {
       if (!h) return;
-      for (const item of collectTocLinks(parseHtml(h), url, selectors)) {
+      for (const item of collectTocLinks(parseHtml(h), bestUrl, winSelectors)) {
         if (!seen.has(item.url)) {
           seen.add(item.url);
-          results.push(item);
+          best.push(item);
         }
       }
     });
   }
-  return results;
+  return best;
 }
 
 // ---------------- Dedicated parsers for major sites ----------------
@@ -4349,17 +4467,24 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
     }
   }
 
-  // Unknown site, or the dedicated parser came back empty: config selectors,
-  // then AI-detected selectors, then a raw same-origin link sweep.
+  // Unknown site, or the dedicated parser came back empty: staged generic
+  // path (selectors, heuristic, AI, Madara probe) inside tocFromConfig.
   const config = lookupSiteConfig(new URL(tocUrl).hostname);
   const items = await tocFromConfig(tocUrl, config, linkSelector).catch((e) => {
     if (e?.blocked) throw e;
     return [];
   });
   if (items.length) return isJonaxx ? cleanJonaxxToc(items) : items;
-  const doc = parseHtml(await getText(tocUrl));
-  const swept = collectTocLinks(doc, tocUrl, [linkSelector || "a[href]"]);
-  return isJonaxx ? cleanJonaxxToc(swept) : swept;
+  // Last resort: the deterministic heuristic on a fresh fetch. If even that
+  // finds no chapter-like cluster, return an honest empty result instead of
+  // the old raw sweep, which returned the page's navigation as a "TOC".
+  try {
+    const doc = parseHtml(await getText(tocUrl));
+    const swept = heuristicTocLinks(doc, tocUrl);
+    return isJonaxx ? cleanJonaxxToc(swept) : swept;
+  } catch {
+    return [];
+  }
 }
 
 
@@ -4452,7 +4577,9 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
   // Some parsers already retry internally against metered APIs — don't stack
   // up to 5 reader calls per attempt) — restarting those from this outer loop
   // multiplies straight into the site's rate limit, so they get one attempt.
-  const maxAttempts = 3;
+  // The generic path already sweeps every route inside one attempt, so a
+  // single retry is plenty there too.
+  const maxAttempts = key === "generic" ? 2 : 3;
   let last = "";
   let thinTries = 0;
   for (let i = 0; i < maxAttempts; i++) {
