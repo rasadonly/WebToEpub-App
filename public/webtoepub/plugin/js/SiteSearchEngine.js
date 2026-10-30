@@ -237,52 +237,23 @@ class SiteSearchEngine {
                 name: "NovelFull",
                 hostname: "novelfull.net",
                 searchUrl: (q) => `https://novelfull.net/search?keyword=${encodeURIComponent(q)}`,
-                parseResults: (dom) => {
-                    let results = [];
-                    let items = dom.querySelectorAll(".list-truyen .row");
-                    if (items.length === 0) items = dom.querySelectorAll(".archive .list-truyen-item-wrap");
-                    for (let item of items) {
-                        let a = item.querySelector(".truyen-title a") || item.querySelector("h3 a") || item.querySelector("a");
-                        if (a && a.href) {
-                            let snippet = item.querySelector(".text-primary") || item.querySelector(".author");
-                            results.push({
-                                title: a.textContent.trim(),
-                                url: SiteSearchEngine.resolveUrl("https://novelfull.net", a.getAttribute("href")),
-                                snippet: snippet ? snippet.textContent.trim() : "",
-                                source: "NovelFull (.net)"
-                            });
-                        }
-                    }
-                    return results;
-                }
+                parseResults: (dom) => SiteSearchEngine.parseNovelFullStyle(dom, "https://novelfull.net", "NovelFull (.net)")
             },
             {
                 name: "NovelFull (.com)",
                 hostname: "novelfull.com",
                 searchUrl: (q) => `https://novelfull.com/search?keyword=${encodeURIComponent(q)}`,
-                parseResults: (dom) => {
-                    let results = [];
-                    let items = dom.querySelectorAll(".list-truyen .row");
-                    if (items.length === 0) items = dom.querySelectorAll(".archive .list-truyen-item-wrap");
-                    for (let item of items) {
-                        let a = item.querySelector(".truyen-title a") || item.querySelector("h3 a") || item.querySelector("a");
-                        if (a && a.href) {
-                            let snippet = item.querySelector(".text-primary") || item.querySelector(".author");
-                            results.push({
-                                title: a.textContent.trim(),
-                                url: SiteSearchEngine.resolveUrl("https://novelfull.com", a.getAttribute("href")),
-                                snippet: snippet ? snippet.textContent.trim() : "",
-                                source: "NovelFull (.com)"
-                            });
-                        }
-                    }
-                    return results;
-                }
+                parseResults: (dom) => SiteSearchEngine.parseNovelFullStyle(dom, "https://novelfull.com", "NovelFull (.com)")
             },
             {
                 name: "FreeWebNovel",
                 hostname: "freewebnovel.com",
-                searchUrl: (q) => `https://freewebnovel.com/search/?searchkey=${encodeURIComponent(q)}`,
+                searchUrl: (q) => `https://freewebnovel.com/search`,
+                getFetchOptions: (q) => ({
+                    method: "POST",
+                    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                    body: `keyword=${encodeURIComponent(q)}`
+                }),
                 parseResults: (dom) => {
                     let results = [];
                     let items = dom.querySelectorAll(".li-row");
@@ -520,7 +491,7 @@ class SiteSearchEngine {
         for (let h of readwnHosts) {
             addIfNew(h, {
                 name: h, hostname: h,
-                searchUrl: (q) => `https://${h}/search?q=${encodeURIComponent(q)}`,
+                searchUrl: (q) => `https://${h}/search.html?keyword=${encodeURIComponent(q)}`,
                 parseResults: (dom) => SiteSearchEngine.parseReadwnStyle(dom, `https://${h}`, h)
             });
         }
@@ -577,6 +548,12 @@ class SiteSearchEngine {
                 };
             } else if (h.includes("czbooks.net")) {
                 searchUrl = (q) => `https://czbooks.net/s/${encodeURIComponent(q)}`;
+            } else if (h.includes("chyoa.com")) {
+                searchUrl = (q) => `https://chyoa.com/search?q=${encodeURIComponent(q)}`;
+                parseResults = (dom) => SiteSearchEngine.parseChyoaStyle(dom, `https://chyoa.com`, h);
+            } else if (h.includes("webnovel.com")) {
+                searchUrl = (q) => `https://www.webnovel.com/search?keywords=${encodeURIComponent(q)}`;
+                parseResults = (dom) => SiteSearchEngine.parseWebNovelStyle(dom, `https://www.webnovel.com`, h);
             } else if (h.includes("ranobes.")) {
                 searchUrl = (q) => `https://${h}/index.php?do=search&subaction=search&story=${encodeURIComponent(q)}`;
             }
@@ -592,14 +569,41 @@ class SiteSearchEngine {
 
     static parseNovelFullStyle(dom, baseUrl, sourceName) {
         let results = [];
-        let items = dom.querySelectorAll(".list-truyen .row, .archive .list-truyen-item-wrap, .list .row");
+        // .li-row is the current novelfull.net search layout; #results-grid
+        // cards are novel-bin's layout (the card itself is the anchor, its
+        // title lives in h3 or the title attribute, not the full card text
+        // which also carries author/view counts).
+        // Scope to the main results column when the theme has one: the
+        // .list-truyen selector also matches the Genres sidebar and the
+        // "Top novels" sidebar, whose links otherwise leak in as results
+        // whenever the real result list is empty ("No results" pages).
+        let scope = dom.querySelector(".col-truyen-main") || dom;
+        let items = scope.querySelectorAll(".list-truyen .row, .archive .list-truyen-item-wrap, .list .row, .li-row, #results-grid a.nl2-book-card");
+        const inSidebar = (el) => {
+            let p = el;
+            while (p) {
+                let c = String((p.className && p.className.baseVal !== undefined) ? p.className.baseVal : (p.className || ""));
+                if (/(^|\s)(list-cat|list-side|col-truyen-side|top-item|sidebar)(\s|$)/.test(c)) return true;
+                p = p.parentElement;
+            }
+            return false;
+        };
         for (let item of items) {
-            let a = item.querySelector(".truyen-title a, h3 a, a");
-            if (a && a.href) {
+            if (inSidebar(item)) continue;
+            let a = item.tagName === "A" ? item : item.querySelector(".truyen-title a, h3 a, a");
+            if (a && a.getAttribute("href")) {
+                let titleEl = item.querySelector("h3, .truyen-title");
+                let title = (titleEl ? titleEl.textContent : "") || a.getAttribute("title") || a.textContent;
+                title = title.trim();
+                let url = SiteSearchEngine.resolveUrl(baseUrl, a.getAttribute("href"));
+                // The .list-truyen selector also matches the Genres sidebar
+                // (.list-cat rows); those links are genre archives, not
+                // novels, and must never surface as search results.
+                if (SiteSearchEngine.isJunkResultUrl(url)) continue;
                 let snippet = item.querySelector(".text-primary, .author");
                 results.push({
-                    title: a.textContent.trim(),
-                    url: SiteSearchEngine.resolveUrl(baseUrl, a.getAttribute("href")),
+                    title,
+                    url,
                     snippet: snippet ? snippet.textContent.trim() : "",
                     source: sourceName
                 });
@@ -608,11 +612,29 @@ class SiteSearchEngine {
         return results;
     }
 
+    // Archive/utility URLs that can never be a novel page: genre, category,
+    // author and tag archives, site home/search pages, and Cloudflare's
+    // email-protection links (which the parsers otherwise pick up as results).
+    static isJunkResultUrl(url) {
+        try {
+            let u = new URL(url);
+            let path = u.pathname.toLowerCase();
+            if (url.includes("cdn-cgi/")) return true;
+            if (path === "/" || path === "/home" || path === "/home/" || path === "/search" || path === "/search/") return true;
+            return /^\/(genre|genres|category|categories|author|authors|tag|tags)\//.test(path);
+        } catch (e) {
+            return false;
+        }
+    }
+
     static parseMadaraStyle(dom, baseUrl, sourceName) {
         let results = [];
         let items = dom.querySelectorAll(".c-tabs-item__content, .search-wrap .manga-item, .manga-item");
         for (let item of items) {
-            let a = item.querySelector(".post-title a, h3 a, a");
+            // Prefer the title anchor: the first anchor in a card is often a
+            // status/rank/cover link whose text ("New chapter", "1") is not
+            // the novel title.
+            let a = item.querySelector(".post-title a, h3 a") || item.querySelector("a");
             if (a && a.href) {
                 let snippet = item.querySelector(".summary__content, .excerpt, .summary");
                 results.push({
@@ -630,7 +652,7 @@ class SiteSearchEngine {
         let results = [];
         let items = dom.querySelectorAll("article, .post-item, .latest-post, .entry");
         for (let item of items) {
-            let a = item.querySelector(".entry-title a, .post-title a, h2 a, a");
+            let a = item.querySelector(".entry-title a, .post-title a, h2 a") || item.querySelector("a");
             if (a && a.href) {
                 let snippet = item.querySelector(".entry-summary, .post-excerpt, p");
                 results.push({
@@ -672,6 +694,47 @@ class SiteSearchEngine {
                 let title = item.querySelector(".tt, h2, h3, .title") || a;
                 results.push({
                     title: title.textContent.trim(),
+                    url: SiteSearchEngine.resolveUrl(baseUrl, a.getAttribute("href")),
+                    snippet: "",
+                    source: sourceName
+                });
+            }
+        }
+        return results;
+    }
+
+    // CHYOA renders real search results server-side in
+    // ol.rd-search-results > li.rd-search-results__item, title in h3 a.
+    // (Its generic WordPress route /?s= just returns the story index.)
+    static parseChyoaStyle(dom, baseUrl, sourceName) {
+        let results = [];
+        let items = dom.querySelectorAll(".rd-search-results__item, .rd-search-results li");
+        for (let item of items) {
+            // The cover anchor comes first in the item and has no text; the
+            // title lives in the h3 anchor, so it must win.
+            let a = item.querySelector("h3 a") || item.querySelector("a");
+            if (a && a.getAttribute("href")) {
+                results.push({
+                    title: (a.getAttribute("title") || a.textContent).trim(),
+                    url: SiteSearchEngine.resolveUrl(baseUrl, a.getAttribute("href")),
+                    snippet: "",
+                    source: sourceName
+                });
+            }
+        }
+        return results;
+    }
+
+    // WebNovel renders results server-side: .j_result_wrap li items, the
+    // title link is the h3 anchor (title attribute = novel title).
+    static parseWebNovelStyle(dom, baseUrl, sourceName) {
+        let results = [];
+        let items = dom.querySelectorAll(".j_result_wrap li, .search-result-container li");
+        for (let item of items) {
+            let a = item.querySelector("h3 a, a[title]");
+            if (a && a.getAttribute("href")) {
+                results.push({
+                    title: (a.getAttribute("title") || a.textContent).trim(),
                     url: SiteSearchEngine.resolveUrl(baseUrl, a.getAttribute("href")),
                     snippet: "",
                     source: sourceName
@@ -829,6 +892,15 @@ class SiteSearchEngine {
             if (results.length === 0 && typeof AiClient !== "undefined") {
                 results = await AiClient.fetchAiResults(html, query, url);
             }
+
+            // Drop utility/archive links every parser can pick up (genre and
+            // category sidebars, author/tag archives, home/search links,
+            // email-protection links) and empty/ellipsis titles.
+            results = results.filter(r =>
+                r && r.url && r.title && r.title.trim() && r.title.trim() !== "\u2026" &&
+                r.title.trim().toLowerCase() !== "new chapter" &&
+                r.title.trim().toLowerCase() !== "new chapters" &&
+                !SiteSearchEngine.isJunkResultUrl(r.url));
 
             // Cap per-site results
             if (results.length > SiteSearchEngine.MAX_RESULTS_PER_SITE) {

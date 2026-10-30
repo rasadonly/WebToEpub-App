@@ -811,12 +811,20 @@ export async function engineSearch(
         siteResults = siteResults.filter((r: EngineSearchResult) => {
           if (!r.url) return false;
           const u = r.url.toLowerCase();
-          // Exclude URLs that are clearly chapters
-          const isChapter = /\/chapter-?\d+/i.test(u) || 
+          // Exclude URLs that are clearly chapters. The extra patterns cover
+          // chapter links the old set missed on WordPress search pages:
+          // prefixed slugs (atcf-ch-148, bto-ch11), volume-chapter codes
+          // (fxdl-v4c6), episode numbers, and dated post permalinks
+          // (WP chapter posts; novel pages are not dated).
+          const isChapter = /\/chapter-?\d+/i.test(u) ||
                             /\/ch-?\d+/i.test(u) ||
                             /\/read\//i.test(u) ||
                             /\/c\d+/i.test(u) ||
-                            /-chapter-\d+/i.test(u);
+                            /-chapter-\d+/i.test(u) ||
+                            /-ch-?\d+/i.test(u) ||
+                            /v\d+c\d+/i.test(u) ||
+                            /episode-?\d+/i.test(u) ||
+                            /\/\d{4}\/\d{2}\/\d{2}\//.test(u);
           return !isChapter;
         });
       } catch (e) {
