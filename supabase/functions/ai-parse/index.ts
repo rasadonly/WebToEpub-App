@@ -21,11 +21,13 @@ const passthrough = (text: string, status: number, contentType?: string | null) 
   });
 
 // ---------------------------------------------------------------------------
-// NVIDIA free endpoint: models there are retired without notice, so instead
-// of hardcoding ids, discover what the endpoint serves (GET /v1/models),
-// pick the best chat model by preference, cache the pick for an hour, and
-// rediscover + retry once if a chat call 404s (model dropped). Mirrors the
-// logic in server/src/aiParser.js — keep the two in step.
+// NVIDIA free endpoint: models there are retired without notice, and the
+// /v1/models catalog lists models not actually deployed for the account
+// (chat calls 404 "Function not found for account"). So: discover the
+// catalog, rank candidates by preference, walk them with the real chat
+// call until one answers, cache the WORKING model for an hour, and
+// remember the dead ones; the walk re-runs automatically when the cached
+// model drops. Mirrors server/src/aiParser.js - keep the two in step.
 // ---------------------------------------------------------------------------
 const NV_BASE = "https://integrate.api.nvidia.com/v1";
 const NV_PREFERRED_MODELS = [
@@ -33,25 +35,33 @@ const NV_PREFERRED_MODELS = [
   "meta/llama-3.1-70b-instruct",
   "nvidia/llama-3.1-nemotron-70b-instruct",
   "qwen/qwen2.5-72b-instruct",
+  "openai/gpt-oss-120b",
+  "openai/gpt-oss-20b",
   "mistralai/mixtral-8x7b-instruct-v0.1",
   "meta/llama-3.1-405b-instruct",
   "meta/llama-3.1-8b-instruct",
 ];
 const NV_MODEL_TTL_MS = 60 * 60 * 1000;
-let nvModelCache: { model: string; at: number } = { model: "", at: 0 };
+const NV_DEAD_TTL_MS = 30 * 60 * 1000;
+const NV_MAX_ATTEMPTS = 4;
+let nvWorking: { model: string; at: number } = { model: "", at: 0 };
+let nvCatalog: { candidates: string[]; at: number } = { candidates: [], at: 0 };
+const nvDead = new Map<string, number>();
 
-function pickNvidiaModel(ids: string[]): string {
-  if (!ids.length) return "";
+function rankNvidiaModels(ids: string[]): string[] {
+  if (!ids.length) return [];
   const byLower = new Map(ids.map((id) => [String(id).toLowerCase(), String(id)]));
+  const out: string[] = [];
   for (const want of NV_PREFERRED_MODELS) {
-    if (byLower.has(want)) return byLower.get(want) as string;
+    if (byLower.has(want)) out.push(byLower.get(want) as string);
   }
-  const notChat = /(embed|rerank|reward|guard|vision|clip|ocr|detect|moderation|asr|tts|image|video|diffusion|vila|kosmos|deplot)/i;
-  const families = [/llama/, /nemotron/, /qwen/, /mistral|mixtral/, /gemma/, /phi/, /deepseek/];
+  const notChat = /(embed|rerank|reward|guard|vision|clip|ocr|detect|moderation|safety|content-safety|topic-control|asr|tts|image|video|diffusion|vila|kosmos|deplot|parse)/i;
+  const families = [/llama/, /nemotron/, /qwen/, /gpt-oss/, /mistral|mixtral/, /gemma/, /phi/, /deepseek/];
   const scored: { id: string; score: number }[] = [];
   for (const raw of ids) {
     const id = String(raw);
-    if (!/instruct|chat/i.test(id) || notChat.test(id)) continue;
+    if (out.includes(id)) continue;
+    if (!/instruct|chat|-it\b/i.test(id) || notChat.test(id)) continue;
     const m = id.match(/(\d+(?:\.\d+)?)\s*b\b/i);
     const size = m ? parseFloat(m[1]) : 0;
     const fam = families.findIndex((f) => f.test(id.toLowerCase()));
@@ -59,32 +69,39 @@ function pickNvidiaModel(ids: string[]): string {
     scored.push({ id, score: (fam === -1 ? 0 : (families.length - fam) * 10) + sizeScore });
   }
   scored.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
-  return scored.length ? scored[0].id : "";
+  for (const s of scored) {
+    if (out.length >= 8) break;
+    out.push(s.id);
+  }
+  return out;
 }
 
-async function discoverNvidiaModel(nvKey: string): Promise<string> {
+async function nvidiaCandidates(nvKey: string, forceRefresh = false): Promise<string[]> {
+  if (!forceRefresh && nvCatalog.candidates.length && Date.now() - nvCatalog.at < NV_MODEL_TTL_MS) {
+    return nvCatalog.candidates;
+  }
   try {
     const res = await fetch(`${NV_BASE}/models`, {
       headers: { Authorization: `Bearer ${nvKey}` },
       signal: AbortSignal.timeout(6000),
     });
-    if (!res.ok) return "";
-    const j = await res.json();
-    const ids = (Array.isArray(j?.data) ? j.data : []).map((m: { id?: string }) => m?.id ?? "");
-    return pickNvidiaModel(ids);
+    if (res.ok) {
+      const j = await res.json();
+      const ids = (Array.isArray(j?.data) ? j.data : []).map((m: { id?: string }) => m?.id ?? "");
+      const candidates = rankNvidiaModels(ids);
+      if (candidates.length) nvCatalog = { candidates, at: Date.now() };
+      return candidates;
+    }
   } catch {
-    return "";
+    /* fall through to the cached list */
   }
+  return nvCatalog.candidates;
 }
 
-async function nvidiaModel(nvKey: string, forceRediscover = false): Promise<string> {
-  if (!forceRediscover && nvModelCache.model && Date.now() - nvModelCache.at < NV_MODEL_TTL_MS) {
-    return nvModelCache.model;
-  }
-  const model = await discoverNvidiaModel(nvKey);
-  if (model) nvModelCache = { model, at: Date.now() };
-  return model || nvModelCache.model;
-}
+const nvRecentlyDead = (model: string) => {
+  const at = nvDead.get(model);
+  return at !== undefined && Date.now() - at < NV_DEAD_TTL_MS;
+};
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -120,15 +137,22 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 2) NVIDIA free endpoint — model auto-discovered from /v1/models, with
-    // one rediscover-and-retry if the cached model has been retired.
+    // 2) NVIDIA free endpoint - walk ranked candidates until one answers.
     if (nvKey && (!provider || provider === "nvidia" || provider === "lovable")) {
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const model = await nvidiaModel(nvKey, attempt === 1);
+      const tried = new Set<string>();
+      for (let attempt = 0; attempt < NV_MAX_ATTEMPTS; attempt++) {
+        let model = "";
+        if (attempt === 0 && nvWorking.model && Date.now() - nvWorking.at < NV_MODEL_TTL_MS && !nvRecentlyDead(nvWorking.model)) {
+          model = nvWorking.model;
+        } else {
+          const candidates = await nvidiaCandidates(nvKey, attempt === 1);
+          model = candidates.find((c) => !tried.has(c) && !nvRecentlyDead(c)) ?? "";
+        }
         if (!model) {
           errors.push("nvidia:no-chat-model-available");
           break;
         }
+        tried.add(model);
         try {
           const res = await fetch(`${NV_BASE}/chat/completions`, {
             method: "POST",
@@ -136,14 +160,18 @@ Deno.serve(async (req) => {
             body: JSON.stringify({ model, messages, temperature, stream: false }),
             signal: AbortSignal.timeout(20000),
           });
-          if (res.ok) return passthrough(await res.text(), res.status, res.headers.get("Content-Type"));
+          if (res.ok) {
+            nvWorking = { model, at: Date.now() };
+            return passthrough(await res.text(), res.status, res.headers.get("Content-Type"));
+          }
           const t = await res.text();
           errors.push(`nvidia(${model}):${res.status}`);
           console.warn(`[ai-parse] NVIDIA ${model} failed ${res.status}: ${t.slice(0, 200)}`);
-          if (res.status === 401 || res.status === 403) break; // bad key, don't retry
-          if ((res.status === 404 || res.status === 400) && attempt === 0) {
-            nvModelCache = { model: "", at: 0 }; // model likely retired — rediscover
-            continue;
+          if (res.status === 401 || res.status === 403) break; // bad key
+          if (res.status === 404 || res.status === 400) {
+            nvDead.set(model, Date.now());
+            if (nvWorking.model === model) nvWorking = { model: "", at: 0 };
+            continue; // retired or not deployed for this account - next candidate
           }
           break;
         } catch (e) {

@@ -51,12 +51,15 @@ function extractJson(text) {
 const NV_KEY = process.env.NVIDIA_API_KEY || "";
 
 // ---------------------------------------------------------------------------
-// NVIDIA free endpoint (OpenAI-compatible). Models on the free tier are
-// retired without notice, so a hardcoded model id is a ticking failure.
-// Instead: discover what the endpoint actually serves via GET /v1/models,
-// pick the best chat model by preference, cache the pick for an hour, and
-// if a chat call 404s (model dropped), rediscover and retry once with a
-// live model. No code change is ever needed when NVIDIA rotates models.
+// NVIDIA free endpoint (OpenAI-compatible). Two failure modes make a
+// hardcoded model id useless: models are retired without notice, and the
+// /v1/models catalog lists models that are not actually deployed for the
+// account (chat calls 404 with "Function not found for account"). So:
+// discover the catalog, rank candidates by preference, walk them with the
+// real chat call until one answers, cache the WORKING model for an hour,
+// and remember the dead ones. If the cached model later drops, the walk
+// runs again automatically. No code change is ever needed when NVIDIA
+// rotates its free models.
 // ---------------------------------------------------------------------------
 const NV_BASE = "https://integrate.api.nvidia.com/v1";
 const NV_PREFERRED_MODELS = [
@@ -64,28 +67,35 @@ const NV_PREFERRED_MODELS = [
   "meta/llama-3.1-70b-instruct",
   "nvidia/llama-3.1-nemotron-70b-instruct",
   "qwen/qwen2.5-72b-instruct",
+  "openai/gpt-oss-120b",
+  "openai/gpt-oss-20b",
   "mistralai/mixtral-8x7b-instruct-v0.1",
   "meta/llama-3.1-405b-instruct",
   "meta/llama-3.1-8b-instruct",
 ];
-const NV_MODEL_TTL_MS = 60 * 60 * 1000;
-let nvModelCache = { model: "", at: 0 };
+const NV_MODEL_TTL_MS = 60 * 60 * 1000; // working-model + catalog cache
+const NV_DEAD_TTL_MS = 30 * 60 * 1000; // how long a 404ing model stays skipped
+const NV_MAX_ATTEMPTS = 4; // chat attempts per call, to stay fast
+let nvWorking = { model: "", at: 0 };
+let nvCatalog = { candidates: [], at: 0 };
+const nvDead = new Map(); // model -> timestamp it last 404'd
 
-export function pickNvidiaModel(ids) {
-  if (!Array.isArray(ids) || !ids.length) return "";
+/** Rank the endpoint's catalog: preferred ids first (in order), then the
+ *  best-scoring remaining chat models. Returns at most 8 candidates. */
+export function rankNvidiaModels(ids) {
+  if (!Array.isArray(ids) || !ids.length) return [];
   const byLower = new Map(ids.map((id) => [String(id).toLowerCase(), String(id)]));
+  const out = [];
   for (const want of NV_PREFERRED_MODELS) {
-    if (byLower.has(want)) return byLower.get(want);
+    if (byLower.has(want)) out.push(byLower.get(want));
   }
-  // None of the preferred ids are served right now: score whatever chat
-  // models the endpoint does have — known families first, then the
-  // 30–130B speed/quality sweet spot.
-  const notChat = /(embed|rerank|reward|guard|vision|clip|ocr|detect|moderation|asr|tts|image|video|diffusion|vila|kosmos|deplot)/i;
-  const families = [/llama/, /nemotron/, /qwen/, /mistral|mixtral/, /gemma/, /phi/, /deepseek/];
+  const notChat = /(embed|rerank|reward|guard|vision|clip|ocr|detect|moderation|safety|content-safety|topic-control|asr|tts|image|video|diffusion|vila|kosmos|deplot|parse)/i;
+  const families = [/llama/, /nemotron/, /qwen/, /gpt-oss/, /mistral|mixtral/, /gemma/, /phi/, /deepseek/];
   const scored = [];
   for (const raw of ids) {
     const id = String(raw);
-    if (!/instruct|chat/i.test(id) || notChat.test(id)) continue;
+    if (out.includes(id)) continue;
+    if (!/instruct|chat|-it\b/i.test(id) || notChat.test(id)) continue;
     const m = id.match(/(\d+(?:\.\d+)?)\s*b\b/i);
     const size = m ? parseFloat(m[1]) : 0;
     const fam = families.findIndex((f) => f.test(id.toLowerCase()));
@@ -93,40 +103,55 @@ export function pickNvidiaModel(ids) {
     scored.push({ id, score: (fam === -1 ? 0 : (families.length - fam) * 10) + sizeScore });
   }
   scored.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
-  return scored.length ? scored[0].id : "";
+  for (const s of scored) {
+    if (out.length >= 8) break;
+    out.push(s.id);
+  }
+  return out;
 }
 
-async function discoverNvidiaModel() {
+async function nvidiaCandidates(forceRefresh = false) {
+  if (!forceRefresh && nvCatalog.candidates.length && Date.now() - nvCatalog.at < NV_MODEL_TTL_MS) {
+    return nvCatalog.candidates;
+  }
   try {
     const r = await fetchWithTimeout(`${NV_BASE}/models`, {
       headers: { Authorization: `Bearer ${NV_KEY}` },
     }, 6000);
-    if (!r.ok) return "";
-    const j = await r.json();
-    return pickNvidiaModel((j?.data || []).map((m) => m?.id));
+    if (r.ok) {
+      const j = await r.json();
+      const candidates = rankNvidiaModels((j?.data || []).map((m) => m?.id));
+      if (candidates.length) nvCatalog = { candidates, at: Date.now() };
+      return candidates;
+    }
   } catch {
-    return "";
+    /* fall through to the cached list */
   }
+  return nvCatalog.candidates;
 }
 
-async function nvidiaModel(forceRediscover = false) {
-  if (!forceRediscover && nvModelCache.model && Date.now() - nvModelCache.at < NV_MODEL_TTL_MS) {
-    return nvModelCache.model;
-  }
-  const model = await discoverNvidiaModel();
-  if (model) nvModelCache = { model, at: Date.now() };
-  return model || nvModelCache.model; // a stale pick beats none if discovery hiccups
-}
+const nvRecentlyDead = (model) => {
+  const at = nvDead.get(model);
+  return at !== undefined && Date.now() - at < NV_DEAD_TTL_MS;
+};
 
 async function nvidiaChat(messages, timeoutMs = 10000) {
   if (!NV_KEY) return null;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const model = await nvidiaModel(attempt === 1);
+  const tried = new Set();
+  for (let attempt = 0; attempt < NV_MAX_ATTEMPTS; attempt++) {
+    let model = "";
+    if (attempt === 0 && nvWorking.model && Date.now() - nvWorking.at < NV_MODEL_TTL_MS && !nvRecentlyDead(nvWorking.model)) {
+      model = nvWorking.model; // fast path: last known working model
+    } else {
+      const candidates = await nvidiaCandidates(attempt === 1);
+      model = candidates.find((c) => !tried.has(c) && !nvRecentlyDead(c)) || "";
+    }
     if (!model) return null;
+    tried.add(model);
     try {
       const payload = { model, temperature: 0, messages };
       // response_format is not supported by every NIM model; the meta
-      // family (the usual pick) takes it, others rely on the prompt.
+      // family (a common pick) takes it, others rely on the prompt.
       if (model.startsWith("meta/")) payload.response_format = { type: "json_object" };
       const r = await fetchWithTimeout(`${NV_BASE}/chat/completions`, {
         method: "POST",
@@ -136,14 +161,18 @@ async function nvidiaChat(messages, timeoutMs = 10000) {
         },
         body: JSON.stringify(payload),
       }, timeoutMs);
-      if (r.ok) return r;
-      // 404 (or a model-flavoured 400) almost always means the model was
-      // retired from the free endpoint: rediscover and retry once.
-      if ((r.status === 404 || r.status === 400) && attempt === 0) {
-        nvModelCache = { model: "", at: 0 };
+      if (r.ok) {
+        nvWorking = { model, at: Date.now() };
+        return r;
+      }
+      // 404 (or a model-flavoured 400): the model is retired or not
+      // deployed for this account - mark it dead and try the next one.
+      if (r.status === 404 || r.status === 400) {
+        nvDead.set(model, Date.now());
+        if (nvWorking.model === model) nvWorking = { model: "", at: 0 };
         continue;
       }
-      return null; // 401/403/429/5xx — another model won't fix it, stay fast
+      return null; // 401/403/429/5xx - another model won't fix it, stay fast
     } catch {
       return null;
     }
