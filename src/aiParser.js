@@ -328,6 +328,17 @@ export async function aiFilterChapterLinks(links, pageUrl) {
     .map((l, i) => `${i}. ${(l?.title || "").replace(/\s+/g, " ").trim().slice(0, 80)} | ${l?.url || ""}`)
     .join("\n");
 
+  // The book's URL stem is the strongest mechanical signal the model gets:
+  // a link without it is almost always another book's chapter, even when
+  // its title says "Chapter N" (the regex cannot tell those apart).
+  let stem = "";
+  try {
+    const segs = new URL(pageUrl).pathname.split("/").filter(Boolean);
+    stem = segs.reduce((a, b) => (b.length > a.length ? b : a), "");
+  } catch {
+    /* ignore */
+  }
+
   const parsed = await chatJson(
     "You are a web-novel chapter-list filter. Output ONLY a JSON array of numbers.",
     `This is a web-novel TABLE OF CONTENTS page: ${pageUrl}
@@ -335,6 +346,7 @@ export async function aiFilterChapterLinks(links, pageUrl) {
 Below is a numbered list of links the site's own parser collected from it.
 Return ONLY the numbers of the links that are chapters of THIS book, in
 reading order. Keep range posts (e.g. "Chapter 1-200") and part posts.
+${stem ? `Book identifier from the page URL: "${stem}". This book's chapter links normally contain that identifier in their URL. A link without it is almost certainly another book's chapter - exclude it even if its title says "Chapter N", unless its title unambiguously continues this book's own chapter sequence.` : ""}
 EXCLUDE: site navigation, login/account/edit/history links, links to
 other books or series, author pages, ads, recommendations, "read now"
 or homepage links, and duplicate entries of the same chapter (keep the
@@ -356,12 +368,47 @@ ${numbered}`
     }
   }
   const seen = new Set();
-  const out = [];
+  let out = [];
   for (const i of indices) {
     const n = Number(i);
     if (!Number.isInteger(n) || n < 0 || n >= links.length || seen.has(n)) continue;
     seen.add(n);
     out.push(links[n]);
+  }
+  if (!out.length) return null;
+
+  // Deterministic guard the model cannot be trusted with: a kept link
+  // whose path matches the dominant chapter path template with ONLY the
+  // book-stem segment swapped is another book's chapter, however
+  // chapter-shaped its title looks. (The model kept such a link in
+  // testing even with the stem hint in the prompt.) The guard only fires
+  // when the dominant template actually contains the book stem, so
+  // differently-shaped legit chapters (dated permalinks, specials) are
+  // untouched.
+  if (out.length >= 3 && stem) {
+    const tpl = (u) => {
+      try {
+        return new URL(u).pathname.replace(/\d+/g, "#");
+      } catch {
+        return "";
+      }
+    };
+    const counts = new Map();
+    for (const l of out) {
+      const t = tpl(l.url);
+      if (t) counts.set(t, (counts.get(t) || 0) + 1);
+    }
+    const dominant = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "";
+    const dSegs = dominant.split("/").filter(Boolean);
+    const stemIndex = dSegs.indexOf(stem);
+    if (stemIndex >= 0) {
+      out = out.filter((l) => {
+        const segs = tpl(l.url).split("/").filter(Boolean);
+        if (segs.length !== dSegs.length) return true;
+        const diffs = segs.map((s, i) => (s === dSegs[i] ? -1 : i)).filter((i) => i >= 0);
+        return diffs.length !== 1 || diffs[0] !== stemIndex;
+      });
+    }
   }
   return out.length ? out : null;
 }

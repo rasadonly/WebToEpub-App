@@ -4,7 +4,7 @@
 import { parseHTML } from "linkedom";
 import crypto from "node:crypto";
 import fs from "node:fs";
-import { aiContentSelectors, aiFilterChapterLinks, aiTocSelectors } from "./aiParser.js";
+import { aiContentSelectors, aiEnabled, aiFilterChapterLinks, aiTocSelectors } from "./aiParser.js";
 
 
 const UA =
@@ -1864,17 +1864,55 @@ async function tocFromConfig(url, config, linkSelector) {
       (!CHAPTERISH_RE.test(i.url) && !CHAPTERISH_RE.test(i.title || "")) ||
       (slug && !i.url.includes(slug))
   );
-  if (best.length >= 2 && best.length <= 400 && impure) {
+  if (aiEnabled() && best.length >= 2 && best.length <= 400 && impure) {
     try {
+      // Shrink what the model sees: fetch the FIRST candidate URL and
+      // extract its links. Links common to the main page and that page
+      // are site furniture (nav, home, series page) - drop them, and send
+      // only the links unique to the main page to AI. If the reduction
+      // leaves too little (e.g. the chapter page carries the full list),
+      // fall back to the whole candidate list.
+      const normUrl = (u) => String(u || "").split("#")[0].replace(/\/$/, "");
+      let toFilter = best;
+      let reduced = false;
+      try {
+        const firstHtml = await smartGetText(best[0].url, 8000, 12000);
+        const firstLinks = collectTocLinks(parseHtml(firstHtml), best[0].url, ["a[href]"]);
+        const firstSet = new Set(firstLinks.map((l) => normUrl(l.url)));
+        const diff = best.filter((l) => !firstSet.has(normUrl(l.url)));
+        if (diff.length >= 2) {
+          toFilter = diff;
+          reduced = true;
+        }
+      } catch {
+        /* first-page fetch failed - send the whole list */
+      }
       const filtered = await Promise.race([
-        aiFilterChapterLinks(best, bestUrl),
+        aiFilterChapterLinks(toFilter, bestUrl),
         new Promise((r) => setTimeout(() => r(null), 20000)),
       ]);
-      if (filtered?.length && filtered.length >= Math.ceil(best.length / 2)) {
-        if (filtered.length !== best.length) {
-          console.warn(`[fetcher] AI chapter filter: ${best.length} -> ${filtered.length} links for ${bestUrl}`);
+      if (filtered?.length && filtered.length >= Math.ceil(toFilter.length / 2)) {
+        if (reduced) {
+          // The subtraction also eats prev/next chapter links, which ARE
+          // chapters: restore subtracted links that are chapter-shaped
+          // and under this book's stem, in original order.
+          const kept = new Set(filtered.map((l) => normUrl(l.url)));
+          const subtracted = new Set(best.map((l) => normUrl(l.url)));
+          for (const l of toFilter) subtracted.delete(normUrl(l.url));
+          best = best.filter(
+            (l) =>
+              kept.has(normUrl(l.url)) ||
+              (subtracted.has(normUrl(l.url)) &&
+                (CHAPTERISH_RE.test(l.url) || CHAPTERISH_RE.test(l.title || "")) &&
+                (!slug || l.url.includes(slug)))
+          );
+          console.warn(`[fetcher] AI chapter filter: ${toFilter.length} unique -> ${filtered.length} kept (+${best.length - filtered.length} prev/next restored) for ${bestUrl}`);
+        } else {
+          if (filtered.length !== best.length) {
+            console.warn(`[fetcher] AI chapter filter: ${best.length} -> ${filtered.length} links for ${bestUrl}`);
+          }
+          best = filtered;
         }
-        best = filtered;
       }
     } catch (e) {
       console.warn("[fetcher] AI chapter filter failed", e?.message || e);
