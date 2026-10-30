@@ -429,8 +429,20 @@ class SiteSearchEngine {
             });
         }
 
+        // Indra Translations (custom theme, not Madara): its series
+        // search lives at /series/?keyword= and results are .series-card
+        // elements whose URL is in the card's onclick (no anchor tags).
+        // The old Madara route (/?s=&post_type=wp-manga) returns "No
+        // results" for every query, so the AI fallback invented results
+        // from the nav/promo links instead — the false search results.
+        addIfNew("indratranslations.com", {
+            name: "indratranslations.com", hostname: "indratranslations.com",
+            searchUrl: (q) => `https://indratranslations.com/series/?keyword=${encodeURIComponent(q)}`,
+            parseResults: (dom) => SiteSearchEngine.parseIndratranslationsStyle(dom, "https://indratranslations.com", "indratranslations.com")
+        });
+
         // Madara Engine
-        const madaraHosts = ["greenztl2.com","indratranslations.com","kdtnovels.com","mangaread.co","mangasushi.net","manhwaden.com","manhwatop.com","readwebnovel.xyz","vipnovel.com","wuxiaworld.site","hiraethtranslation.com","novelmic.com","sonicmtl.com","zetrotranslation.com","crescentmoon.blog",];
+        const madaraHosts = ["greenztl2.com","kdtnovels.com","mangaread.co","mangasushi.net","manhwaden.com","manhwatop.com","readwebnovel.xyz","vipnovel.com","wuxiaworld.site","hiraethtranslation.com","novelmic.com","sonicmtl.com","zetrotranslation.com","crescentmoon.blog",];
         for (let h of madaraHosts) {
             addIfNew(h, {
                 name: h, hostname: h,
@@ -573,11 +585,42 @@ class SiteSearchEngine {
             let u = new URL(url);
             let path = u.pathname.toLowerCase();
             if (url.includes("cdn-cgi/")) return true;
-            if (path === "/" || path === "/home" || path === "/home/" || path === "/search" || path === "/search/") return true;
+            if (path === "/" || path === "/home" || path === "/home/" || path === "/search" || path === "/search/" || path === "/series" || path === "/series/") return true;
             return /^\/(genre|genres|category|categories|author|authors|tag|tags)\//.test(path);
         } catch (e) {
             return false;
         }
+    }
+
+    static parseIndratranslationsStyle(dom, baseUrl, sourceName) {
+        let results = [];
+        // Scoped to the results container so featured/promo cards
+        // elsewhere on the page can never surface as results.
+        let items = dom.querySelectorAll("#series-results-container .series-card");
+        for (let item of items) {
+            let titleEl = item.querySelector(".series-card-title");
+            let title = titleEl ? titleEl.textContent.trim() : "";
+            let url = "";
+            let onclick = item.getAttribute("onclick") || "";
+            let m = onclick.match(/location\.href\s*=\s*['"]([^'"]+)['"]/);
+            if (m) {
+                url = m[1];
+            } else {
+                let a = item.querySelector("a");
+                if (a && a.getAttribute("href")) {
+                    url = a.getAttribute("href");
+                }
+            }
+            if (title && url) {
+                results.push({
+                    title,
+                    url: SiteSearchEngine.resolveUrl(baseUrl, url),
+                    snippet: "",
+                    source: sourceName
+                });
+            }
+        }
+        return results;
     }
 
     static parseMadaraStyle(dom, baseUrl, sourceName) {

@@ -169,6 +169,16 @@ ${simplifiedHtml}
             url = AiClient._resolveUrl(baseUrl, url);
             if (seen.has(url)) continue;
             seen.add(url);
+            // Drop hallucinated links: a genuine extracted result's path
+            // must occur in the source page. Without this, the model
+            // invents plausible series URLs that surface as false results
+            // (seen on sites whose own parser returns nothing).
+            let urlPath = "";
+            try { urlPath = new URL(url).pathname.replace(/\/+$/, ""); } catch (e) { /* keep */ }
+            if (urlPath) {
+                let htmlNorm = String(html || "").replace(/&amp;/g, "&");
+                if (!htmlNorm.includes(urlPath) && !htmlNorm.includes(urlPath + "/")) continue;
+            }
             results.push({ title, url, snippet: String(item.snippet || "").trim(), source: "AI" });
         }
         console.log(`[AiClient] Extracted ${results.length} valid results via AI.`);
