@@ -16,6 +16,8 @@ import {
   lookupSiteConfig,
   stealthGet,
   smartGetText,
+  siteKey,
+  detectChapterSelectors,
 } from "./fetcher.js";
 import { buildEpub, sanitizeFilename, writeChapterFile, countEpubChapters } from "./epub.js";
 import { createWorkPool, DEFAULT_MAX_ACTIVE_JOBS } from "./workPool.js";
@@ -661,6 +663,29 @@ async function convertJob(job, { tocUrl, providedChapters, metadata, options, se
 
   if (!list.length) throw new Error("No chapters found for this URL");
 
+  // Differential chapter-selector detection (generic hosts only, no
+  // user-supplied selector): compare the first two chapters - page
+  // furniture is identical on both, so the container whose text actually
+  // differs IS the chapter content. The detected selector is then used
+  // for every chapter in this job. Best-effort: any failure falls back
+  // to the normal per-chapter path.
+  let detectedSelector = "";
+  if (!selector && list.length >= 2) {
+    try {
+      const host = new URL(list[0].url).hostname;
+      if (siteKey(host) === "generic") {
+        const detected = await detectChapterSelectors(list[0].url, list[1].url);
+        if (detected?.content) {
+          detectedSelector = detected.content;
+          job.phase = `Detected chapter selector: ${detectedSelector}`;
+          touch();
+        }
+      }
+    } catch {
+      /* detection failed - proceed with the normal path */
+    }
+  }
+
   job.total = list.length;
   job.phase = `Downloading ${list.length} chapters`;
   touch();
@@ -687,7 +712,7 @@ async function convertJob(job, { tocUrl, providedChapters, metadata, options, se
       }
       const saved = await chapterPool.run(async () => {
         if (stopped()) return false;
-        const content = await fetchChapterContent(c.url, selector);
+        const content = await fetchChapterContent(c.url, selector || detectedSelector);
         if (stopped()) return false;
         await writeChapterFile(file, { title: c.title || `Chapter ${i + 1}`, content });
         return true;
