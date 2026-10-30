@@ -483,7 +483,12 @@ function extractWithSelector(doc, selectors) {
     .filter(Boolean)) {
     const el = doc.querySelector(sel);
     if (el) {
-      stripInside(el, "script, style, ins, iframe, .ad, .ads, .advertisement, a[href*='utm_source'], a[href^='mailto:']");
+      stripInside(el, "script, style, ins, iframe, .ad, .ads, .advertisement, a[href*='utm_source'], a[href^='mailto:'], [hidden], .noprint, .mw-editsection, sup.reference");
+      // Hidden elements carry machine data (template JSON, microformats,
+      // decoy text), never readable prose - drop them too.
+      el.querySelectorAll("[style]").forEach((n) => {
+        if (/display\s*:\s*none|visibility\s*:\s*hidden/i.test(n.getAttribute("style") || "")) n.remove();
+      });
       return sanitizeHtml(el.innerHTML);
     }
   }
@@ -1377,6 +1382,8 @@ async function bodyGeneric(url, selector) {
     "#chapter-content",
     ".chapter-content",
     "#chr-content",
+    "#mw-content-text",
+    "main",
     "#content",
     "div.entry-content",
     "div.post-content",
@@ -1626,13 +1633,20 @@ function tocPageUrls(doc, pageUrl) {
 // ---------------------------------------------------------------------------
 const CHAPTERISH_RE = /(chapter|chap|episode|ep|part|ch)[-_/ ]?\d+|\/c\d+[-_/]|\d+\.html?$/i;
 
+// Site-utility links (log in, create account, edit, history, permanent
+// link, mobile view...) form same-shaped clusters on article-style pages
+// and must never be mistaken for a chapter list.
+const UTILITY_URL_RE = /(title=Special:|title=User:|title=Help:|title=Wikipedia:|[\?&]action=(edit|history|info|protect|delete|move|watch|unwatch)|[\?&](oldid|returnto|mobileaction|printable|redlink|veaction)=|\/(log[-_]?in|log[-_]?out|register|sign[-_]?up|create[-_]?account|user\/login|account\/login)\b)/i;
+
 function tocSetScore(items) {
   if (!items?.length) return 0;
   let chap = 0;
+  let util = 0;
   for (const i of items) {
     if (CHAPTERISH_RE.test(i.url) || CHAPTERISH_RE.test(i.title || "")) chap++;
+    if (UTILITY_URL_RE.test(i.url)) util++;
   }
-  return items.length * 2 + chap;
+  return items.length * 2 + chap - util * 3;
 }
 
 /** Order a link set by the chapter number in its URL/title when most of the
@@ -1662,7 +1676,7 @@ function sortChapterLinks(items) {
  * under the book's own path. Returns [] when no group qualifies.
  */
 function heuristicTocLinks(doc, pageUrl) {
-  const all = collectTocLinks(doc, pageUrl, ["a[href]"]);
+  const all = collectTocLinks(doc, pageUrl, ["a[href]"]).filter((i) => !UTILITY_URL_RE.test(i.url));
   if (all.length < 3) return [];
   let slug = "";
   try {
@@ -4482,7 +4496,22 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
   // should see the real error (404, blocked), not a silent empty list.
   const doc = parseHtml(await getText(tocUrl));
   const swept = heuristicTocLinks(doc, tocUrl);
-  return isJonaxx ? cleanJonaxxToc(swept) : swept;
+  if (swept.length) return isJonaxx ? cleanJonaxxToc(swept) : swept;
+  // Single-page fallback (generic hosts only): a page with no chapter list
+  // but substantial readable text - an article, a one-shot story - converts
+  // as a one-chapter book instead of failing or inventing a list from the
+  // page's utility links.
+  if (key === "generic") {
+    const textLen = (doc.body?.textContent || "").replace(/\s+/g, " ").trim().length;
+    if (textLen >= 800) {
+      const title =
+        textOf(doc.querySelector("h1")) ||
+        (doc.title || "").split(/[|\u2013\u2014]/)[0].trim() ||
+        "Untitled";
+      return [{ url: tocUrl, title }];
+    }
+  }
+  return swept;
 }
 
 
