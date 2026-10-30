@@ -709,9 +709,11 @@ export async function engineListSupportedHosts(): Promise<string[]> {
   const win = await ensureIframe();
   const factory = win.parserFactory;
   if (!factory) return [];
-  // WTR-LAB and Ranobes support was removed, so they are not listed as supported hosts.
-  const removedHosts = new Set(['wtr-lab.com', 'ranobes.top', 'ranobes.net']);
-  return (Array.from(factory.parsers.keys()) as string[]).filter(h => !removedHosts.has(h.toLowerCase()));
+  // Only the verified-working sites are advertised as supported. The engine
+  // still carries parsers for other hosts, but they are not listed anywhere —
+  // this matches the /sites page and the search allowlist.
+  return (Array.from(factory.parsers.keys()) as string[])
+    .filter(h => SUPPORTED_HOST_SET.has(h.toLowerCase().replace(/^www\./, '')));
 }
 
 /**
