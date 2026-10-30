@@ -48,6 +48,91 @@ class SonakoParser extends BakaTsukiParser {
         super(new SonakoImageCollector());
     }
 
+    async getChapterUrls(dom, chapterUrlsUI) {
+        // Backend tocSonako: the series page's WIKITEXT (via the MW API)
+        // is the authoritative ordered chapter listing — the rendered
+        // page's links (BakaTsukiParser's old mechanism) are not.
+        try {
+            let list = await this.fetchSonakoChapters(dom);
+            if (0 < list.length) {
+                return list;
+            }
+        } catch (e) { /* fall through to legacy */ }
+        try {
+            return await super.getChapterUrls(dom, chapterUrlsUI);
+        } catch (e) {
+            return [];
+        }
+    }
+
+    async fetchSonakoChapters(dom) {
+        let origin = "https://sonako.fandom.com";
+        let series = "";
+        try {
+            series = decodeURIComponent(new URL(dom.baseURI).pathname.split("/wiki/")[1] || "")
+                .replace(/_/g, " ").trim();
+        } catch (e) { /* fall through */ }
+        if (!series) {
+            return [];
+        }
+        let api = (params) => HttpClient.fetchJson(`${origin}/api.php?${params}`);
+        let j = await api(`action=parse&page=${encodeURIComponent(series)}&prop=wikitext&format=json`);
+        let wikitext = j?.parse?.wikitext?.["*"] || "";
+        let sLow = series.toLowerCase();
+        let esc = series.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        let volComp = new RegExp(`^${esc} (tập|vol\\.?|volume) \\d+(\\.\\d+)?$`, "i");
+        let seen = new Set();
+        let entries = [];
+        for (let m of wikitext.matchAll(/\[\[([^\]|#]+)(?:\|[^\]]*)?\]\]/g)) {
+            let title = m[1].replace(/_/g, " ").trim();
+            if (!title || seen.has(title)) {
+                continue;
+            }
+            if (/^(category|file|image|mediawiki|template|help|special|sonako|user|talk)/i.test(title)) {
+                continue;
+            }
+            let low = title.toLowerCase();
+            if (!(low.startsWith(sLow + ":") || low.startsWith(sLow + " "))) {
+                continue;
+            }
+            if (/minh h[ọo]a/i.test(title)) {
+                continue; // illustration pages
+            }
+            if (volComp.test(title)) {
+                continue; // bare volume compilations
+            }
+            seen.add(title);
+            entries.push(title);
+        }
+        // Existence filter — drop redlinks in batches of 40.
+        let existing = new Set();
+        for (let i = 0; i < entries.length; i += 40) {
+            let batch = entries.slice(i, i + 40);
+            let q = await api(`action=query&titles=${batch.map(encodeURIComponent).join("%7C")}&format=json`);
+            let pages = q?.query?.pages || {};
+            let normalized = new Map((q?.query?.normalized || []).map(n => [n.from, n.to]));
+            let validTitles = new Set(Object.values(pages).filter(pg => !("missing" in pg)).map(pg => pg.title));
+            for (let t of batch) {
+                let norm = normalized.get(t) || t;
+                if (validTitles.has(norm) || validTitles.has(t)) {
+                    existing.add(t);
+                }
+            }
+        }
+        let kept = entries.filter(t => existing.has(t));
+        let volOf = (t) => {
+            let m = t.match(/(?:tập|vol\.?|volume)\s*(\d+(?:\.\d+)?)/i);
+            return m ? parseFloat(m[1]) : Number.MAX_SAFE_INTEGER;
+        };
+        return kept
+            .map((t, i) => ({ t, i }))
+            .sort((a, b) => (volOf(a.t) - volOf(b.t)) || (a.i - b.i))
+            .map(({ t }) => ({
+                sourceUrl: `${origin}/vi/wiki/${encodeURIComponent(t.replace(/ /g, "_")).replace(/%3A/gi, ":")}`,
+                title: t
+            }));
+    }
+
     extractTitleImpl(dom) {
         return dom.title;
     }

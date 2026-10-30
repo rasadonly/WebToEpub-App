@@ -99,8 +99,47 @@ class MadaraParser extends WordpressBaseParser {
                     ajaxDom = new DOMParser().parseFromString(response.responseText, "text/html");
                 }
                 if (ajaxDom) {
-                    chapters = [...ajaxDom.querySelectorAll("li.wp-manga-chapter a:not([title])")]
-                        .map(a => util.hyperLinkToChapter(a)).reverse();
+                    let pickLinks = (d) => [...d.querySelectorAll("li.wp-manga-chapter a:not([title])")]
+                        .map(a => util.hyperLinkToChapter(a));
+                    let allLinks = pickLinks(ajaxDom);
+                    // Paginated variant (e.g. novelnice, backend tocMadara):
+                    // the page-1 fragment announces "Page 1 of N" and serves
+                    // the remaining newest-first blocks via POST ?t={page}.
+                    // Only when pagination is announced; otherwise this
+                    // behaves exactly as before (single page, reversed).
+                    let fragText = response.responseText || "";
+                    if (!fragText && ajaxDom.body) {
+                        fragText = ajaxDom.body.textContent || "";
+                    }
+                    let totalPages = parseInt((fragText.match(/Page\s*1\s*of\s*(\d+)/i) || [])[1] || "1", 10);
+                    for (let el of ajaxDom.querySelectorAll("[data-page]")) {
+                        let n = parseInt(el.getAttribute("data-page"), 10);
+                        if (!isNaN(n)) {
+                            totalPages = Math.max(totalPages, n);
+                        }
+                    }
+                    for (let p = 2; p <= Math.min(totalPages, 60); p++) {
+                        try {
+                            let r2 = await HttpClient.wrapFetch(`${altAjaxUrl}?t=${p}`, {
+                                fetchOptions: { method: "POST" }
+                            });
+                            let d2 = r2.responseXML;
+                            if (!d2 && r2.responseText) {
+                                d2 = new DOMParser().parseFromString(r2.responseText, "text/html");
+                            }
+                            if (!d2) {
+                                break;
+                            }
+                            let more = pickLinks(d2);
+                            if (more.length === 0) {
+                                break;
+                            }
+                            allLinks = allLinks.concat(more);
+                        } catch (e) {
+                            break;
+                        }
+                    }
+                    chapters = allLinks.reverse();
                 }
             }
         } catch (e) {
