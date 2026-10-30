@@ -299,7 +299,10 @@ ${simplifyHtml(html).slice(0, 6000)}`
       : typeof parsed.toc === "string"
         ? [parsed.toc]
         : [];
-    const toc = list.map((s) => String(s || "").trim()).filter(Boolean);
+    const toc = list
+      .flatMap((s) => String(s || "").split(","))
+      .map((s) => s.trim())
+      .filter(Boolean);
     if (toc.length) {
       result = { toc, nextPage: typeof parsed.nextPage === "string" ? parsed.nextPage.trim() : "" };
     }
