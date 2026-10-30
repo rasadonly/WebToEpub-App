@@ -435,7 +435,24 @@ async function getJson(url) {
 }
 
 function parseHtml(html) {
-  return parseHTML(html).document;
+  const doc = parseHTML(html).document;
+  // linkedom preserves attribute case, but every selector in this codebase
+  // queries lowercase names (a[href], getAttribute("href"), .class
+  // selectors). Old-school pages written in UPPERCASE HTML (PageByPage
+  // Books and friends) are otherwise completely invisible to the parser:
+  // their anchors exist in the DOM yet a[href] matches none of them.
+  // Lowercase every attribute name once, centrally, so all downstream
+  // selectors work on every page regardless of the author's casing.
+  for (const el of doc.querySelectorAll("*")) {
+    for (const attr of [...el.attributes]) {
+      const lower = attr.name.toLowerCase();
+      if (lower !== attr.name) {
+        el.setAttribute(lower, attr.value);
+        el.removeAttribute(attr.name);
+      }
+    }
+  }
+  return doc;
 }
 
 function unwrapProxyUrl(url) {
@@ -1457,7 +1474,13 @@ export async function detectChapterSelectors(urlA, urlB) {
       if (!total) break;
       scored.sort((a, b) => b.diff - a.diff);
       const top = scored[0];
-      if (top.diff < 0.7 * total || top.len < 300) break;
+      // Share is measured against the PARENT's own differing text, not
+      // the sum of the children's: word-set differences do not add up
+      // linearly (a chrome word can differ in two children yet count once
+      // in the parent), and the sum understated the dominant child on
+      // table-layout pages, stalling the descent at <body>.
+      const parentDiff = diffWordCount(diffTextOf(nodeA), diffTextOf(nodeB));
+      if (top.diff < 0.7 * parentDiff || top.len < 300) break;
       nodeA = top.childA;
       nodeB = top.childB;
     }
@@ -1847,7 +1870,43 @@ function heuristicTocLinks(doc, pageUrl) {
     }
   }
   const winner = best || desperate;
-  return winner ? sortChapterLinks(winner.items) : [];
+  if (winner) return sortChapterLinks(winner.items);
+  // Fallback: unique-slug chapters (story collections, unnumbered posts).
+  // When no URL template repeats enough to form a cluster, a set of direct
+  // children of the book's own path - same-origin links exactly one segment
+  // below the book page, in document order - is the chapter list:
+  // navigation lives elsewhere (root, parent, or sibling paths), so it
+  // cannot pollute this set. Requires at least 5 such links making up at
+  // least half of the page's links, so a page with a few stray same-path
+  // links does not get a junk TOC.
+  try {
+    const bookPath = new URL(pageUrl).pathname.replace(/\/?$/, "/");
+    if (bookPath.split("/").filter(Boolean).length >= 1) {
+      const kids = all.filter((i) => {
+        let p;
+        try {
+          p = new URL(i.url).pathname;
+        } catch {
+          return false;
+        }
+        if (!p.startsWith(bookPath)) return false;
+        const rest = p.slice(bookPath.length);
+        if (!rest || rest.includes("/")) return false;
+        if (/\.(css|js|png|jpe?g|gif|svg|webp|ico|pdf|zip)$/i.test(rest)) return false;
+        return (i.title || "").trim().length > 0;
+      });
+      const seen = new Set();
+      const uniq = kids.filter((i) => {
+        if (seen.has(i.url)) return false;
+        seen.add(i.url);
+        return true;
+      });
+      if (uniq.length >= 5 && uniq.length * 2 >= all.length) return uniq;
+    }
+  } catch {
+    /* ignore */
+  }
+  return [];
 }
 
 /** TOC extraction driven purely by the generated config table. */
