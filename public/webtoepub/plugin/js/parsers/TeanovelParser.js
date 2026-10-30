@@ -10,8 +10,27 @@ class TeanovelParser extends Parser {
     }
 
     async getChapterUrls(dom) {
-        let storyName = new URL(dom.baseURI).pathname.split("/").pop();
-        let tocUrl = `https://www.teanovel.com/novel/${storyName}/chapter-list`;
+        // Backend tocTeanovel: the full list is a first-party JSON endpoint
+        // keyed by the book slug. The HTML chapter-list page renders only a
+        // slice (~18 links), so it is only a degraded fallback.
+        let url = new URL(dom.baseURI);
+        let storyName = url.pathname.split("/").filter(Boolean).pop();
+        try {
+            let json = (await HttpClient.fetchJson(
+                `${url.origin}/api/novel/chapter-list?slug=${encodeURIComponent(storyName)}`)).json;
+            let rows = Array.isArray(json?.data) ? json.data : [];
+            if (0 < rows.length) {
+                return rows.slice()
+                    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+                    .map(c => ({
+                        sourceUrl: `${url.origin}/novel/${storyName}/${c.order}`,
+                        title: c.title || `Chapter ${c.order}`
+                    }));
+            }
+        } catch (e) {
+            // fall through to the HTML chapter-list page
+        }
+        let tocUrl = `${url.origin}/novel/${storyName}/chapter-list`;
         let chapterDom = (await HttpClient.fetchHtml(tocUrl)).responseXML;
         return [...chapterDom.querySelectorAll("a.flex")]
             .map(a => this.linkToChapter(a))
