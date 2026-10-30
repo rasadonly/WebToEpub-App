@@ -8,8 +8,34 @@ class NovelinguaParser extends Parser {
     }
 
     async getChapterUrls(dom) {
-        return [...dom.querySelectorAll(".pagelayer-text-holder a")]
+        let chapters = [...dom.querySelectorAll(".pagelayer-text-holder a")]
             .map(a => util.hyperLinkToChapter(a));
+        // Backend tocNovelingua: long series keep their newest tail on a
+        // sibling /{series}-front/ page, linked from the main page. Merge
+        // it when present, then sort by -chapter-N (extras first).
+        let frontHref = [...dom.querySelectorAll("a")]
+            .map(a => a.getAttribute("href"))
+            .find(h => h && /\/[a-z0-9-]+-front\/?$/i.test(h));
+        if (frontHref) {
+            try {
+                let frontUrl = new URL(frontHref, dom.baseURI).href;
+                let frontDom = (await HttpClient.wrapFetch(frontUrl)).responseXML;
+                let seen = new Set(chapters.map(c => c.sourceUrl));
+                for (let a of frontDom.querySelectorAll(".pagelayer-text-holder a")) {
+                    let ch = util.hyperLinkToChapter(a);
+                    if (!seen.has(ch.sourceUrl)) {
+                        chapters.push(ch);
+                        seen.add(ch.sourceUrl);
+                    }
+                }
+            } catch (e) { /* tail stays partial */ }
+        }
+        let num = (c) => {
+            let m = (c.sourceUrl || "").match(/-chapter-(\d+)/);
+            return m ? parseInt(m[1], 10) : -1;
+        };
+        chapters.sort((a, b) => num(a) - num(b));
+        return chapters;
     }
 
     findContent(dom) {

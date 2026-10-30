@@ -15,6 +15,23 @@ class PtwxzParser extends Parser {
     }
 
     findContent(dom) {
+        // Backend bodyPiaotia: the prose has no container — it lives as
+        // direct body children between the toplink and bottomlink markers.
+        // Slice that region (cloned, so the source dom stays intact); the
+        // existing denylist cleanup still runs on the result.
+        let top = dom.querySelector("div.toplink");
+        let bottom = dom.querySelector("div.bottomlink");
+        if (top != null && bottom != null) {
+            let container = dom.createElement("div");
+            let node = top.nextSibling;
+            while (node != null && node !== bottom) {
+                container.appendChild(node.cloneNode(true));
+                node = node.nextSibling;
+            }
+            if (0 < container.childNodes.length) {
+                return container;
+            }
+        }
         return dom.querySelector("body");
     }
 

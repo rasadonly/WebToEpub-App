@@ -9,6 +9,21 @@ class RanobesParser extends Parser {
     }
 
     async getChapterUrls(dom, chapterUrlsUI) {
+        // Backend tocRanobes: book pages (/ranobe/{id}-{slug}.html) 404 on
+        // the plain route, but the chapter index is addressable directly
+        // at /chapters/{slug}/. Rewrite before the existing TOC walk.
+        let bookM = null;
+        try {
+            bookM = new URL(dom.baseURI).pathname.match(/\/ranobe\/\d+-([a-z0-9-]+)\.html$/i);
+        } catch (e) { /* keep existing flow */ }
+        if (bookM) {
+            let tocUrl = `${new URL(dom.baseURI).origin}/chapters/${bookM[1]}/`;
+            let tocDom = (await HttpClient.wrapFetch(tocUrl)).responseXML;
+            let urlsOfTocPages = RanobesParser.extractTocPageUrls(tocDom, tocUrl);
+            let options = { parser: this };
+            return (await this.getChaptersFromAllTocPages([],
+                this.extractPartialChapterList, urlsOfTocPages, chapterUrlsUI, options)).reverse();
+        }
         let chapters = [];
         let tocUrl = dom.querySelector("div.r-fullstory-chapters-foot a[title='Go to table of contents']")?.href;
         if (tocUrl == null) {

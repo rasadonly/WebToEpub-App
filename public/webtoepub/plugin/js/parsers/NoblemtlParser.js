@@ -38,9 +38,32 @@ class NoblemtlParser extends Parser {
     }
 
     async getChapterUrls(dom) {
-        return [...dom.querySelectorAll("div.eplister a")]
+        let chapters = [...dom.querySelectorAll("div.eplister a")]
             .map(this.linkToChapter)
             .reverse();
+        if (0 < chapters.length) {
+            return chapters;
+        }
+        // universalnovel.com only (backend tocUniversalNovel): a chapter-URL
+        // input (/{slug}-chapter-N/) has no eplister; normalize to
+        // /series/{slug}/ and read the eplister there.
+        let url = null;
+        try {
+            url = new URL(dom.baseURI);
+        } catch (e) { /* fall through */ }
+        if (url && url.hostname === "universalnovel.com") {
+            let slug = url.pathname.match(/^\/series\/([a-z0-9-]+)\/?$/i)?.[1]
+                || url.pathname.match(/^\/([a-z0-9-]+?)-chapter-\d+(?:-\d+)?\/?$/i)?.[1];
+            if (slug) {
+                try {
+                    let seriesDom = (await HttpClient.wrapFetch(`${url.origin}/series/${slug}/`)).responseXML;
+                    return [...seriesDom.querySelectorAll("div.eplister a")]
+                        .map(this.linkToChapter)
+                        .reverse();
+                } catch (e) { /* fall through to empty list */ }
+            }
+        }
+        return chapters;
     }
 
     linkToChapter(link) {
