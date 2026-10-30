@@ -640,6 +640,13 @@ class LiveReaderUI {
             for (let i = startIndex; i < targetEnd; i++) {
                 // If it's already cached, skip it instantly
                 if (this.lazyCache.has(i)) continue;
+                // Space background fetches by the parser's own rate limit
+                // (novel-bin's family: 1s) so prefetch bursts don't trip
+                // the site's per-IP limiter and force a full proxy race
+                // per chapter. Current-chapter loads stay immediate.
+                if (this.parser && typeof this.parser.rateLimitDelay === "function") {
+                    await this.parser.rateLimitDelay();
+                }
                 await this._loadChapterIntoCache(i).catch(() => {});
             }
         });

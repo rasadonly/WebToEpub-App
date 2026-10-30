@@ -293,6 +293,13 @@ class HttpClient {
                     }
                 } catch (err) {
                     HttpClient.noteActiveProxyFailure();
+                    // A 429 is a direct "slow down" signal for this proxy's
+                    // IP (novel-bin rate-limits shared proxy IPs on chapter
+                    // bursts): skip the doomed first attempt at once
+                    // instead of waiting for a second failure.
+                    if (/429|rate limited/i.test(err.message || "")) {
+                        HttpClient.activeProxyStaleUntil = Date.now() + 30000;
+                    }
                     console.warn(`[WebToEpub] Active proxy ${activeProxyUrl} failed or timed out: ${err.message}. Fallback to discovery race.`);
                 }
             }
@@ -796,6 +803,14 @@ class HttpClient {
         return false;
     }
 
+    static isRateLimitPage(text) {
+        if (!text) return false;
+        let lower = text.toLowerCase();
+        return lower.includes("<title>429") ||
+            lower.includes("error code: 429") ||
+            lower.includes("429 too many requests");
+    }
+
     static isCloudflareBlock(text) {
         if (!text || text.length < 200) return false;
         let lower = text.toLowerCase();
@@ -906,6 +921,11 @@ class FetchResponseHandler {
             let data = this.makeTextDecoder(response).decode(rawBytes);
             if (HttpClient.isCloudflareBlock(data)) {
                 throw new Error("Cloudflare block page");
+            }
+            if (HttpClient.isRateLimitPage(data)) {
+                // A proxy that forwards a 429 error page (some normalize
+                // the status to 200) must not win a race with junk content.
+                throw new Error("Rate limited (429)");
             }
             // Strip speculative preload tags to prevent relative asset fetches through proxies
             data = data.replace(/<link\s+[^>]*?rel=["']preload["'][^>]*?>/gi, "");
