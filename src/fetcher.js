@@ -4478,13 +4478,11 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
   // Last resort: the deterministic heuristic on a fresh fetch. If even that
   // finds no chapter-like cluster, return an honest empty result instead of
   // the old raw sweep, which returned the page's navigation as a "TOC".
-  try {
-    const doc = parseHtml(await getText(tocUrl));
-    const swept = heuristicTocLinks(doc, tocUrl);
-    return isJonaxx ? cleanJonaxxToc(swept) : swept;
-  } catch {
-    return [];
-  }
+  // A fetch failure here still propagates, as it did before: the caller
+  // should see the real error (404, blocked), not a silent empty list.
+  const doc = parseHtml(await getText(tocUrl));
+  const swept = heuristicTocLinks(doc, tocUrl);
+  return isJonaxx ? cleanJonaxxToc(swept) : swept;
 }
 
 
