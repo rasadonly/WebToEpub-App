@@ -92,7 +92,7 @@ function matches(host: string, hosts: Iterable<string>): boolean {
   return false;
 }
 
-/** Synchronous check — returns true for any valid web URL. Backend handles all sites (526+ site configs + generic fallback). */
+/** Synchronous check — returns true for any valid web URL. Backend handles all sites (178 site parsers + generic fallback). */
 export function isBackendSupportedUrl(url: string): boolean {
   try {
     const u = new URL(url);
