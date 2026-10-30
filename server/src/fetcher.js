@@ -4693,11 +4693,23 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
   // Unknown site, or the dedicated parser came back empty: staged generic
   // path (selectors, heuristic, AI, Madara probe) inside tocFromConfig.
   const config = lookupSiteConfig(new URL(tocUrl).hostname);
+  // Sites with NO defined parser (no dedicated parser, no site config):
+  // the main URL itself is chapter 1, and the default parser's chapters
+  // follow it. The empty title becomes "Chapter 1" downstream (job and
+  // frontend both fall back to Chapter N on empty titles). The guard
+  // keeps the single-page fallback (which already IS the main URL) and
+  // any list that already contains the main URL from duplicating it.
+  const normMainUrl = (u) => String(u || "").split("#")[0].replace(/\/$/, "");
+  const withMainFirst = (list) => {
+    if (key !== "generic" || config || !list?.length) return list;
+    if (list.some((i) => normMainUrl(i.url) === normMainUrl(tocUrl))) return list;
+    return [{ url: tocUrl, title: "" }, ...list];
+  };
   const items = await tocFromConfig(tocUrl, config, linkSelector).catch((e) => {
     if (e?.blocked) throw e;
     return [];
   });
-  if (items.length) return isJonaxx ? cleanJonaxxToc(items) : items;
+  if (items.length) return withMainFirst(isJonaxx ? cleanJonaxxToc(items) : items);
   // Last resort: the deterministic heuristic on a fresh fetch. If even that
   // finds no chapter-like cluster, return an honest empty result instead of
   // the old raw sweep, which returned the page's navigation as a "TOC".
@@ -4705,7 +4717,7 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
   // should see the real error (404, blocked), not a silent empty list.
   const doc = parseHtml(await getText(tocUrl));
   const swept = heuristicTocLinks(doc, tocUrl);
-  if (swept.length) return isJonaxx ? cleanJonaxxToc(swept) : swept;
+  if (swept.length) return withMainFirst(isJonaxx ? cleanJonaxxToc(swept) : swept);
   // Single-page fallback (generic hosts only): a page with no chapter list
   // but substantial readable text - an article, a one-shot story - converts
   // as a one-chapter book instead of failing or inventing a list from the
@@ -4717,12 +4729,24 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         textOf(doc.querySelector("h1")) ||
         (doc.title || "").split(/[|\u2013\u2014]/)[0].trim() ||
         "Untitled";
-      return [{ url: tocUrl, title }];
+      return withMainFirst([{ url: tocUrl, title }]);
     }
   }
   return swept;
 }
 
+
+// Whole-page download, used for the main URL chapter on undefined-parser
+// hosts: no content selector is applied at all, so the chapter is the
+// page itself (scripts/styles stripped, everything else kept - including
+// the page's own nav/footer text, because "whole" means whole).
+export async function fetchWholePage(url) {
+  const html = await smartGetText(url, 20000, 75000);
+  const doc = parseHtml(html);
+  doc.querySelectorAll("script, style, noscript, template, svg, iframe").forEach((n) => n.remove());
+  if (!doc.body) throw new Error("No readable content on page");
+  return doc.body.innerHTML;
+}
 
 export async function fetchChapterContent(chapterUrl, contentSelector = "") {
   let hostname = "";
