@@ -4,7 +4,7 @@
 import { parseHTML } from "linkedom";
 import crypto from "node:crypto";
 import fs from "node:fs";
-import { aiContentSelectors, aiTocSelectors } from "./aiParser.js";
+import { aiContentSelectors, aiFilterChapterLinks, aiTocSelectors } from "./aiParser.js";
 
 
 const UA =
@@ -1841,6 +1841,44 @@ async function tocFromConfig(url, config, linkSelector) {
         }
       }
     });
+  }
+  // Final AI pass, only when AI is available: the default parser already
+  // collected candidate chapter links, so hand THAT list to the model and
+  // let it return only genuine chapter links. It runs only when the list
+  // looks impure (some links are not chapter-shaped) and only on lists of
+  // 2-400 links; a failed, timed-out or disabled AI leaves the default
+  // result untouched. The filtered set is accepted only if it keeps at
+  // least half the list, so a confused model cannot nuke a good list.
+  // Impure = some link that is neither chapter-shaped nor under this
+  // book's own URL stem (e.g. another book's chapter, which looks exactly
+  // like a chapter to the regex). A pure list skips the AI call entirely.
+  let slug = "";
+  try {
+    const segs = new URL(bestUrl).pathname.split("/").filter(Boolean);
+    slug = segs.reduce((a, b) => (b.length > a.length ? b : a), "");
+  } catch {
+    /* ignore */
+  }
+  const impure = best.some(
+    (i) =>
+      (!CHAPTERISH_RE.test(i.url) && !CHAPTERISH_RE.test(i.title || "")) ||
+      (slug && !i.url.includes(slug))
+  );
+  if (best.length >= 2 && best.length <= 400 && impure) {
+    try {
+      const filtered = await Promise.race([
+        aiFilterChapterLinks(best, bestUrl),
+        new Promise((r) => setTimeout(() => r(null), 20000)),
+      ]);
+      if (filtered?.length && filtered.length >= Math.ceil(best.length / 2)) {
+        if (filtered.length !== best.length) {
+          console.warn(`[fetcher] AI chapter filter: ${best.length} -> ${filtered.length} links for ${bestUrl}`);
+        }
+        best = filtered;
+      }
+    } catch (e) {
+      console.warn("[fetcher] AI chapter filter failed", e?.message || e);
+    }
   }
   return best;
 }

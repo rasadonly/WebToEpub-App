@@ -310,3 +310,58 @@ ${simplifyHtml(html).slice(0, 6000)}`
   if (host) tocCache.set(host, result);
   return result;
 }
+
+/**
+ * AI as a filter, not an extractor: the default parser already collected
+ * candidate chapter links — hand THAT list to the model and ask it to
+ * return only genuine chapter links, in reading order. This is far more
+ * reliable than asking for CSS selectors on pages whose lists are
+ * JS-loaded, paginated or oddly marked up. Returns the filtered link
+ * objects, or null when AI is unavailable/disabled or the answer is
+ * unusable — the caller's default-parser result then stands untouched.
+ */
+export async function aiFilterChapterLinks(links, pageUrl) {
+  if (!aiEnabled()) return null;
+  if (!Array.isArray(links) || links.length < 2 || links.length > 400) return null;
+
+  const numbered = links
+    .map((l, i) => `${i}. ${(l?.title || "").replace(/\s+/g, " ").trim().slice(0, 80)} | ${l?.url || ""}`)
+    .join("\n");
+
+  const parsed = await chatJson(
+    "You are a web-novel chapter-list filter. Output ONLY a JSON array of numbers.",
+    `This is a web-novel TABLE OF CONTENTS page: ${pageUrl}
+
+Below is a numbered list of links the site's own parser collected from it.
+Return ONLY the numbers of the links that are chapters of THIS book, in
+reading order. Keep range posts (e.g. "Chapter 1-200") and part posts.
+EXCLUDE: site navigation, login/account/edit/history links, links to
+other books or series, author pages, ads, recommendations, "read now"
+or homepage links, and duplicate entries of the same chapter (keep the
+first occurrence). If none of the links are chapters, return [].
+
+Links:
+${numbered}`
+  );
+
+  if (!parsed) return null;
+  let indices = [];
+  if (Array.isArray(parsed)) {
+    if (parsed.every((v) => typeof v === "number")) {
+      indices = parsed;
+    } else if (parsed.every((v) => typeof v === "string")) {
+      // The model answered with URLs instead of numbers - map them back.
+      const byUrl = new Map(links.map((l, i) => [l?.url, i]));
+      indices = parsed.map((u) => byUrl.get(u)).filter((i) => i !== undefined);
+    }
+  }
+  const seen = new Set();
+  const out = [];
+  for (const i of indices) {
+    const n = Number(i);
+    if (!Number.isInteger(n) || n < 0 || n >= links.length || seen.has(n)) continue;
+    seen.add(n);
+    out.push(links[n]);
+  }
+  return out.length ? out : null;
+}
