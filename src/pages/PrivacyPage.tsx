@@ -60,7 +60,7 @@ export default function PrivacyPage() {
             <ul className="space-y-1 text-muted-foreground">
               <li><strong className="text-foreground">Google Analytics</strong> — usage stats</li>
               <li><strong className="text-foreground">Supabase</strong> — hosts the AI parser function (no content stored)</li>
-              <li><strong className="text-foreground">NVIDIA / Pollinations AI</strong> — used as a fallback to figure out a site's HTML structure; only the page structure, not your data, is sent</li>
+              <li><strong className="text-foreground">NVIDIA / Lovable AI</strong> — used as a fallback to figure out a site's HTML structure; only the page structure, not your data, is sent</li>
             </ul>
           </section>
 

@@ -1,10 +1,10 @@
 "use strict";
 
 /**
- * AiClient - Interacts with Pollinations AI for search fallbacks and parser autocompletion.
+ * AiClient - Talks to the ai-parse proxy (Lovable AI Gateway -> NVIDIA) for
+ * search fallbacks and parser autocompletion.
  */
 class AiClient { // eslint-disable-line no-unused-vars
-    static MODEL = "nova-fast"; // Cost-efficient and fast
 
     // Pre-compiled regexes for performance
     static REGEX_SCRIPT = /<script\b(?![^>]*\btype=['"]?(?:application\/ld\+json|__NUXT__)['"]?)[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi;
@@ -42,10 +42,6 @@ class AiClient { // eslint-disable-line no-unused-vars
             return text.substring(startIndex, endIndex + 1);
         }
         return text;
-    }
-
-    static _apiKey() {
-        return typeof Secrets !== "undefined" ? Secrets.POLLINATIONS_API_KEY : null;
     }
 
     /** Endpoint override injected by the host app; defaults to the ai-parse proxy. */
@@ -86,7 +82,8 @@ class AiClient { // eslint-disable-line no-unused-vars
      */
     static async _chatRaw(system, user, temperature = 0) {
         // Always go through the server-side proxy: it holds the provider keys
-        // (NVIDIA first, Pollinations fallback) and avoids CORS/key exposure.
+        // (Lovable AI Gateway first, NVIDIA free endpoint as fallback, with
+        // automatic model discovery) and avoids CORS/key exposure.
         try {
             const res = await fetch(AiClient._endpoint(), {
                 method: "POST",

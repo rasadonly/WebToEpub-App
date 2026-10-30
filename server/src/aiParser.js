@@ -49,7 +49,107 @@ function extractJson(text) {
 }
 
 const NV_KEY = process.env.NVIDIA_API_KEY || "";
-const POLL_KEY = process.env.POLLINATIONS_API_KEY || "";
+
+// ---------------------------------------------------------------------------
+// NVIDIA free endpoint (OpenAI-compatible). Models on the free tier are
+// retired without notice, so a hardcoded model id is a ticking failure.
+// Instead: discover what the endpoint actually serves via GET /v1/models,
+// pick the best chat model by preference, cache the pick for an hour, and
+// if a chat call 404s (model dropped), rediscover and retry once with a
+// live model. No code change is ever needed when NVIDIA rotates models.
+// ---------------------------------------------------------------------------
+const NV_BASE = "https://integrate.api.nvidia.com/v1";
+const NV_PREFERRED_MODELS = [
+  "meta/llama-3.3-70b-instruct",
+  "meta/llama-3.1-70b-instruct",
+  "nvidia/llama-3.1-nemotron-70b-instruct",
+  "qwen/qwen2.5-72b-instruct",
+  "mistralai/mixtral-8x7b-instruct-v0.1",
+  "meta/llama-3.1-405b-instruct",
+  "meta/llama-3.1-8b-instruct",
+];
+const NV_MODEL_TTL_MS = 60 * 60 * 1000;
+let nvModelCache = { model: "", at: 0 };
+
+export function pickNvidiaModel(ids) {
+  if (!Array.isArray(ids) || !ids.length) return "";
+  const byLower = new Map(ids.map((id) => [String(id).toLowerCase(), String(id)]));
+  for (const want of NV_PREFERRED_MODELS) {
+    if (byLower.has(want)) return byLower.get(want);
+  }
+  // None of the preferred ids are served right now: score whatever chat
+  // models the endpoint does have — known families first, then the
+  // 30–130B speed/quality sweet spot.
+  const notChat = /(embed|rerank|reward|guard|vision|clip|ocr|detect|moderation|asr|tts|image|video|diffusion|vila|kosmos|deplot)/i;
+  const families = [/llama/, /nemotron/, /qwen/, /mistral|mixtral/, /gemma/, /phi/, /deepseek/];
+  const scored = [];
+  for (const raw of ids) {
+    const id = String(raw);
+    if (!/instruct|chat/i.test(id) || notChat.test(id)) continue;
+    const m = id.match(/(\d+(?:\.\d+)?)\s*b\b/i);
+    const size = m ? parseFloat(m[1]) : 0;
+    const fam = families.findIndex((f) => f.test(id.toLowerCase()));
+    const sizeScore = size >= 30 && size <= 130 ? 3 : size >= 7 ? 2 : size > 130 ? 1 : 0;
+    scored.push({ id, score: (fam === -1 ? 0 : (families.length - fam) * 10) + sizeScore });
+  }
+  scored.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
+  return scored.length ? scored[0].id : "";
+}
+
+async function discoverNvidiaModel() {
+  try {
+    const r = await fetchWithTimeout(`${NV_BASE}/models`, {
+      headers: { Authorization: `Bearer ${NV_KEY}` },
+    }, 6000);
+    if (!r.ok) return "";
+    const j = await r.json();
+    return pickNvidiaModel((j?.data || []).map((m) => m?.id));
+  } catch {
+    return "";
+  }
+}
+
+async function nvidiaModel(forceRediscover = false) {
+  if (!forceRediscover && nvModelCache.model && Date.now() - nvModelCache.at < NV_MODEL_TTL_MS) {
+    return nvModelCache.model;
+  }
+  const model = await discoverNvidiaModel();
+  if (model) nvModelCache = { model, at: Date.now() };
+  return model || nvModelCache.model; // a stale pick beats none if discovery hiccups
+}
+
+async function nvidiaChat(messages, timeoutMs = 10000) {
+  if (!NV_KEY) return null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const model = await nvidiaModel(attempt === 1);
+    if (!model) return null;
+    try {
+      const payload = { model, temperature: 0, messages };
+      // response_format is not supported by every NIM model; the meta
+      // family (the usual pick) takes it, others rely on the prompt.
+      if (model.startsWith("meta/")) payload.response_format = { type: "json_object" };
+      const r = await fetchWithTimeout(`${NV_BASE}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${NV_KEY}`,
+        },
+        body: JSON.stringify(payload),
+      }, timeoutMs);
+      if (r.ok) return r;
+      // 404 (or a model-flavoured 400) almost always means the model was
+      // retired from the free endpoint: rediscover and retry once.
+      if ((r.status === 404 || r.status === 400) && attempt === 0) {
+        nvModelCache = { model: "", at: 0 };
+        continue;
+      }
+      return null; // 401/403/429/5xx — another model won't fix it, stay fast
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
   const ctrl = new AbortController();
@@ -68,64 +168,10 @@ async function chatJson(system, user, timeoutMs = 15000) {
     { role: "user", content: user },
   ];
 
-  let res = null;
+  // 1. NVIDIA free endpoint, with automatic model discovery/failover.
+  let res = await nvidiaChat(messages);
 
-  // 1. Try Pollinations free text API (fastest, no key needed, ~1-2s response)
-  try {
-    const r = await fetchWithTimeout("https://text.pollinations.ai/openai/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "openai",
-        messages,
-        temperature: 0,
-      }),
-    }, 10000);
-    if (r.ok) res = r;
-  } catch {
-    /* try next */
-  }
-
-  // 2. Try NVIDIA API key if configured
-  if (!res && NV_KEY) {
-    try {
-      const r = await fetchWithTimeout("https://integrate.api.nvidia.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${NV_KEY}`,
-        },
-        body: JSON.stringify({
-          model: "meta/llama-3.1-70b-instruct",
-          temperature: 0,
-          response_format: { type: "json_object" },
-          messages,
-        }),
-      }, 10000);
-      if (r.ok) res = r;
-    } catch {
-      /* try next */
-    }
-  }
-
-  // 3. Try Pollinations key endpoint if configured
-  if (!res && POLL_KEY) {
-    try {
-      const r = await fetchWithTimeout("https://gen.pollinations.ai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${POLL_KEY}`,
-        },
-        body: JSON.stringify({ model: "nova-fast", temperature: 0, messages }),
-      }, 10000);
-      if (r.ok) res = r;
-    } catch {
-      /* try next */
-    }
-  }
-
-  // 4. Fallback to Supabase Edge Function proxy
+  // 2. Fallback to Supabase Edge Function proxy (Lovable AI Gateway chain)
   if (!res) {
     try {
       const r = await fetchWithTimeout(AI_ENDPOINT, {

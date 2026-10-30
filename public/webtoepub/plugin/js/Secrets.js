@@ -2,8 +2,8 @@
 
 /**
  * Secrets - API keys and sensitive configuration.
- * DO NOT COMMIT THIS FILE.
+ * Currently empty: all AI calls go through the ai-parse proxy, which holds
+ * the provider keys server-side. Do not put live keys in this file.
  */
 const Secrets = {
-    POLLINATIONS_API_KEY: "sk_tefNMUnvpQbdOVYRgthdUFLBnvhrnxAW"
 };

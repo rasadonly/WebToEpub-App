@@ -218,8 +218,8 @@ async function ensureIframe(): Promise<EngineWindow> {
         reject(new Error('Iframe has no contentWindow'));
         return;
       }
-      // Inject our free AI proxy endpoint so AiClient uses Lovable AI Gateway
-      // instead of Pollinations for search fallback and selector autocomplete.
+      // Inject our AI proxy endpoint (Lovable AI Gateway -> NVIDIA) so
+      // AiClient uses it for search fallback and selector autocomplete.
       try {
         const supaUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined) || '';
         const anon = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined) || '';
