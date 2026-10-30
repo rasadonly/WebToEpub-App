@@ -508,33 +508,6 @@ async function tocNovelFull(
 
 
 
-async function tocWtrLab(url: string, onBatch?: OnChapterBatch): Promise<string[]> {
-  const u = new URL(url);
-  const parts = u.pathname.split("/").filter(Boolean);
-  const language = parts[0] || "en";
-  const slug = parts[parts.length - 1].split("?")[0];
-  // Two URL shapes exist:
-  //   /en/serie-12345/slug            -> id in the "serie-" segment
-  //   /en/novel/12345/slug            -> id is the numeric segment after "novel"
-  const seriePart = parts.find((p) => p.startsWith("serie-"));
-  let id = seriePart?.slice(6);
-  if (!id) {
-    const novelIdx = parts.indexOf("novel");
-    if (novelIdx >= 0 && /^\d+$/.test(parts[novelIdx + 1] || "")) id = parts[novelIdx + 1];
-  }
-  if (!id) id = parts.find((p) => /^\d+$/.test(p));
-  if (!id) throw new Error("wtr-lab: serie id missing");
-  const json = await getJson(`https://wtr-lab.com/api/chapters/${id}`);
-  const chapters = json.chapters || json.data?.chapters || [];
-  const results: ChapterLink[] = chapters.map(
-    (a: any) => ({
-      url: `https://wtr-lab.com/${language}/serie-${id}/${slug}/${a.order ?? a.id}`,
-      title: a.title || a.name || `Chapter ${a.order ?? a.id}`
-    })
-  );
-  if (onBatch && results.length > 0) onBatch(results);
-  return results.map(c => c.url);
-}
 
 // ---------- Site-specific chapter body ----------
 
@@ -569,13 +542,6 @@ async function bodyNovelFull(url: string): Promise<string> {
 }
 
 
-async function bodyWtrLab(url: string): Promise<string> {
-  const doc = parseHtml(await getText(url));
-  const el = doc.querySelector(".chapter-content, #chapter-content");
-  if (!el) return "";
-  stripInside(el, "script, style, ins, iframe, .ad, .ads, .advertisement");
-  return sanitizeHtml(el.innerHTML);
-}
 
 async function bodyNovGo(url: string): Promise<string> {
   const doc = parseHtml(await getText(url));
@@ -757,7 +723,6 @@ export function siteKey(hostname: string): string {
   if (hostname.includes("novelfull.net")) return "novelfullnet";
   if (hostname.includes("novelfull.com")) return "novelfullcom";
   if (hostname.includes("novelfull")) return "novelfull";
-  if (hostname.includes("wtr-lab.com")) return "wtrlab";
   if (hostname.includes("wattpad.com")) return "wattpad";
   if (hostname.includes("readnovelmtl.com")) return "readnovelmtl";
   if (hostname.includes("inkitt.com")) return "inkitt";
@@ -882,7 +847,6 @@ async function fetchChapterContent(url: string, selector: string): Promise<strin
       case "novelfullnet":
       case "novelfullcom":
       case "novelfull":    return bodyNovelFull(url);
-      case "wtrlab":       return bodyWtrLab(url);
       case "wattpad":      return bodyWattpad(url);
       case "readnovelmtl": {
         const doc = parseHtml(await getText(url));
@@ -904,9 +868,7 @@ async function fetchChapterContent(url: string, selector: string): Promise<strin
   const base = RATE_LIMITED.test(hostname) ? 1500 : 400;
 
   const textLen = (h: string) => (h ? h.replace(/<[^>]+>/g, "").trim().length : 0);
-  // WTR-LAB's parser retries internally against a metered API — don't stack
-  // the full outer loop on top of it.
-  const maxAttempts = key === "wtrlab" ? 2 : 4;
+  const maxAttempts = 4;
   let last = "";
   let thinTries = 0;
   for (let i = 0; i < maxAttempts; i++) {
@@ -1048,7 +1010,6 @@ export async function fetchChapterLinks(tocUrl: string, linkSelector: string): P
       case "novelfullnet": return await tocNovelFull(tocUrl);
       case "novelfullcom": return await tocNovelFull(tocUrl);
       case "novelfull":    return await tocNovelFull(tocUrl);
-      case "wtrlab":       return await tocWtrLab(tocUrl);
       case "wattpad":      return await tocWattpad(tocUrl);
       case "readnovelmtl": {
         const doc = parseHtml(await getText(tocUrl));
@@ -1178,7 +1139,6 @@ export async function fetchChapterLinksLive(
       case "novelfullnet": await tocNovelFull(tocUrl, wrap); break;
       case "novelfullcom": await tocNovelFull(tocUrl, wrap); break;
       case "novelfull":    await tocNovelFull(tocUrl, wrap); break;
-      case "wtrlab":       await tocWtrLab(tocUrl, wrap); break;
       default: {
         // For sites that return everything at once (API-based / single-page),
         // fetch and emit one batch so the UI still updates.

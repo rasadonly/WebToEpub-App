@@ -18,35 +18,27 @@ export const BACKEND_URLS: readonly string[] = [HEROKU_BACKEND_URL];
 
 /**
  * Hostnames that have a dedicated server-side parser in fetcher.js.
- * For everything else the browser engine (WebToEpub, 386 parsers) handles it.
+ * For everything else the browser engine (WebToEpub parsers) handles it.
  */
 export const BACKEND_SUPPORTED_HOSTS: readonly string[] = [
-  'novelhall.com',
   'freewebnovel.com',
   'novelfire.net', 'novelfire.com', 'novelfire.io',
   'novgo.com', 'novgo.net',
   'novelbuddy.com', 'novelbuddy.io',
   'novelarrow.com',
   'novelfull.com', 'novelfull.net',
-  'novelbin.com', 'novelbin.net', 'novlove.com',
-  'wtr-lab.com',
   'wattpad.com',
-  'royalroad.com', 'royalroadl.com',
   'scribblehub.com',
-  'lightnovelworld.com', 'lightnovelcave.com', 'lightnovelpub.com', 'novelpub.com', 'webnovelpub.com',
-  'ranobes.top', 'ranobes.net',
   'webnovel.com',
-  'mtlnovel.com', 'mtlnation.com',
-  'readnovelfull.com', 'allnovelfull.com', 'novelusb.com', 'vipnovel.com', 'novelsonline.net',
+  'readnovelfull.com', 'allnovelfull.com', 
   'syosetu.com', 'kakuyomu.jp',
   'novelcool.com',
-  'archiveofourown.org', 'fanfiction.net',
-  'boxnovel.com', 'wuxiaworld.site', 'foxaholic.com', 'znovel.com',
-  'cherrymist.cafe',
+  'fanfiction.net',
+  'wuxiaworld.site', 
   'zenithtls.com',
 ];
 
-/** Domains reported live by the backend's /api/sites (526+ entries). */
+/** Domains reported live by the backend's /api/sites (178 entries). */
 const SITES_CACHE_KEY = 'backend_sites_v1';
 let dynamicHosts: Set<string> | null = null;
 let dynamicHostsPromise: Promise<Set<string>> | null = null;

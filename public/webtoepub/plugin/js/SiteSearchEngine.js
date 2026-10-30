@@ -190,7 +190,6 @@ class SiteSearchEngine {
             "wetriedtls.com",
             "woopread.com",
             "wtnovels.com",
-            "wtr-lab.com",
             "wuxia.city",
             "wuxia.click",
             "wuxiabox.com",
@@ -389,30 +388,6 @@ class SiteSearchEngine {
                                 snippet: "",
                                 source: "WuxiaWorld"
                             });
-                        }
-                    }
-                    return results;
-                }
-            },
-            {
-                name: "WTR-Lab",
-                hostname: "wtr-lab.com",
-                searchUrl: (q) => `https://wtr-lab.com/en/novel-finder?text=${encodeURIComponent(q)}`,
-                parseResults: (dom) => {
-                    let results = [];
-                    let links = dom.querySelectorAll("a[href*='/novel/']");
-                    for (let a of links) {
-                        let href = a.getAttribute("href");
-                        if (href && !href.endsWith("/continue") && a.textContent.trim()) {
-                            let url = SiteSearchEngine.resolveUrl("https://wtr-lab.com", href);
-                            if (!results.some(r => r.url === url)) {
-                                results.push({
-                                    title: a.textContent.trim(),
-                                    url: url,
-                                    snippet: "",
-                                    source: "WTR-Lab"
-                                });
-                            }
                         }
                     }
                     return results;

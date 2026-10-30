@@ -94,7 +94,7 @@ export default function AlternativesPage() {
           <h2 className="text-2xl font-bold text-foreground">Why Readers Are Switching to LinkToEpub</h2>
           <p className="text-muted-foreground leading-relaxed">
             The classic <em>WebToEpub Chrome extension</em> is legendary, but browser extensions don't run on iPhones, iPads, or standard mobile Chrome/Safari. 
-            <strong>LinkToEpub</strong> ports the full 179-site parser engine into a modern web application accessible from any device.
+            <strong>LinkToEpub</strong> ports the full 178-site parser engine into a modern web application accessible from any device.
           </p>
 
           <div className="grid sm:grid-cols-3 gap-4 pt-2">
@@ -151,8 +151,8 @@ export default function AlternativesPage() {
                 </tr>
                 <tr>
                   <td className="py-3 px-4 font-medium text-foreground">Supported Site Parsers</td>
-                  <td className="py-3 px-4 text-primary font-bold">179 Pre-Configured Sites</td>
-                  <td className="py-3 px-4">179 Sites</td>
+                  <td className="py-3 px-4 text-primary font-bold">178 Pre-Configured Sites</td>
+                  <td className="py-3 px-4">178 Sites</td>
                 </tr>
               </tbody>
             </table>
@@ -169,7 +169,7 @@ export default function AlternativesPage() {
             <span>·</span>
             <Link to="/web-to-epub" className="text-primary hover:underline">Web to EPUB Tool</Link>
             <span>·</span>
-            <Link to="/sites" className="text-primary hover:underline">179 Supported Sites</Link>
+            <Link to="/sites" className="text-primary hover:underline">178 Supported Sites</Link>
             <span>·</span>
             <Link to="/guide" className="text-primary hover:underline">EPUB Conversion Guide</Link>
           </div>

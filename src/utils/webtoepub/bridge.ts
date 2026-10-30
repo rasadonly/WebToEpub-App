@@ -547,7 +547,7 @@ export async function enginePackEpub(
   try {
     const p = win.parser as any;
     const host = (() => { try { return new URL(orderedChapters[0]?.url || metadata.tocUrl || '').hostname; } catch { return ''; } })();
-    const RATE_LIMITED = /(freewebnovel\.com|novelfull(l)?\.(net|com)|allnovelfull|allnovelnext|allnovel\.org|novelfire\.net|novelhall\.com|scribblehub\.com|novelgo\.id|novgo\.net|novelcodex\.com|novel-?next\.(com|net)|novel-?bin\.(com|net)|novelbin\.(com|me|net)|novelmax\.net|novelgate\.net|novelhulk\.net|fanfiction\.net|archiveofourown\.org|akknovel\.com|readlightnovel\.me|wtr-lab\.com)$/i;
+    const RATE_LIMITED = /(freewebnovel\.com|novelfull(l)?\.(net|com)|allnovelfull|allnovelnext|allnovel\.org|novelfire\.net|novelhall\.com|scribblehub\.com|novelgo\.id|novgo\.net|novelcodex\.com|novel-?next\.(com|net)|novel-?bin\.(com|net)|novelbin\.(com|me|net)|novelmax\.net|novelgate\.net|novelhulk\.net|fanfiction\.net|archiveofourown\.org|akknovel\.com|readlightnovel\.me)$/i;
     const siteThrottle = Number(p.minimumThrottle) || 500;
     const gentle = siteThrottle > 500 || RATE_LIMITED.test(host);
     p.maxSimultanousFetchSize = gentle ? 2 : 10;

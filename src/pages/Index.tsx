@@ -153,7 +153,7 @@ const Index = () => {
               },
               {
                 q: 'Which web novel sites are supported?',
-                a: 'LinkToEpub supports 179 sites including NovelFull, NovelFire, WTR-LAB, Scribble Hub, FreeWebNovel, WebNovel and many more.',
+                a: 'LinkToEpub supports 178 sites including NovelFull, NovelFire, Scribble Hub, FreeWebNovel, WebNovel and many more.',
               },
               {
                 q: 'Is LinkToEpub free?',

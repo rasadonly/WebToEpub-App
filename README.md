@@ -21,7 +21,7 @@ anywhere (Kindle, Kobo, Apple Books, Moon+ Reader, and the built-in reader).
 ## Features
 
 - **Link or search** — paste a TOC/chapter URL, or type a novel name to search supported sites.
-- **179 site parsers** — Novelfull, NovelFire, FreeWebNovel, WTR-LAB, Scribble Hub,
+- **178 site parsers** — Novelfull, NovelFire, FreeWebNovel, Scribble Hub,
   FreeWebNovel and many more, with an AI fallback parser for unknown sites.
 - **Chapter manager** — select a range, remove chapters, reorder or reverse the list.
 - **Metadata** — auto-detected title, author, language and cover, all editable before export.

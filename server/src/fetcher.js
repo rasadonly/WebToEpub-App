@@ -644,7 +644,7 @@ const RIDI_UA =
 // Ridi refuses direct requests from datacenter IPs (HTTP 403 on the web
 // hosts, a Cloudflare challenge on the API host), so the series page is
 // fetched through the shared httpGet proxy cascade and the JSON POSTs go
-// through the proxy pool, the same pattern as the WTR-LAB reader API.
+// through the proxy pool, the same reader-API pattern used elsewhere.
 const RIDI_API_HEADERS = {
   "User-Agent": RIDI_UA,
   Accept: "application/json",
@@ -1105,216 +1105,15 @@ async function tocNovelFull(url) {
   return results;
 }
 
-async function tocNovelBin(url) {
-  const html = await getText(url);
-  const origin = new URL(url).origin;
-  const novelId =
-    html.match(/data-novel-id=["'](\d+)["']/)?.[1] ||
-    new URL(url).pathname.split("/").filter(Boolean).pop();
-  const ajaxHtml = await getText(`${origin}/ajax/chapter-archive?novelId=${novelId}`);
-  const out = [];
-  parseHtml(ajaxHtml)
-    .querySelectorAll("a[href]")
-    .forEach((a) => {
-      const href = a.getAttribute("href");
-      if (href) out.push({ url: absoluteUrl(origin, href), title: (a.textContent || "").trim() });
-    });
-  return out;
-}
 
-async function tocWtrLab(url) {
-  const u = new URL(url);
-  const parts = u.pathname.split("/").filter(Boolean);
-  const language = parts[0] || "en";
-  const slug = parts[parts.length - 1].split("?")[0];
-  const seriePart = parts.find((p) => p.startsWith("serie-"));
-  let id = seriePart?.slice(6);
-  if (!id) {
-    const idx = parts.indexOf("novel");
-    if (idx >= 0 && /^\d+$/.test(parts[idx + 1] || "")) id = parts[idx + 1];
-  }
-  if (!id) id = parts.find((p) => /^\d+$/.test(p));
-  if (!id) throw new Error("wtr-lab: serie id missing");
-  const json = await getJson(`https://wtr-lab.com/api/chapters/${id}`);
-  const chapters = json.chapters || json.data?.chapters || [];
-  return chapters.map((a, i) => ({
-    url: `https://wtr-lab.com/${language}/serie-${id}/${slug}/${a.order ?? a.id}`,
-    title: a.title || `Chapter ${i + 1}`,
-  }));
-}
 
-// ---------------------------------------------------------------------------
-// wtr-lab chapter bodies
-//
-// The page HTML is a Next.js shell with no text, so chapter text must come from
-// POST /api/reader/get. The "ai" translation needs a login, so we use the free
-// "webplus" service, which returns AES-256-GCM encrypted raw (Chinese) text.
-// Reads are metered per IP behind Cloudflare Turnstile, so requests carry
-// browser-like headers and rotate through the proxy pool when challenged.
-// ---------------------------------------------------------------------------
 
-const WTRLAB_AI_LOCKED = new Set();
-const WTRLAB_KEY = "IJAFUUxjM25hyzL2AZrn0wl7cESED6Ru";
-
-function decryptWtrlabBody(encrypted) {
-  if (typeof encrypted !== "string") return encrypted;
-  let isArray = false;
-  let dataStr = encrypted;
-  if (dataStr.startsWith("arr:")) {
-    isArray = true;
-    dataStr = dataStr.slice(4);
-  } else if (dataStr.startsWith("str:")) {
-    dataStr = dataStr.slice(4);
-  } else {
-    return encrypted;
-  }
-  const parts = dataStr.split(":");
-  if (parts.length < 3) return encrypted;
-  const iv = Buffer.from(parts[0], "base64");
-  const tag = Buffer.from(parts[1], "base64");
-  const cipher = Buffer.from(parts.slice(2).join(":"), "base64");
-  const decipher = crypto.createDecipheriv("aes-256-gcm", Buffer.from(WTRLAB_KEY), iv);
-  decipher.setAuthTag(tag);
-  const out = Buffer.concat([decipher.update(cipher), decipher.final()]).toString("utf8");
-  return isArray ? JSON.parse(out) : out;
-}
-
-const WTRLAB_HEADERS = {
-  "Content-Type": "application/json",
-  Accept: "application/json, text/plain, */*",
-  "Accept-Language": "en-US,en;q=0.9",
-  "User-Agent": UA,
-  Origin: "https://wtr-lab.com",
-  Referer: "https://wtr-lab.com/",
-  "Sec-Fetch-Site": "same-origin",
-  "Sec-Fetch-Mode": "cors",
-  "Sec-Fetch-Dest": "empty",
-  "sec-ch-ua": '"Chromium";v="123", "Not:A-Brand";v="8"',
-  "sec-ch-ua-mobile": "?0",
-  "sec-ch-ua-platform": '"Windows"',
-};
 
 /** POSTs to /api/reader/get, rotating egress routes when Turnstile blocks one. */
-async function wtrlabReaderGet(payload) {
-  const body = JSON.stringify(payload);
-  const target = "https://wtr-lab.com/api/reader/get";
-  let lastErr = null;
-  // Direct first (fastest); proxies act as extra egress IPs with their own quota.
-  for (const proxy of PROXIES) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 25000);
-        let res;
-        try {
-          res = await fetch(buildUrl(proxy, target), {
-            method: "POST",
-            headers: WTRLAB_HEADERS,
-            body,
-            signal: ctrl.signal,
-          });
-        } finally {
-          clearTimeout(timer);
-        }
-        if (!res.ok) {
-          lastErr = new Error(`HTTP ${res.status}`);
-          continue;
-        }
-        const json = await res.json();
-        if (json?.requireTurnstile) {
-          lastErr = new Error("Cloudflare Turnstile challenge");
-          break; // this egress IP is burned — move to the next route
-        }
-        return json;
-      } catch (e) {
-        lastErr = e;
-      }
-      await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
-    }
-  }
-  throw lastErr || new Error("wtr-lab reader request failed");
-}
 
 /** True when a block of text is mostly non-Latin (i.e. still needs translating). */
-function needsTranslation(text) {
-  const sample = String(text || "").slice(0, 4000);
-  if (!sample.trim()) return false;
-  const cjk = (sample.match(/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/g) || []).length;
-  // Lower threshold (0.03 instead of 0.05) so mixed chapters are caught
-  return cjk > sample.length * 0.03;
-}
 
 /** One call to a public translate endpoint. Returns "" when the route fails. */
-async function translateOnce(text) {
-  const endpoints = [
-    async () => {
-      const res = await fetch(
-        "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded;charset=utf-8",
-            "User-Agent": UA,
-          },
-          body: "q=" + encodeURIComponent(text),
-        }
-      );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      let out = "";
-      for (const part of json?.[0] || []) if (part?.[0]) out += part[0];
-      return out;
-    },
-    async () => {
-      const res = await fetch(
-        "https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=auto&tl=en&q=" +
-          encodeURIComponent(text),
-        { headers: { "User-Agent": UA } }
-      );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      if (Array.isArray(json)) {
-        return json
-          .map((p) => (Array.isArray(p) ? p[0] : p))
-          .filter((p) => typeof p === "string")
-          .join("");
-      }
-      return "";
-    },
-    // MyMemory — free, generous quota, good quality for CJK→EN
-    async () => {
-      const res = await fetch(
-        "https://api.mymemory.translated.net/get?q=" +
-          encodeURIComponent(text.slice(0, 500)) +
-          "&langpair=zh|en",
-        { headers: { "User-Agent": UA } }
-      );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      return json?.responseData?.translatedText || "";
-    },
-    async () => {
-      const res = await fetch(
-        "https://lingva.ml/api/v1/auto/en/" + encodeURIComponent(text),
-        { headers: { "User-Agent": UA } }
-      );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return (await res.json())?.translation || "";
-    },
-  ];
-  for (const call of endpoints) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const out = await call();
-        if (out && out.trim() && !out.includes("MYMEMORY WARNING")) return out;
-      } catch {
-        /* next attempt / endpoint */
-      }
-      await sleep(300 * (attempt + 1));
-    }
-  }
-  return "";
-}
 
 /**
  * Translates raw paragraphs to English. Paragraphs are sent in small batches
@@ -1322,170 +1121,7 @@ async function translateOnce(text) {
  * count we re-translate that batch one paragraph at a time so nothing is lost
  * or misaligned (this was the cause of chapters staying in Chinese).
  */
-async function translateToEnglish(paragraphs) {
-  if (!paragraphs.length) return paragraphs;
-  // Sample broadly — first 8 paras might be English headings before Chinese body text
-  const sample = paragraphs.slice(0, 25).join(" ");
-  if (!needsTranslation(sample)) return paragraphs;
 
-  const SEP = "\n";
-  const out = [];
-  let batch = [];
-  let size = 0;
-
-  const flush = async () => {
-    if (!batch.length) return;
-    const current = batch;
-    batch = [];
-    size = 0;
-    const translated = await translateOnce(current.join(SEP));
-    const pieces = translated
-      ? translated.split(/\n+/).map((s) => s.trim()).filter(Boolean)
-      : [];
-    if (pieces.length === current.length) {
-      out.push(...pieces);
-      return;
-    }
-    // Misaligned (or failed) — translate each paragraph on its own.
-    for (const p of current) {
-      const one = await translateOnce(p);
-      out.push(one && one.trim() ? one.trim() : p);
-    }
-  };
-
-  for (const p of paragraphs) {
-    if (size + p.length > 1500) await flush();
-    batch.push(String(p));
-    size += p.length + SEP.length;
-  }
-  await flush();
-  return out.length ? out : paragraphs;
-}
-
-async function bodyWtrLab(chapterUrl) {
-  const u = new URL(chapterUrl);
-  const parts = u.pathname.split("/").filter(Boolean);
-  const language = parts[0] || "en";
-  const seriePart = parts.find((p) => p.startsWith("serie-"));
-  let rawId = seriePart?.slice(6);
-  if (!rawId) {
-    const idx = parts.indexOf("novel");
-    if (idx >= 0 && /^\d+$/.test(parts[idx + 1] || "")) rawId = parts[idx + 1];
-  }
-  const last = parts[parts.length - 1].replace("chapter-", "").split("?")[0];
-  const chapterNo = Number(last);
-  if (!rawId || !Number.isFinite(chapterNo)) {
-    throw new Error("wtr-lab: could not read serie id / chapter number from URL");
-  }
-
-  const base = {
-    language,
-    raw_id: Number(rawId),
-    chapter_no: chapterNo,
-    retry: false,
-    force_retry: false,
-  };
-
-  // AI translation is best quality but needs a logged-in account (code 1401).
-  // Each request counts against the per-IP Turnstile meter, so once a novel has
-  // answered 1401 we stop asking and go straight to webplus for later chapters.
-  let paragraphs = null;
-  let title = "";
-  let glossary = null;
-  let patch = null;
-  if (!WTRLAB_AI_LOCKED.has(rawId)) {
-    try {
-      const ai = await wtrlabReaderGet({ ...base, translate: "ai" });
-      title = ai?.chapter?.title || title;
-      if (ai?.code === 1401) {
-        WTRLAB_AI_LOCKED.add(rawId);
-      } else {
-        let aiBody = ai?.data?.data?.body;
-        if (typeof aiBody === "string") aiBody = decryptWtrlabBody(aiBody);
-        if (Array.isArray(aiBody) && aiBody.length) {
-          paragraphs = aiBody;
-          glossary = ai?.data?.data?.glossary_data?.terms || null;
-          patch = ai?.data?.data?.patch || null;
-        }
-      }
-    } catch {
-      /* fall through to webplus */
-    }
-  }
-
-
-  if (!paragraphs) {
-    // webplus may need a moment on first request for a chapter — retry a few
-    // times before giving up, otherwise the chapter lands in the book blank.
-    let decrypted = null;
-    let lastErr = null;
-    for (let attempt = 0; attempt < 4 && !decrypted; attempt++) {
-      try {
-        const wp = await wtrlabReaderGet({
-          ...base,
-          translate: "webplus",
-          retry: attempt > 0,
-          // On 3rd attempt, force the server to re-generate the translation
-          force_retry: attempt >= 2,
-        });
-        title = wp?.chapter?.title || title;
-        const wpStatus = wp?.data?.status;
-        const enc = wp?.data?.data?.body;
-        if (typeof enc === "string" && enc.length) {
-          const d = decryptWtrlabBody(enc);
-          const arr = Array.isArray(d) ? d : [d];
-          if (arr.filter((p) => String(p).trim()).length) decrypted = arr;
-        } else if (wpStatus !== undefined && wpStatus !== 0) {
-          // Server is still processing — back off longer
-          await sleep(1500 * (attempt + 1));
-          continue;
-        }
-      } catch (e) {
-        lastErr = e;
-      }
-      if (!decrypted) await sleep(900 * (attempt + 1));
-    }
-    if (!decrypted) {
-      throw new Error(
-        `wtr-lab returned no content for chapter ${chapterNo}${lastErr ? `: ${lastErr.message}` : ""}`
-      );
-    }
-    paragraphs = decrypted.filter((p) => String(p).trim());
-  }
-
-  // AI bodies use ※n⛬ placeholders that map into the chapter glossary.
-  if (glossary?.length || patch?.length) {
-    paragraphs = paragraphs.map((raw) => {
-      let text = String(raw);
-      for (let i = 0; i < (glossary?.length || 0); i++) {
-        const term = glossary[i]?.[0] ?? `※${i}⛬`;
-        text = text.replaceAll(`※${i}⛬`, term).replaceAll(`※${i}〓`, term);
-      }
-      for (const p of patch || []) {
-        if (p?.zh) text = text.replaceAll(p.zh, ` ${p.en ?? ""}`);
-      }
-      return text;
-    });
-  }
-
-  // Whatever route produced the text (AI or webplus), auto-translate anything
-  // that came back in the original language so the EPUB is always English.
-  paragraphs = await translateToEnglish(paragraphs.map((p) => String(p)));
-  if (title && needsTranslation(title)) {
-    const t = await translateOnce(title);
-    if (t.trim()) title = t.trim();
-  }
-  paragraphs = paragraphs.filter((p) => String(p).trim());
-  if (!paragraphs.length) {
-    throw new Error(`wtr-lab returned no content for chapter ${chapterNo}`);
-  }
-
-  const esc = (s) =>
-    String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  const heading = title ? `<h1>${esc(chapterNo)}: ${esc(title)}</h1>` : "";
-  return heading + paragraphs.map((p) => `<p>${esc(p)}</p>`).join("\n");
-
-}
 
 
 
@@ -1824,7 +1460,6 @@ export function supportedDomains() {
     "novelarrow.com",
     "novelfull.com",
     "novelfull.net",
-    "wtr-lab.com",
     "wattpad.com",
     "snowytranslations.com",
     ...MAJOR_DOMAINS,
@@ -4473,7 +4108,6 @@ function siteKey(hostname) {
   if (host.includes("novelfull.net")) return "novelfullnet";
   if (host.includes("novelfull.com")) return "novelfullcom";
   if (host.includes("novelfull.")) return "novelfull";
-  if (host.includes("wtr-lab.com")) return "wtrlab";
   if (host.includes("wattpad.com")) return "wattpad";
   if (host.includes("novelhi.com")) return "novelhi";
   if (host.includes("foxteller.com")) return "foxteller";
@@ -4549,8 +4183,6 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
       case "novelfullcom":
       case "novelfull":
         return tocNovelFull(tocUrl);
-      case "wtrlab":
-        return tocWtrLab(tocUrl);
       case "wattpad":
         return tocWattpad(tocUrl);
       case "hako":
@@ -4759,8 +4391,6 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
         return bodyNovelArrow(chapterUrl);
       case "wattpad":
         return bodyWattpad(chapterUrl);
-      case "wtrlab":
-        return bodyWtrLab(chapterUrl);
       case "hako":
         return bodyHako(chapterUrl);
       case "tianya":
@@ -4819,10 +4449,10 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
 
   const textLen = (h) => (h ? h.replace(/<[^>]+>/g, "").trim().length : 0);
   const enough = (h) => textLen(h) >= 20;
-  // Some parsers already retry internally against metered APIs (WTR-LAB makes
+  // Some parsers already retry internally against metered APIs — don't stack
   // up to 5 reader calls per attempt) — restarting those from this outer loop
   // multiplies straight into the site's rate limit, so they get one attempt.
-  const maxAttempts = key === "wtrlab" ? 1 : 3;
+  const maxAttempts = 3;
   let last = "";
   let thinTries = 0;
   for (let i = 0; i < maxAttempts; i++) {

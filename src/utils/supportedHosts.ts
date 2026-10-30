@@ -165,7 +165,6 @@ export const SUPPORTED_HOSTS: string[] = [
   "wetriedtls.com",
   "woopread.com",
   "wtnovels.com",
-  "wtr-lab.com",
   "wuxia.city",
   "wuxia.click",
   "wuxiabox.com",

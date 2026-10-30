@@ -38,7 +38,7 @@ export default function SitesPage() {
 
         <h1 className="text-3xl font-bold mb-2">Supported Sites</h1>
         <p className="text-muted-foreground mb-8">
-          {hosts.length ? hosts.length : '179'} sites work out of the box. Just paste the novel's main page URL — not a chapter link.
+          {hosts.length ? hosts.length : '178'} sites work out of the box. Just paste the novel's main page URL — not a chapter link.
           If your site isn't in the list, paste it anyway. The AI fallback picks up most novel sites automatically.
         </p>
 
