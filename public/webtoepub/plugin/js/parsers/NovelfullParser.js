@@ -213,6 +213,53 @@ class NovelHyphenBinParser extends NovelfullParser {
         super();
     }
 
+    // Novel-bin moved its novel pages to a new "almanac" layout:
+    // ol.almanac-chapter-list holds only the FIRST 30 chapters, and the page
+    // prints "N total" with no pagination and no full chapter list
+    // ("Showing the first 30 chapters. Start reading to continue through
+    // the full index."). The inherited ul.list-chapter selector finds 0
+    // links on this layout, so the live reader got an empty TOC and fell
+    // back to a heuristic that only ever saw those 30 chapters.
+    // Mirror the backend tocNovelBinMirror approach: take the almanac links,
+    // read the printed total, and synthesize the missing chapters by URL
+    // pattern (chapter URLs are sequential: .../chapter-N).
+    async getChapterUrls(dom, chapterUrlsUI) {
+        let links = [...dom.querySelectorAll("ol.almanac-chapter-list a")]
+            .map(link => util.hyperLinkToChapter(link));
+        if (0 < links.length) {
+            let total = 0;
+            let countEl = dom.querySelector(".almanac-count");
+            if (countEl) {
+                total = parseInt(countEl.textContent.replace(/[^0-9]/g, ""), 10) || 0;
+            }
+            if (!total) {
+                let m = dom.body.textContent.match(/(\d[\d,]*)\s*total/i);
+                if (m) {
+                    total = parseInt(m[1].replace(/,/g, ""), 10);
+                }
+            }
+            if (total > links.length) {
+                let byNum = new Map();
+                for (let ch of links) {
+                    let url = ch.sourceUrl || ch.href || "";
+                    let n = parseInt(url.match(/chapter-(\d+)$/)?.[1] || "0", 10);
+                    if (n) {
+                        byNum.set(n, ch);
+                    }
+                }
+                let firstUrl = links[0].sourceUrl || links[0].href || "";
+                let base = firstUrl.replace(/chapter-\d+$/, "");
+                let out = [];
+                for (let n = 1; n <= total; ++n) {
+                    out.push(byNum.get(n) || { title: `Chapter ${n}`, sourceUrl: base + "chapter-" + n });
+                }
+                return out;
+            }
+            return links;
+        }
+        return super.getChapterUrls(dom, chapterUrlsUI);
+    }
+
     extractSubject(dom) {
         let genres = [...dom.querySelectorAll(".info > li:nth-child(2) a")];
 
