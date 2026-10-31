@@ -586,6 +586,9 @@ class SiteSearchEngine {
             let path = u.pathname.toLowerCase();
             if (url.includes("cdn-cgi/")) return true;
             if (path === "/" || path === "/home" || path === "/home/" || path === "/search" || path === "/search/" || path === "/series" || path === "/series/") return true;
+            // Account-flow pages are never novels (seen in live search tests:
+            // "Password Reset" results from snowytranslations/peachpitting).
+            if (/password-reset|lost-password|reset-password/.test(path)) return true;
             return /^\/(genre|genres|category|categories|author|authors|tag|tags)\//.test(path);
         } catch (e) {
             return false;
