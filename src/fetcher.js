@@ -3645,9 +3645,13 @@ async function tocPawRead(startUrl) {
 async function tocTeanovel(startUrl) {
   const u = new URL(startUrl);
   const slug = u.pathname.split('/').filter(Boolean).pop();
-  const r = await fetch(`${u.origin}/api/novel/chapter-list?slug=${encodeURIComponent(slug)}`, { headers: { ...DEFAULT_HEADERS, Accept: 'application/json' } });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  const j = await r.json();
+  // Was a raw direct fetch: from the Heroku dyno it fails (the API route
+  // rejects that egress), so the dedicated parser threw and the generic
+  // sweep returned 6 navigation links as the "TOC" while the live reader
+  // (proxy-routed) correctly showed 589. Route through getJson like the
+  // other JSON-backed parsers: direct first, then lovable, then the CF
+  // worker, with challenge detection and blocked-host handling.
+  const j = await getJson(`${u.origin}/api/novel/chapter-list?slug=${encodeURIComponent(slug)}`);
   const rows = Array.isArray(j?.data) ? j.data : [];
   return rows
     .slice()
