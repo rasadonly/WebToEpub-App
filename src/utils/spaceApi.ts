@@ -266,7 +266,26 @@ async function translateResultTitles(
   return Promise.all(
     choices.map(async ([label, url]) => {
       const m = String(label).match(/^(.*?) — (.*?) \(([^)]*)\)$/);
-      if (!m || !CJK_RE.test(m[3])) return { label, url };
+      if (m && !CJK_RE.test(m[1])) {
+        // First part is already in English
+        return { label, url };
+      }
+      if (!m || !CJK_RE.test(m[3])) {
+        // Fallback: if whole title is CJK before the dash, try translating it
+        const hostMatch = String(label).match(/^(.*?) — (.*)$/);
+        if (hostMatch && CJK_RE.test(hostMatch[1])) {
+          try {
+            const outs = await callSpace('translate_text', [hostMatch[1], 'auto', 'en', 'mymemory'], 8_000);
+            const translated = String((outs && outs[0]) || '').trim();
+            if (translated && translated !== hostMatch[1]) {
+              return { label: `${translated} — ${hostMatch[2]} (${hostMatch[1]})`, url };
+            }
+          } catch {
+            /* ignore */
+          }
+        }
+        return { label, url };
+      }
       try {
         const outs = await callSpace('translate_text', [m[3], 'auto', 'en', 'mymemory'], 8_000);
         const translated = String((outs && outs[0]) || '').trim();
