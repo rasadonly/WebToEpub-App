@@ -24,6 +24,7 @@ import {
   fetchSpaceToc,
   resolveJobTitle,
   startSpaceJob,
+  trackOnServer,
   refreshSpaceJob,
   cancelSpaceJob,
   downloadSpaceEpub,
