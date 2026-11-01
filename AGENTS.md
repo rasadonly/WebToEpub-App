@@ -7,3 +7,4 @@
 - Render the Library overlay in a document-body portal and stop search submit propagation; its forms must never nest inside or submit the converter form.
 - Use the shared Unicode-aware library search helpers for library filtering, suggestions, and query normalization; preserve non-Latin titles and reject empty or incidental one-letter fuzzy matches.
 - Apply EPUB reader colors through one updatable chapter stylesheet sourced from global reader tokens; content hooks read the current theme from a ref so newly loaded chapters cannot restore stale colors, and embedded publisher colors cannot hide text.
+- The default parser uses no AI: chapter text comes from site selectors, then the densest text block, then main/article/body, so a chapter is never empty. AI is optional; the ai-parse NVIDIA fallback must use a model verified live (old Llama 3.x ids were retired).

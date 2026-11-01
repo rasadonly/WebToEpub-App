@@ -20,88 +20,85 @@ const passthrough = (text: string, status: number, contentType?: string | null) 
     headers: { ...corsHeaders, "Content-Type": contentType ?? "application/json" },
   });
 
-// ---------------------------------------------------------------------------
-// NVIDIA free endpoint: models there are retired without notice, and the
-// /v1/models catalog lists models not actually deployed for the account
-// (chat calls 404 "Function not found for account"). So: discover the
-// catalog, rank candidates by preference, walk them with the real chat
-// call until one answers, cache the WORKING model for an hour, and
-// remember the dead ones; the walk re-runs automatically when the cached
-// model drops. Mirrors server/src/aiParser.js - keep the two in step.
-// ---------------------------------------------------------------------------
-const NV_BASE = "https://integrate.api.nvidia.com/v1";
-const NV_PREFERRED_MODELS = [
-  "meta/llama-3.3-70b-instruct",
-  "meta/llama-3.1-70b-instruct",
+
+// ---- NVIDIA auto-fallback ----
+// Preferred chat models, best first. Only ids NVIDIA currently lists for this key are tried,
+// plus any other "instruct"/"-it" chat model it lists, so retired ids are skipped automatically.
+const NV_PREFERRED = [
+  "nvidia/nemotron-3.5-lightning-30b-a3b",
+  "deepseek-ai/deepseek-v4.1-flash",
+  "google/gemma-4-31b-it",
+  "nvidia/nemotron-3-super-120b-a12b",
   "nvidia/llama-3.1-nemotron-70b-instruct",
-  "qwen/qwen2.5-72b-instruct",
-  "openai/gpt-oss-120b",
-  "openai/gpt-oss-20b",
-  "mistralai/mixtral-8x7b-instruct-v0.1",
-  "meta/llama-3.1-405b-instruct",
-  "meta/llama-3.1-8b-instruct",
+  "mistralai/mistral-large-2-instruct",
+  "nvidia/nemotron-nano-3-30b-a3b",
 ];
-const NV_MODEL_TTL_MS = 60 * 60 * 1000;
-const NV_DEAD_TTL_MS = 30 * 60 * 1000;
-const NV_MAX_ATTEMPTS = 4;
-let nvWorking: { model: string; at: number } = { model: "", at: 0 };
-let nvCatalog: { candidates: string[]; at: number } = { candidates: [], at: 0 };
-const nvDead = new Map<string, number>();
+const NV_SKIP = /embed|guard|safety|reward|parse|retriever|vision|vlm|omni|code|diffusion|-vl-|base|v0\.1$/i;
+const NV_TIMEOUT_MS = 20000;
+const NV_PENALTY_MS = 10 * 60 * 1000;
+const nvPenalty = new Map<string, number>(); // model -> retry-after timestamp
+let nvLastGood: string | null = null;
+let nvList: { at: number; ids: string[] } | null = null;
 
-function rankNvidiaModels(ids: string[]): string[] {
-  if (!ids.length) return [];
-  const byLower = new Map(ids.map((id) => [String(id).toLowerCase(), String(id)]));
-  const out: string[] = [];
-  for (const want of NV_PREFERRED_MODELS) {
-    if (byLower.has(want)) out.push(byLower.get(want) as string);
-  }
-  const notChat = /(embed|rerank|reward|guard|vision|clip|ocr|detect|moderation|safety|content-safety|topic-control|asr|tts|image|video|diffusion|vila|kosmos|deplot|parse)/i;
-  const families = [/llama/, /nemotron/, /qwen/, /gpt-oss/, /mistral|mixtral/, /gemma/, /phi/, /deepseek/];
-  const scored: { id: string; score: number }[] = [];
-  for (const raw of ids) {
-    const id = String(raw);
-    if (out.includes(id)) continue;
-    if (!/instruct|chat|-it\b/i.test(id) || notChat.test(id)) continue;
-    const m = id.match(/(\d+(?:\.\d+)?)\s*b\b/i);
-    const size = m ? parseFloat(m[1]) : 0;
-    const fam = families.findIndex((f) => f.test(id.toLowerCase()));
-    const sizeScore = size >= 30 && size <= 130 ? 3 : size >= 7 ? 2 : size > 130 ? 1 : 0;
-    scored.push({ id, score: (fam === -1 ? 0 : (families.length - fam) * 10) + sizeScore });
-  }
-  scored.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
-  for (const s of scored) {
-    if (out.length >= 8) break;
-    out.push(s.id);
-  }
-  return out;
-}
-
-async function nvidiaCandidates(nvKey: string, forceRefresh = false): Promise<string[]> {
-  if (!forceRefresh && nvCatalog.candidates.length && Date.now() - nvCatalog.at < NV_MODEL_TTL_MS) {
-    return nvCatalog.candidates;
-  }
+async function nvAvailable(key: string): Promise<string[]> {
+  if (nvList && Date.now() - nvList.at < 30 * 60 * 1000) return nvList.ids;
   try {
-    const res = await fetch(`${NV_BASE}/models`, {
-      headers: { Authorization: `Bearer ${nvKey}` },
-      signal: AbortSignal.timeout(6000),
+    const r = await fetch("https://integrate.api.nvidia.com/v1/models", {
+      headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(8000),
     });
-    if (res.ok) {
-      const j = await res.json();
-      const ids = (Array.isArray(j?.data) ? j.data : []).map((m: { id?: string }) => m?.id ?? "");
-      const candidates = rankNvidiaModels(ids);
-      if (candidates.length) nvCatalog = { candidates, at: Date.now() };
-      return candidates;
+    if (r.ok) {
+      const ids = ((await r.json())?.data ?? []).map((m: { id: string }) => m.id);
+      nvList = { at: Date.now(), ids };
+      return ids;
     }
-  } catch {
-    /* fall through to the cached list */
-  }
-  return nvCatalog.candidates;
+  } catch { /* fall back to preferred list */ }
+  return NV_PREFERRED;
 }
 
-const nvRecentlyDead = (model: string) => {
-  const at = nvDead.get(model);
-  return at !== undefined && Date.now() - at < NV_DEAD_TTL_MS;
-};
+async function nvCandidates(key: string): Promise<string[]> {
+  const listed = new Set(await nvAvailable(key));
+  const extras = [...listed].filter((id) =>
+    !NV_PREFERRED.includes(id) && /instruct|-it$|nemotron-3|flash/i.test(id) && !NV_SKIP.test(id));
+  const order = [...NV_PREFERRED.filter((id) => listed.has(id)), ...extras];
+  if (nvLastGood && order.includes(nvLastGood)) order.unshift(...order.splice(order.indexOf(nvLastGood), 1));
+  const now = Date.now();
+  const healthy = order.filter((m) => (nvPenalty.get(m) ?? 0) < now);
+  return (healthy.length ? healthy : order).slice(0, 5);
+}
+
+async function tryNvidia(key: string, messages: unknown[], temperature: number, errors: string[]) {
+  for (const model of await nvCandidates(key)) {
+    try {
+      const res = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+        signal: AbortSignal.timeout(NV_TIMEOUT_MS),
+        body: JSON.stringify({ model, messages, temperature, stream: false, chat_template_kwargs: { enable_thinking: false } }),
+      });
+      const text = await res.text();
+      if (res.ok) {
+        let content: unknown = null;
+        try { content = JSON.parse(text)?.choices?.[0]?.message?.content; } catch { /* ignore */ }
+        if (typeof content === "string" && content.trim()) {
+          nvLastGood = model;
+          nvPenalty.delete(model);
+          return passthrough(text, 200, res.headers.get("Content-Type"));
+        }
+        errors.push(`nvidia(${model}):empty`);
+      } else {
+        errors.push(`nvidia(${model}):${res.status}`);
+        console.warn(`[ai-parse] NVIDIA ${model} failed ${res.status}: ${text.slice(0, 200)}`);
+        if (res.status === 401 || res.status === 403) return null; // bad key
+      }
+    } catch (e) {
+      errors.push(`nvidia(${model}):${e instanceof Error ? e.name : String(e)}`);
+      console.warn(`[ai-parse] NVIDIA ${model} slow/down: ${e instanceof Error ? e.message : e}`);
+    }
+    nvPenalty.set(model, Date.now() + NV_PENALTY_MS);
+    if (nvLastGood === model) nvLastGood = null;
+  }
+  return null;
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -137,48 +134,11 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 2) NVIDIA free endpoint - walk ranked candidates until one answers.
+    // 2) NVIDIA (fallback) — auto-picks a working model; skips models that are down or slow.
     if (nvKey && (!provider || provider === "nvidia" || provider === "lovable")) {
-      const tried = new Set<string>();
-      for (let attempt = 0; attempt < NV_MAX_ATTEMPTS; attempt++) {
-        let model = "";
-        if (attempt === 0 && nvWorking.model && Date.now() - nvWorking.at < NV_MODEL_TTL_MS && !nvRecentlyDead(nvWorking.model)) {
-          model = nvWorking.model;
-        } else {
-          const candidates = await nvidiaCandidates(nvKey, attempt === 1);
-          model = candidates.find((c) => !tried.has(c) && !nvRecentlyDead(c)) ?? "";
-        }
-        if (!model) {
-          errors.push("nvidia:no-chat-model-available");
-          break;
-        }
-        tried.add(model);
-        try {
-          const res = await fetch(`${NV_BASE}/chat/completions`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${nvKey}` },
-            body: JSON.stringify({ model, messages, temperature, stream: false }),
-            signal: AbortSignal.timeout(20000),
-          });
-          if (res.ok) {
-            nvWorking = { model, at: Date.now() };
-            return passthrough(await res.text(), res.status, res.headers.get("Content-Type"));
-          }
-          const t = await res.text();
-          errors.push(`nvidia(${model}):${res.status}`);
-          console.warn(`[ai-parse] NVIDIA ${model} failed ${res.status}: ${t.slice(0, 200)}`);
-          if (res.status === 401 || res.status === 403) break; // bad key
-          if (res.status === 404 || res.status === 400) {
-            nvDead.set(model, Date.now());
-            if (nvWorking.model === model) nvWorking = { model: "", at: 0 };
-            continue; // retired or not deployed for this account - next candidate
-          }
-          break;
-        } catch (e) {
-          errors.push(`nvidia(${model}):${e instanceof Error ? e.message : String(e)}`);
-          break;
-        }
-      }
+      const r = await tryNvidia(nvKey, messages, temperature, errors);
+      if (r) return r;
+
     }
 
     return json({ error: "All AI providers failed", details: errors }, 502);
