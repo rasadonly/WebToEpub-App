@@ -219,7 +219,7 @@ function parseTitleCount(titleCount: string): { title: string; count: number } {
 // the shape so the user knows what actually went wrong.
 function spaceTocProblem(toc: SpaceToc): string | null {
   if (!toc || toc.count <= 0) return 'no chapters found';
-  if (toc.count < 5) return `only ${toc.count} chapters`;
+  if (toc.count < 1) return 'no chapters found';
   const lines = toc.chaptersText.split('\n').filter((l) => l.trim());
   if (!lines.length) return 'no chapters found';
   const firstTitle = lines[0].replace(/^\d+\.\s*/, '');

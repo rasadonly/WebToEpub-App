@@ -487,6 +487,39 @@ export default function RawPage() {
                 ))}
               </div>
             )}
+            {!tocTitle && !job && (
+              <div className="mt-8 pt-4 border-t border-border/40 text-left">
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 text-center">
+                  Supported Raw Novel Sites (10+ per language)
+                </h3>
+                <div className="grid gap-3 sm:grid-cols-3 text-xs">
+                  <div className="rounded-xl border border-border/70 bg-card/40 p-3">
+                    <span className="font-bold text-primary block mb-1.5">
+                      🇯🇵 Japanese (13 Sites)
+                    </span>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Syosetu (ncode & novel18), Kakuyomu, Estar (エブリスタ), Alphapolis, Mahou no iLand, Tanpens, Monogatary, Nola, Arcadia, Novelup+, Novelba, Hameln.
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-border/70 bg-card/40 p-3">
+                    <span className="font-bold text-primary block mb-1.5">
+                      🇰🇷 Korean (13 Sites)
+                    </span>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Naver Webnovel (novel.naver.com), Novelpia, Brunch Story, Postype, Munpia, Joara, Series Naver, Blice, OneStory, Kakao Stage, Toki.
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-border/70 bg-card/40 p-3">
+                    <span className="font-bold text-primary block mb-1.5">
+                      🇨🇳 Chinese (22 Sites)
+                    </span>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      69shuba (69shu), 17K, Piaotia (飘天), Biquge (b5200 & biquge.tw), CZbooks, SFACG, JJWXC (晋江), Uukanshu, 7017k, Shubaow, Ciweimao, Zongheng.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </section>
 
