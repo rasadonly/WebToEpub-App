@@ -277,21 +277,12 @@ export default function RawPage() {
         setNotice('You already translated this book in this browser — here is your EPUB.');
         return;
       }
-      // Start the job and translate its title at the same time;
-      // the title never blocks the job (capped at 20s).
-      const [title, spaceJobId] = await Promise.all([
-        Promise.race([
-          resolveJobTitle(payload.originalTitle, payload.source, payload.target, 'auto'),
-          new Promise<string>((r) => window.setTimeout(() => r(payload.originalTitle), 20_000)),
-        ]),
-        startSpaceJob({ ...payload, engine: 'auto' }),
-      ]);
-      // The server follows the job and saves it to the Community
-      // Library even if this tab is closed.
-      trackOnServer(spaceJobId, title);
+      // Start the job right away; the title is translated in the
+      // background and filled in when ready (capped at 20s).
+      const spaceJobId = await startSpaceJob({ ...payload, engine: 'auto' });
       const created: SpaceJob = {
         spaceJobId,
-        title,
+        title: payload.originalTitle,
         originalTitle: payload.originalTitle,
         tocUrl: payload.tocUrl,
         source: payload.source,
@@ -310,6 +301,19 @@ export default function RawPage() {
       setTrackedJob(created);
       pollJob(spaceJobId);
       window.setTimeout(() => jobSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+      void Promise.race([
+        resolveJobTitle(payload.originalTitle, payload.source, payload.target, 'auto'),
+        new Promise<string>((r) => window.setTimeout(() => r(payload.originalTitle), 20_000)),
+      ])
+        .catch(() => payload.originalTitle)
+        .then((title) => {
+          // The server follows the job and saves it to the Community
+          // Library even if this tab is closed.
+          trackOnServer(spaceJobId, title);
+          if (title && title !== payload.originalTitle) {
+            setTrackedJob((prev) => (prev && prev.spaceJobId === spaceJobId ? { ...prev, title } : prev));
+          }
+        });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to start translation job');
     } finally {
