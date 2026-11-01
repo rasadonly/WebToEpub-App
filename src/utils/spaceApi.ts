@@ -212,49 +212,45 @@ function parseTitleCount(titleCount: string): { title: string; count: number } {
   return { title: String(titleCount || '').trim(), count: 0 };
 }
 
-// A Space TOC is only trusted when it looks like a real chapter
-// list: 0 chapters, under 5, an info page first, or chapters in
-// descending numeric order all mean the Space fetch went wrong.
-// (There is no parser fallback any more — an unusable TOC is an
-// honest error, not a silent substitute.)
-function spaceTocUsable(toc: SpaceToc): boolean {
-  if (!toc || toc.count <= 0) return false;
-  if (toc.count < 5) return false;
+// Why a Space TOC is unusable (null = usable). The old client
+// only retried the info-page case and gave up on partial,
+// tiny, or reversed lists with a bare "please retry" —
+// now every bad shape is retried, and the final error names
+// the shape so the user knows what actually went wrong.
+function spaceTocProblem(toc: SpaceToc): string | null {
+  if (!toc || toc.count <= 0) return 'no chapters found';
+  if (toc.count < 5) return `only ${toc.count} chapters`;
   const lines = toc.chaptersText.split('\n').filter((l) => l.trim());
-  if (!lines.length) return false;
+  if (!lines.length) return 'no chapters found';
   const firstTitle = lines[0].replace(/^\d+\.\s*/, '');
-  if (isInfoPageTitle(firstTitle)) return false;
+  if (isInfoPageTitle(firstTitle)) return 'info page first';
   const num = (s: string): number | null => {
     const m = s.match(/(\d{1,5})/);
     return m ? Number(m[1]) : null;
   };
   const firstNum = num(firstTitle);
   const lastNum = num(lines[lines.length - 1].replace(/^\d+\.\s*/, ''));
-  if (firstNum !== null && lastNum !== null && firstNum > lastNum) return false;
-  return true;
+  if (firstNum !== null && lastNum !== null && firstNum > lastNum) {
+    return 'chapters in reverse order';
+  }
+  return null;
 }
 
-/** Fetch a TOC from the Space, retrying when the first entry is the site's info page. */
+/** Fetch a TOC from the Space, retrying any unusable shape. */
 export async function fetchSpaceToc(url: string): Promise<SpaceToc> {
-  let last: SpaceToc | null = null;
+  let lastReason = 'no chapters found';
   for (let attempt = 0; attempt < 4; attempt++) {
     const outs = await callSpace('book_fetch_toc', [url], 300_000);
     const { title, count } = parseTitleCount(String((outs && outs[0]) || ''));
     const chaptersText = String((outs && outs[1]) || '');
     const info = String((outs && outs[2]) || '');
-    last = { title, count, chaptersText, info };
-    const firstLine = chaptersText.split('\n')[0] || '';
-    if (!isInfoPageTitle(firstLine.replace(/^\d+\.\s*/, ''))) break;
+    const toc = { title, count, chaptersText, info };
+    const reason = spaceTocProblem(toc);
+    if (!reason) return toc;
+    lastReason = reason;
     await new Promise((r) => setTimeout(r, 5000));
   }
-  if (!last || !spaceTocUsable(last)) {
-    throw new Error(
-      last && last.count > 0
-        ? 'Space returned an unusable chapter list (partial, reversed, or info page first) — please retry'
-        : 'Space found no chapters for this URL',
-    );
-  }
-  return last;
+  throw new Error(`Space returned an unusable chapter list (${lastReason}) — please retry`);
 }
 
 const CJK_RE = /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/;
@@ -474,6 +470,9 @@ export function parseTocLines(chaptersText: string): { n: number; title: string 
     .split('\n')
     .map((l) => l.trim())
     .filter(Boolean)
+    // Trailers from book_fetch_toc, not chapters: the
+    // "… and N more" count line and the Novelpia login note.
+    .filter((line) => !line.startsWith('…') && !line.startsWith('Note:'))
     .map((line, i) => {
       const m = line.match(/^(\d+)\.\s*(.*)$/);
       return m ? { n: Number(m[1]), title: m[2] } : { n: i + 1, title: line };

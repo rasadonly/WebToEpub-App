@@ -583,6 +583,11 @@ export default function RawPage() {
                 </div>
               ))}
             </div>
+            {tocCount > tocRows.length && (
+              <p className="text-xs text-muted-foreground">
+                Showing first {tocRows.length} of {tocCount} chapters — a job translates the full list.
+              </p>
+            )}
           </Card>
         )}
 
