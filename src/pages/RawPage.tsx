@@ -478,7 +478,8 @@ export default function RawPage() {
           </div>
         )}
 
-        <Card className="w-full max-w-2xl mx-auto p-4 sm:p-6 bg-gradient-card shadow-card border-0 space-y-4">
+        {((libMatches.length > 0 && libDismissed !== input.trim()) || results.length > 0) && (
+        <Card className="w-full max-w-3xl mx-auto p-4 sm:p-6 bg-gradient-card shadow-card border-0 space-y-4">
           {libMatches.length > 0 && libDismissed !== input.trim() && (
             <Card className="p-4 border border-primary/30 bg-primary/5 rounded-2xl">
               <div className="flex items-center justify-between mb-3">
@@ -550,6 +551,7 @@ export default function RawPage() {
             </ul>
           )}
         </Card>
+        )}
 
         {tocTitle && (
           <Card className="w-full max-w-2xl mx-auto p-4 sm:p-6 bg-gradient-card shadow-card border-0 space-y-4">
