@@ -275,8 +275,18 @@ export default function RawPage() {
         setNotice('You already translated this book in this browser — here is your EPUB.');
         return;
       }
-      const title = await resolveJobTitle(payload.originalTitle, payload.source, payload.target, 'auto');
-      const spaceJobId = await startSpaceJob({ ...payload, engine: 'auto' });
+      // Start the job and translate its title at the same time;
+      // the title never blocks the job (capped at 20s).
+      const [title, spaceJobId] = await Promise.all([
+        Promise.race([
+          resolveJobTitle(payload.originalTitle, payload.source, payload.target, 'auto'),
+          new Promise<string>((r) => window.setTimeout(() => r(payload.originalTitle), 20_000)),
+        ]),
+        startSpaceJob({ ...payload, engine: 'auto' }),
+      ]);
+      // The server follows the job and saves it to the Community
+      // Library even if this tab is closed.
+      trackOnServer(spaceJobId, title);
       const created: SpaceJob = {
         spaceJobId,
         title,
