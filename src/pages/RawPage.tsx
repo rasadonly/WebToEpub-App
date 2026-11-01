@@ -394,21 +394,75 @@ export default function RawPage() {
       style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
       <main className="container mx-auto px-4 sm:px-6 md:px-8 py-6 sm:py-12 space-y-8 max-w-6xl">
-        <section className="space-y-4 text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
-            <Languages className="w-3.5 h-3.5" /> Raw Translation
+        <section className="flex flex-col items-center gap-5 sm:gap-8 pt-4 sm:pt-10">
+          <div className="text-center space-y-2 sm:space-y-3 px-2">
+            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary/60 px-3 py-1 text-[11px] sm:text-xs text-muted-foreground">
+              <Languages className="w-3.5 h-3.5 text-primary" />
+              Raw novels, translated to English
+            </div>
+            <h1 className="font-display text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight leading-none">
+              <span className="text-foreground">Raw</span>
+              <span className="text-primary">To</span>
+              <span className="text-foreground">Epub</span>
+              <span className="text-primary">.</span>
+            </h1>
+            <p className="text-muted-foreground text-sm max-w-lg mx-auto leading-relaxed">
+              Search a Japanese, Korean or Chinese novel, or paste its link, and get an English EPUB.
+            </p>
           </div>
-          <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight">
-            Translate a <span className="text-primary">Raw Novel</span> to EPUB
-          </h1>
-          <p className="text-muted-foreground max-w-2xl mx-auto">
-            Find a Japanese, Korean, or Chinese novel, translate it chapter by chapter, and get a clean English EPUB.
-            Translation runs on the Translate Me Space, and finished books are saved to the community library when
-            they are big enough.
-          </p>
-          <p className="text-xs text-muted-foreground">
-            <Link to="/raw/jobs" className="text-primary hover:underline">View current translation jobs →</Link>
-          </p>
+          <div className="w-full max-w-2xl sm:max-w-3xl px-2 sm:px-4">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                onSingleAction();
+              }}
+              className="group relative flex items-center rounded-full bg-card border-2 border-border/80 shadow-md transition-all duration-300 focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 hover:border-primary/40 hover:shadow-lg"
+            >
+              <Search className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground absolute left-4 sm:left-5 pointer-events-none transition-colors group-focus-within:text-primary" />
+              <Input
+                type="text"
+                inputMode="search"
+                autoComplete="off"
+                spellCheck={false}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Search a raw novel or paste its link…"
+                aria-label="Search a raw novel or paste its link"
+                className="h-11 sm:h-13 pl-11 sm:pl-13 pr-28 sm:pr-32 text-sm sm:text-base rounded-full border-0 bg-transparent shadow-none focus-visible:ring-0 text-foreground placeholder:text-muted-foreground/70"
+              />
+              <Button
+                type="submit"
+                disabled={searching || fetchingToc || !input.trim()}
+                className="absolute right-1.5 h-8 sm:h-10 rounded-full px-4 sm:px-5 font-bold text-xs sm:text-sm gap-1.5 shadow-sm"
+              >
+                {searching || fetchingToc ? (
+                  <div className="w-3.5 h-3.5 border-2 border-primary-foreground/40 border-t-primary-foreground rounded-full animate-spin" />
+                ) : null}
+                {fetchingToc ? 'Fetching' : searching ? 'Searching' : isUrlLike(input) ? 'Fetch' : 'Search'}
+              </Button>
+            </form>
+            {searchStatus && <p className="mt-2.5 text-center text-xs text-muted-foreground">{searchStatus}</p>}
+            <p className="mt-2.5 text-center text-xs">
+              <Link to="/raw/jobs" className="text-primary hover:underline font-medium">See translations in progress</Link>
+            </p>
+            {!tocTitle && !job && (
+              <div className="mt-6 grid gap-3 sm:grid-cols-3 text-left">
+                {[
+                  { n: '1', t: 'Search or paste', d: 'Type an English or original title, or paste a Syosetu, Kakuyomu, Naver or similar link.' },
+                  { n: '2', t: 'Pick chapters', d: 'Check the chapter list and choose which chapters to translate.' },
+                  { n: '3', t: 'Get your EPUB', d: 'Download the English EPUB. Full books are also added to the Community Library.' },
+                ].map((st) => (
+                  <div key={st.n} className="rounded-xl border border-border/80 bg-card/60 p-3.5 shadow-2xs hover:border-primary/40 hover:shadow-xs transition-all duration-200 group">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[11px] font-bold text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">{st.n}</span>
+                      <span className="text-xs font-bold text-foreground">{st.t}</span>
+                    </div>
+                    <p className="text-[11px] leading-relaxed text-muted-foreground">{st.d}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </section>
 
         {error && (
@@ -425,20 +479,6 @@ export default function RawPage() {
         )}
 
         <Card className="w-full max-w-2xl mx-auto p-4 sm:p-6 bg-gradient-card shadow-card border-0 space-y-4">
-          <h2 className="font-bold flex items-center gap-2"><Search className="w-4 h-4" /> 1. Find the book</h2>
-          <div className="flex gap-2">
-            <Input
-              className="min-w-0 flex-1"
-              placeholder="Search by title or paste a book URL (e.g. Re:Zero, or https://ncode.syosetu.com/n2267be/)"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && onSingleAction()}
-            />
-            <Button onClick={onSingleAction} disabled={searching || fetchingToc || !input.trim()} className="shrink-0">
-              {fetchingToc ? 'Fetching…' : searching ? 'Searching…' : isUrlLike(input) ? 'Fetch TOC' : 'Search'}
-            </Button>
-          </div>
-          {searchStatus && <p className="text-xs text-muted-foreground">{searchStatus}</p>}
           {libMatches.length > 0 && libDismissed !== input.trim() && (
             <Card className="p-4 border border-primary/30 bg-primary/5 rounded-2xl">
               <div className="flex items-center justify-between mb-3">
