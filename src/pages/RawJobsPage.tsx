@@ -89,7 +89,10 @@ export default function RawJobsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground py-8 px-4">
+    <div
+      className="min-h-screen bg-background relative overflow-x-hidden"
+      style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+    >
       <main className="container mx-auto max-w-4xl space-y-6">
         <section className="space-y-2 text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
@@ -117,15 +120,23 @@ export default function RawJobsPage() {
             const active = ['queued', 'running'].includes(job.status);
             const finished = ['done', 'done_with_errors'].includes(job.status);
             return (
-              <li key={job.spaceJobId} className="bg-card border border-border rounded-xl p-4 space-y-2">
-                <p className="font-semibold text-sm">{job.title}</p>
+              <li key={job.spaceJobId} className="bg-gradient-card shadow-card border-0 rounded-xl p-4 space-y-2">
+                <p className="font-semibold text-sm break-words">{job.title}</p>
                 {job.originalTitle && job.originalTitle !== job.title && (
-                  <p className="text-xs text-muted-foreground">{job.originalTitle}</p>
+                  <p className="text-xs text-muted-foreground break-words">{job.originalTitle}</p>
                 )}
                 <p className="text-xs text-muted-foreground">
                   {job.status} · {job.phase} · {job.completed}/{job.total || '?'} chapters
                   {job.failed > 0 ? ` · ${job.failed} failed` : ''}
                 </p>
+                {active && job.currentChapter && job.currentChapter !== '—' && (
+                  <p className="text-xs text-muted-foreground break-words">Current chapter: {job.currentChapter}</p>
+                )}
+                {job.lastCheckedAt && (
+                  <p className="text-xs text-muted-foreground">
+                    Last checked {new Date(job.lastCheckedAt).toLocaleTimeString()}
+                  </p>
+                )}
                 {job.total > 0 && (
                   <div className="h-2 bg-secondary rounded-full overflow-hidden" role="progressbar" aria-valuenow={job.completed} aria-valuemin={0} aria-valuemax={job.total}>
                     <div

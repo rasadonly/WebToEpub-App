@@ -77,6 +77,10 @@ export interface SpaceJob {
   total: number;
   failed: number;
   failedChapters: string[];
+  /** Chapter the Space worker is on right now (its "Current chapter" line). */
+  currentChapter?: string;
+  /** Wall-clock ms of the last successful progress check (polling liveness). */
+  lastCheckedAt?: number;
   error?: string | null;
   epubUrl?: string | null;
   epubFilename?: string;
@@ -172,6 +176,7 @@ export function parseSpaceProgress(text: string) {
     total: 0,
     epubReady: false,
     failedChapters: [] as string[],
+    currentChapter: '',
   };
   const t = String(text || '');
   const status = t.match(/Status:\s*([A-Za-z_]+)/);
@@ -183,6 +188,8 @@ export function parseSpaceProgress(text: string) {
     out.total = Number(ch[3]);
   }
   out.epubReady = /EPUB ready:\s*yes/i.test(t);
+  const cur = t.match(/Current chapter:\s*(.+)/);
+  if (cur) out.currentChapter = cur[1].trim();
   const failSection = t.split(/Failed chapters:/i)[1];
   if (failSection) {
     out.failedChapters = failSection
@@ -328,6 +335,7 @@ export interface SpaceProgress {
   total: number;
   failed: number;
   failedChapters: string[];
+  currentChapter: string;
   epubReady: boolean;
   error?: string | null;
 }
@@ -364,6 +372,7 @@ export async function checkSpaceProgress(spaceJobId: string): Promise<SpaceProgr
     total: prog.total,
     failed: prog.failed,
     failedChapters: prog.failedChapters,
+    currentChapter: prog.currentChapter,
     epubReady: prog.epubReady,
   };
 }
@@ -459,6 +468,18 @@ export function findDoneJobForUrl(tocUrl: string): SpaceJob | null {
   );
 }
 
+/** Split a Space TOC text dump into numbered chapter rows for display. */
+export function parseTocLines(chaptersText: string): { n: number; title: string }[] {
+  return String(chaptersText || '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((line, i) => {
+      const m = line.match(/^(\d+)\.\s*(.*)$/);
+      return m ? { n: Number(m[1]), title: m[2] } : { n: i + 1, title: line };
+    });
+}
+
 /**
  * Refresh one job from the Space. When it newly reaches a terminal
  * state, fetch its EPUB URL once and attempt the library save
@@ -478,6 +499,8 @@ export async function refreshSpaceJob(job: SpaceJob): Promise<SpaceJob> {
       total: prog.total,
       failed: prog.failed,
       failedChapters: prog.failedChapters,
+      currentChapter: prog.currentChapter,
+      lastCheckedAt: Date.now(),
     };
   }
   if (
