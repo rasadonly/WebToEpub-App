@@ -1285,6 +1285,7 @@ function spaceTocUsable(toc) {
 }
 
 app.post("/api/raw/toc", async (req, res) => {
+  const startedAt = Date.now();
   try {
     const url = String((req.body || {}).url || "").trim();
     if (!url) return res.status(400).json({ error: "url required" });
@@ -1296,13 +1297,23 @@ app.post("/api/raw/toc", async (req, res) => {
       // TOC fetch with retries takes 30-46s — that is exactly why
       // Fetch TOC failed on production with "Failed to fetch"
       // while it worked locally, where no router limit exists.
-      // So the Space gets a 24s budget: if it is slow, fall back
-      // to the parser at once instead of letting the connection
-      // die, and answer with JSON either way.
+      // Budgets (measured on production 2026-11-01: the parser
+      // alone takes ~12s for Syosetu's 8 pages from Heroku
+      // egress): the Space gets 12s, the parser gets whatever
+      // remains of a 28s overall cap, so the handler always
+      // answers JSON inside 30s instead of letting the
+      // connection die. A 24s Space budget was tried first and
+      // still died on production (24s + 12s parser > 30s); a 15s
+      // budget was tried second and still squeezed too tight
+      // once the parser ran cold, so 12s it is — worst case
+      // 12s + 12s = 24s, with the 28s cap as the backstop that
+      // returns a readable retry error instead of a dead
+      // connection (and the background parser usually warms
+      // the cache for that retry).
       const spaceAttempt = fetchSpaceToc(url);
       spaceAttempt.catch(() => {}); // keep the loser of the race from becoming an unhandled rejection
       const spaceBudget = new Promise((_, rej) =>
-        setTimeout(() => rej(new Error("Space TOC fetch timed out (24s budget)")), 24_000),
+        setTimeout(() => rej(new Error("Space TOC fetch timed out (12s budget)")), 12_000),
       );
       spaceToc = await Promise.race([spaceAttempt, spaceBudget]);
       if (spaceTocUsable(spaceToc)) {
@@ -1314,7 +1325,13 @@ app.post("/api/raw/toc", async (req, res) => {
     } catch (e) {
       spaceError = e.message;
     }
-    const { chapters, meta } = await getTocCached(url, "");
+    const remainingMs = Math.max(5_000, 28_000 - (Date.now() - startedAt));
+    const parserAttempt = getTocCached(url, "");
+    parserAttempt.catch(() => {}); // same unhandled-rejection guard as above
+    const parserBudget = new Promise((_, rej) =>
+      setTimeout(() => rej(new Error("TOC fetch timed out — please retry (the chapter list is usually cached by then, so a retry is fast)")), remainingMs),
+    );
+    const { chapters, meta } = await Promise.race([parserAttempt, parserBudget]);
     if (!chapters.length) {
       throw new Error(spaceError || "No chapters found");
     }
