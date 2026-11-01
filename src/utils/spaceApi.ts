@@ -423,8 +423,9 @@ export async function saveToLibrary(
 
 // ---- Job tracking, per browser (localStorage). The Space holds
 // the real job state; this store is only how /raw/jobs lists jobs
-// started in THIS browser, since there is no server-side list
-// any more. ---------------------------------------------------------
+// started in THIS browser. The Space ALSO exposes a public queue
+// (book_list_jobs, below) so the page can show every job
+// currently translating, from all users. -------------------------
 const STORE_KEY = 'linktoepub-raw-jobs';
 
 export function loadSpaceJobs(): SpaceJob[] {
@@ -464,6 +465,49 @@ export function findDoneJobForUrl(tocUrl: string): SpaceJob | null {
   );
 }
 
+/** One row of the Space's public queue (book_list_jobs).
+ * Deliberately minimal: no source URL, no error text, no
+ * EPUB path — so a finished book's EPUB stays downloadable
+ * only from the browser that started the job. */
+export interface PublicQueueJob {
+  job_id: string;
+  title: string;
+  status: string;
+  done: number;
+  failed: number;
+  total: number;
+  percent: number;
+  current_chapter: string;
+  created_at: number;
+}
+
+/** Every job on the Space, active first — the public queue. */
+export async function fetchPublicQueue(): Promise<PublicQueueJob[]> {
+  let outs: unknown[];
+  try {
+    outs = await callSpace('book_list_jobs', [], 60_000);
+  } catch (e) {
+    // The fn_index map is cached for an hour; a browser that
+    // loaded the page before the Space gained book_list_jobs
+    // retries once with a fresh map instead of failing.
+    if (e instanceof Error && e.message.includes('has no function')) {
+      fnIndexCache = null;
+      fnIndexAt = 0;
+      outs = await callSpace('book_list_jobs', [], 60_000);
+    } else {
+      throw e;
+    }
+  }
+  const raw = String((outs && outs[0]) || '');
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(raw.slice(0, 200) || 'Space returned an unreadable queue');
+  }
+  if (!Array.isArray(parsed)) throw new Error('Space returned an unreadable queue');
+  return parsed as PublicQueueJob[];
+}
 /** Split a Space TOC text dump into numbered chapter rows for display. */
 export function parseTocLines(chaptersText: string): { n: number; title: string }[] {
   return String(chaptersText || '')

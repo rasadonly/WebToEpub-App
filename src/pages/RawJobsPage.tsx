@@ -9,16 +9,22 @@ import {
   downloadSpaceEpub,
   getSpaceEpubFile,
   upsertSpaceJob,
+  fetchPublicQueue,
   type SpaceJob,
+  type PublicQueueJob,
 } from '@/utils/spaceApi';
 
-// /raw/jobs — translation jobs started in THIS browser (the Space
-// holds the real job state; this page lists what localStorage
-// remembers, since there is no server-side job list any more).
-// Active jobs poll the Space every 10s; finished jobs keep their
-// Space download link and library status.
+// /raw/jobs — two lists: jobs started in THIS browser (with
+// downloads and library status), and below them the Space's
+// public queue, so anyone can see what is translating right
+// now. Public rows never carry a download button: a finished
+// book's EPUB stays with the browser that started the job.
+// Active jobs and the queue both refresh every 10s.
 export default function RawJobsPage() {
   const [jobs, setJobs] = useState<SpaceJob[]>([]);
+  const [queue, setQueue] = useState<PublicQueueJob[]>([]);
+  const [queueError, setQueueError] = useState('');
+  const [queueUpdatedAt, setQueueUpdatedAt] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const jobsRef = useRef<SpaceJob[]>([]);
@@ -41,12 +47,24 @@ export default function RawJobsPage() {
     setJobsBoth(next);
   };
 
+  const loadQueue = async () => {
+    try {
+      const q = await fetchPublicQueue();
+      setQueue(q);
+      setQueueUpdatedAt(Date.now());
+      setQueueError('');
+    } catch (e) {
+      setQueueError(e instanceof Error ? e.message : 'Failed to load public queue');
+    }
+  };
+
   const load = async () => {
     setLoading(true);
     setError('');
     try {
       setJobsBoth(loadSpaceJobs());
       await refreshActive();
+      await loadQueue();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load jobs');
     } finally {
@@ -59,6 +77,7 @@ export default function RawJobsPage() {
     void load();
     const t = window.setInterval(() => {
       void refreshActive();
+      void loadQueue();
     }, 10_000);
     return () => window.clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -100,7 +119,7 @@ export default function RawJobsPage() {
           </div>
           <h1 className="text-3xl font-extrabold tracking-tight">Current Translation Jobs</h1>
           <p className="text-muted-foreground text-sm">
-            Jobs started in this browser, tracked live from the Translate Me Space.{' '}
+            Your jobs from this browser, plus the public queue of everything translating on the Space right now.{' '}
             <Link to="/raw" className="text-primary hover:underline">Start a new translation →</Link>
           </p>
         </section>
@@ -115,6 +134,7 @@ export default function RawJobsPage() {
         {jobs.length === 0 && !loading && (
           <p className="text-center text-muted-foreground text-sm">No translation jobs yet in this browser.</p>
         )}
+        <h2 className="text-lg font-bold pt-2">Your jobs</h2>
         <ul className="space-y-3">
           {jobs.map((job) => {
             const active = ['queued', 'running'].includes(job.status);
@@ -173,6 +193,55 @@ export default function RawJobsPage() {
             );
           })}
         </ul>
+
+        <section className="space-y-3 pt-2">
+          <h2 className="text-lg font-bold">Public queue — all jobs on the Space</h2>
+          <p className="text-muted-foreground text-sm">
+            Every job currently translating or recently finished, from all users — active jobs first.
+            Downloads stay on your own jobs above; this list shows status only.
+            {queueUpdatedAt > 0 && (
+              <> Last updated {new Date(queueUpdatedAt).toLocaleTimeString()} · refreshes every 10s.</>
+            )}
+          </p>
+          {queueError && <p className="text-sm text-destructive text-center">{queueError}</p>}
+          {queue.length === 0 && !queueError && (
+            <p className="text-center text-muted-foreground text-sm">No jobs on the Space right now.</p>
+          )}
+          <ul className="space-y-3">
+            {queue.map((q) => {
+              const active = ['queued', 'running'].includes(q.status);
+              const mine = jobs.some((j) => j.spaceJobId === q.job_id);
+              return (
+                <li key={q.job_id} className="bg-gradient-card shadow-card border-0 rounded-xl p-4 space-y-2">
+                  <p className="font-semibold text-sm break-words">
+                    {q.title}
+                    {mine && (
+                      <span className="ml-2 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-semibold align-middle">Yours</span>
+                    )}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {q.status} · {q.done}/{q.total || '?'} chapters ({q.percent}%)
+                    {q.failed > 0 ? ` · ${q.failed} failed` : ''}
+                  </p>
+                  {active && q.current_chapter && q.current_chapter !== '—' && (
+                    <p className="text-xs text-muted-foreground break-words">Current chapter: {q.current_chapter}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Started {new Date(q.created_at * 1000).toLocaleString()}
+                  </p>
+                  {q.total > 0 && (
+                    <div className="h-2 bg-secondary rounded-full overflow-hidden" role="progressbar" aria-valuenow={q.done} aria-valuemin={0} aria-valuemax={q.total}>
+                      <div
+                        className="h-full bg-primary transition-all"
+                        style={{ width: `${Math.min(100, q.percent)}%` }}
+                      />
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
       </main>
     </div>
   );
