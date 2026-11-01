@@ -189,6 +189,11 @@
         font-size: 0.875rem;
         opacity: 0.65;
       }
+      .converter-loading-slow { font-size: 0.875rem; }
+      .converter-loading-slow button {
+        margin-left: 0.5rem; padding: 0.25rem 0.75rem; border-radius: 9999px;
+        border: 1px solid currentColor; background: transparent; color: inherit; cursor: pointer;
+      }
       .converter-loading-track {
         position: relative;
         width: min(16rem, 70vw);
@@ -246,8 +251,43 @@
         <h1>LinkToEpub</h1>
         <div class="converter-loading-track" aria-hidden="true"></div>
         <p role="status">Loading converter…</p>
+        <p class="converter-loading-slow" hidden>
+          This is taking longer than usual.
+          <button type="button" onclick="location.reload()">Reload</button>
+        </p>
       </main>
     </div>
+    <script>
+      // Start-up guard: if one of the app's files fails to download
+      // (a stale cached page asking for files from an older version),
+      // reload once with a fresh copy. If the app still has not started
+      // after 15s, show a Reload button instead of a frozen screen.
+      (function () {
+        var KEY = 'ltb-boot-reload-at';
+        function started() { return !document.querySelector('#root .converter-loading'); }
+        function freshReload() {
+          var last = 0;
+          try { last = Number(sessionStorage.getItem(KEY) || 0); } catch (e) {}
+          if (Date.now() - last < 60000) return false;
+          try { sessionStorage.setItem(KEY, String(Date.now())); } catch (e) {}
+          var u = new URL(location.href);
+          u.searchParams.set('r', String(Date.now()));
+          location.replace(u.toString());
+          return true;
+        }
+        function showButton() {
+          var slow = document.querySelector('.converter-loading-slow');
+          if (slow) slow.hidden = false;
+        }
+        window.addEventListener('error', function (e) {
+          var t = e && e.target;
+          if (t && (t.tagName === 'SCRIPT' || t.tagName === 'LINK') && !started()) {
+            if (!freshReload()) showButton();
+          }
+        }, true);
+        setTimeout(function () { if (!started()) showButton(); }, 15000);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

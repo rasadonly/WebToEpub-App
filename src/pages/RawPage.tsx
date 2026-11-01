@@ -87,6 +87,7 @@ export default function RawPage() {
   const [target, setTarget] = useState('en');
   const [from, setFrom] = useState(1);
   const [to, setTo] = useState(-1);
+  const [pickingEnd, setPickingEnd] = useState(false);
   const [job, setJob] = useState<SpaceJob | null>(null);
   const [starting, setStarting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -387,6 +388,20 @@ export default function RawPage() {
   const jobPct =
     job && job.total > 0 ? Math.min(100, Math.round((job.completed / job.total) * 100)) : 0;
   const tocRows = tocTitle ? parseTocLines(chaptersText) : [];
+  const selectedCount = Math.max(0, (to < 0 ? tocCount : Math.min(to, tocCount)) - from + 1);
+  // First click sets the start; the next click (at or after it) sets the end.
+  const onPickChapter = (n: number) => {
+    const end = to < 0 ? tocCount : to;
+    if (from === n && end === n) return;
+    if (pickingEnd && n >= from) {
+      setTo(n);
+      setPickingEnd(false);
+    } else {
+      setFrom(n);
+      setTo(n);
+      setPickingEnd(true);
+    }
+  };
 
   return (
     <div
@@ -619,22 +634,44 @@ export default function RawPage() {
                   type="number"
                   min={1}
                   max={Math.max(1, tocCount)}
-                  value={to}
-                  onChange={(e) => setTo(Number(e.target.value))}
+                  value={to < 0 ? '' : to}
+                  onChange={(e) => setTo(Number(e.target.value) || -1)}
+                  placeholder="Last"
                   className="w-24 h-8"
                 />
               </div>
-              <span className="text-xs text-muted-foreground mb-2">To = -1 means the last chapter.</span>
+              <div className="flex flex-wrap gap-1.5 mb-0.5">
+                {[10, 50, 100].filter((n) => n < tocCount).map((n) => (
+                  <Button key={n} type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => { setFrom(1); setTo(n); }}>
+                    First {n}
+                  </Button>
+                ))}
+                <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => { setFrom(1); setTo(-1); }}>
+                  All
+                </Button>
+              </div>
             </div>
+            <p className="text-xs text-muted-foreground">
+              {selectedCount} of {tocCount} chapters selected. Click a chapter to start the range there, then click another to end it.
+            </p>
             <div className="max-h-[420px] overflow-y-auto rounded-lg border border-border/60 divide-y divide-border/40">
-              {tocRows.map((c) => (
-                <div key={c.n} className="flex items-center gap-2 px-3 text-sm bg-background" style={{ minHeight: 40 }}>
-                  <span className="w-10 text-xs text-muted-foreground tabular-nums shrink-0">{c.n}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="truncate font-medium">{c.title}</div>
-                  </div>
-                </div>
-              ))}
+              {tocRows.map((c) => {
+                const end = to < 0 ? tocCount : to;
+                const inRange = c.n >= from && c.n <= end;
+                return (
+                  <button
+                    type="button"
+                    key={c.n}
+                    onClick={() => onPickChapter(c.n)}
+                    aria-pressed={inRange}
+                    className={`w-full text-left flex items-center gap-2 px-3 text-sm transition-colors ${inRange ? 'bg-primary/10 hover:bg-primary/15' : 'bg-background text-muted-foreground hover:bg-muted/60'}`}
+                    style={{ minHeight: 40 }}
+                  >
+                    <span className={`w-10 text-xs tabular-nums shrink-0 ${inRange ? 'text-primary font-semibold' : 'text-muted-foreground'}`}>{c.n}</span>
+                    <span className="flex-1 min-w-0 truncate font-medium">{c.title}</span>
+                  </button>
+                );
+              })}
             </div>
             {tocCount > tocRows.length && (
               <p className="text-xs text-muted-foreground">
