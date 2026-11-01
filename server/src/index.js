@@ -912,37 +912,147 @@ app.get("/api/jobs/:id/download", (req, res) => {
 const SPACE_ORIGIN = (process.env.TRANSLATE_SPACE_URL ||
   "https://learningtrade-translate-me.hf.space").replace(/\/$/, "");
 
+// Library saves are idempotent per Space job: the browser and the
+// server-side tracker below may both try, but a book is uploaded once.
+const rawSaves = new Map(); // key -> Promise<{libraryUrl, libraryPageUrl, path}>
+const RAW_SAVE_MAX = 500;
+
+async function saveSpaceEpub(spaceFileUrl, title) {
+  const u = new URL(spaceFileUrl);
+  // SSRF guard: only the Translate Me Space may be fetched here.
+  if (u.protocol !== "https:" || `${u.protocol}//${u.host}` !== SPACE_ORIGIN) {
+    const err = new Error("spaceFileUrl must point at the Translate Me Space");
+    err.status = 400;
+    throw err;
+  }
+  const r = await fetch(spaceFileUrl, { signal: AbortSignal.timeout(300_000) });
+  if (!r.ok) throw Object.assign(new Error(`Space EPUB download failed (${r.status})`), { status: 502 });
+  const buffer = Buffer.from(await r.arrayBuffer());
+  if (buffer.length < 4 || buffer[0] !== 0x50 || buffer[1] !== 0x4b || buffer[2] !== 0x03 || buffer[3] !== 0x04) {
+    throw Object.assign(new Error("spaceFileUrl did not return an EPUB file"), { status: 400 });
+  }
+  const filename = `${sanitizeFilename(title || "book")}.epub`;
+  const up = await uploadToLibrary(buffer, filename, { title });
+  return { libraryUrl: up.url, libraryPageUrl: up.pageUrl, path: up.path };
+}
+
+function saveOnce(key, fn) {
+  if (rawSaves.has(key)) return rawSaves.get(key);
+  const p = fn().catch((e) => {
+    rawSaves.delete(key); // allow a retry after a failure
+    throw e;
+  });
+  rawSaves.set(key, p);
+  if (rawSaves.size > RAW_SAVE_MAX) rawSaves.delete(rawSaves.keys().next().value);
+  return p;
+}
+
+function spaceJobKeyFromUrl(url) {
+  const m = String(url).match(/([0-9a-f]{8,})\.epub/i);
+  return m ? `job:${m[1]}` : `url:${url}`;
+}
+
 app.post("/api/raw/library-save", async (req, res) => {
   try {
     const body = req.body || {};
     const spaceFileUrl = String(body.spaceFileUrl || "").trim();
     const title = String(body.title || "book").trim();
     if (!spaceFileUrl) return res.status(400).json({ error: "spaceFileUrl required" });
-    let u;
     try {
-      u = new URL(spaceFileUrl);
+      new URL(spaceFileUrl);
     } catch {
       return res.status(400).json({ error: "spaceFileUrl is not a URL" });
     }
-    // SSRF guard: only the Translate Me Space may be fetched here.
-    if (u.protocol !== "https:" || `${u.protocol}//${u.host}` !== SPACE_ORIGIN) {
-      return res.status(400).json({ error: "spaceFileUrl must point at the Translate Me Space" });
-    }
-    const r = await fetch(spaceFileUrl, { signal: AbortSignal.timeout(300_000) });
-    if (!r.ok) return res.status(502).json({ error: `Space EPUB download failed (${r.status})` });
-    const buffer = Buffer.from(await r.arrayBuffer());
-    // The URL must point at an actual EPUB (zip), not any Space file.
-    if (buffer.length < 4 || buffer[0] !== 0x50 || buffer[1] !== 0x4b || buffer[2] !== 0x03 || buffer[3] !== 0x04) {
-      return res.status(400).json({ error: "spaceFileUrl did not return an EPUB file" });
-    }
-    const filename = `${sanitizeFilename(title || "book")}.epub`;
-    const up = await uploadToLibrary(buffer, filename, { title });
-    res.json({ libraryUrl: up.url, libraryPageUrl: up.pageUrl, path: up.path });
+    const key = body.spaceJobId ? `job:${String(body.spaceJobId)}` : spaceJobKeyFromUrl(spaceFileUrl);
+    const out = await saveOnce(key, () => saveSpaceEpub(spaceFileUrl, title));
+    res.json(out);
   } catch (e) {
     // uploadToLibrary's own errors (not configured, too small,
     // too large) are honest answers, displayed as-is by the UI.
-    res.status(500).json({ error: e.message });
+    res.status(e.status || 500).json({ error: e.message });
   }
+});
+
+// ---- Server-side tracker: the browser registers each Space job
+// here when it starts, and this server follows it to completion
+// and saves the EPUB to the Community Library — so finished
+// translations reach the library even if the visitor closed the tab.
+let spaceFnMap = null;
+async function spaceCall(apiName, data, timeoutMs = 120_000) {
+  if (!spaceFnMap) {
+    const cfg = await (await fetch(`${SPACE_ORIGIN}/config`, { signal: AbortSignal.timeout(30_000) })).json();
+    spaceFnMap = {};
+    (cfg.dependencies || []).forEach((d, i) => d?.api_name && (spaceFnMap[d.api_name] = i));
+  }
+  const fnIndex = spaceFnMap[apiName];
+  if (fnIndex === undefined) {
+    spaceFnMap = null;
+    throw new Error(`Space has no function ${apiName}`);
+  }
+  const session = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  const join = await fetch(`${SPACE_ORIGIN}/gradio_api/queue/join`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ data, fn_index: fnIndex, session_hash: session }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!join.ok) throw new Error(`Space join ${join.status}`);
+  const r = await fetch(`${SPACE_ORIGIN}/gradio_api/queue/data?session_hash=${session}`, {
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  const text = await r.text();
+  for (const line of text.split("\n")) {
+    if (!line.startsWith("data:")) continue;
+    let msg;
+    try { msg = JSON.parse(line.slice(5).trim()); } catch { continue; }
+    if (msg.msg === "process_completed") {
+      if (msg.success === false) throw new Error(msg.output?.error || "Space call failed");
+      return msg.output?.data || [];
+    }
+  }
+  throw new Error(`Space ${apiName} ended without a result`);
+}
+
+const rawTracked = new Map(); // spaceJobId -> {title, since}
+const RAW_TRACK_MAX_MS = 24 * 3600_000;
+
+async function pollRawJob(id) {
+  const t = rawTracked.get(id);
+  if (!t) return;
+  if (Date.now() - t.since > RAW_TRACK_MAX_MS) return rawTracked.delete(id);
+  try {
+    const outs = await spaceCall("book_check_progress", [id], 60_000);
+    const txt = String(outs[0] || "");
+    const status = (txt.match(/Status:\s*([A-Za-z_]+)/) || [])[1] || "";
+    if (/^(failed|stopped)$/.test(status) || /Job not found/.test(txt)) return rawTracked.delete(id);
+    if (/^done/.test(status)) {
+      const ep = await spaceCall("book_get_epub", [id], 120_000);
+      const f = ep[0] || {};
+      let url = f.url || f.path;
+      if (url && !/^https?:/i.test(url)) url = `${SPACE_ORIGIN}${url.startsWith("/") ? "" : "/"}${url}`;
+      if (url) {
+        await saveOnce(`job:${id}`, () => saveSpaceEpub(url, t.title));
+        console.log(`[raw] saved ${id} to library: ${t.title}`);
+      }
+      return rawTracked.delete(id);
+    }
+  } catch (e) {
+    console.warn(`[raw] track ${id}: ${e.message}`);
+  }
+}
+
+setInterval(() => {
+  for (const id of rawTracked.keys()) pollRawJob(id);
+}, 30_000).unref();
+
+app.post("/api/raw/track", (req, res) => {
+  const id = String(req.body?.spaceJobId || "").trim();
+  const title = String(req.body?.title || "book").trim().slice(0, 300);
+  if (!/^[A-Za-z0-9_-]{6,64}$/.test(id)) return res.status(400).json({ error: "spaceJobId required" });
+  if (rawTracked.size > 500) return res.status(429).json({ error: "too many tracked jobs" });
+  const prev = rawTracked.get(id);
+  rawTracked.set(id, { title: title || prev?.title || "book", since: prev?.since || Date.now() });
+  res.json({ tracked: true });
 });
 
 restoreJobs();
