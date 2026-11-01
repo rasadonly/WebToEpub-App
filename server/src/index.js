@@ -1038,6 +1038,9 @@ async function pollRawJob(id) {
     }
   } catch (e) {
     console.warn(`[raw] track ${id}: ${e.message}`);
+    // Library refusals (too small / too large / not configured)
+    // are final answers; stop retrying them.
+    if (/too small|too large|not configured|did not return an EPUB/i.test(e.message)) rawTracked.delete(id);
   }
 }
 
