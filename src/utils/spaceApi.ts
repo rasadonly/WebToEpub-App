@@ -405,14 +405,25 @@ export async function downloadSpaceEpub(url: string, filename: string): Promise<
 // the browser or the public Space, so the browser hands the Space
 // file URL to this endpoint and the server downloads it and
 // uploads it to the community library dataset. ----------------------
+export function trackOnServer(spaceJobId: string, title: string): void {
+  fetch(`${getBackendUrl().replace(/\/$/, '')}/api/raw/track`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ spaceJobId, title }),
+  }).catch(() => {
+    /* the browser-side save below is the fallback */
+  });
+}
+
 export async function saveToLibrary(
   spaceFileUrl: string,
   title: string,
+  spaceJobId?: string,
 ): Promise<{ libraryUrl: string; libraryPageUrl?: string; path?: string }> {
   const r = await fetch(`${getBackendUrl().replace(/\/$/, '')}/api/raw/library-save`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ spaceFileUrl, title }),
+    body: JSON.stringify({ spaceFileUrl, title, spaceJobId }),
   });
   const body = await r.json().catch(() => null);
   if (!r.ok) {
@@ -560,7 +571,7 @@ export async function refreshSpaceJob(job: SpaceJob): Promise<SpaceJob> {
   if (next.epubUrl && !next.libraryStatus) {
     next = { ...next, libraryStatus: 'uploading' as const };
     try {
-      const lib = await saveToLibrary(next.epubUrl, next.title);
+      const lib = await saveToLibrary(next.epubUrl, next.title, next.spaceJobId);
       next = { ...next, libraryStatus: 'saved' as const, libraryUrl: lib.libraryUrl };
     } catch (e) {
       next = {
