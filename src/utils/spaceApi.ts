@@ -386,6 +386,16 @@ export async function getSpaceEpubFile(
 }
 
 /** Download an EPUB from a Space file URL in the browser. */
+/** Readable "<Title>.epub" name from a job title. */
+export function epubNameFor(title: string, fallback = 'book'): string {
+  const base = String(title || '')
+    .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120);
+  return `${base || fallback}.epub`;
+}
+
 export async function downloadSpaceEpub(url: string, filename: string): Promise<void> {
   const r = await fetch(url);
   if (!r.ok) throw new Error(`Download failed (${r.status})`);

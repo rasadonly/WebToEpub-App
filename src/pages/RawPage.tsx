@@ -343,7 +343,11 @@ export default function RawPage() {
     setTranslatingUrl(resultUrl);
     setInput(resultUrl);
     try {
-      await runStart({ tocUrl: resultUrl, originalTitle: label || resultUrl, source, target, from: 0, to: -1 });
+      // Labels look like "English — Korean site (원제)": use the
+      // English part as the name, not the whole label.
+      const m = String(label || '').match(/^(.*?) — .*?(?: \(([^)]*)\))?$/);
+      const name = (m?.[1] || label || resultUrl).trim();
+      await runStart({ tocUrl: resultUrl, originalTitle: name, source, target, from: 0, to: -1 });
     } finally {
       setTranslatingUrl('');
     }
