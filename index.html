@@ -189,6 +189,11 @@
         font-size: 0.875rem;
         opacity: 0.65;
       }
+      .converter-loading-slow { font-size: 0.875rem; }
+      .converter-loading-slow button {
+        margin-left: 0.5rem; padding: 0.25rem 0.75rem; border-radius: 9999px;
+        border: 1px solid currentColor; background: transparent; color: inherit; cursor: pointer;
+      }
       .converter-loading-track {
         position: relative;
         width: min(16rem, 70vw);
@@ -246,8 +251,34 @@
         <h1>LinkToEpub</h1>
         <div class="converter-loading-track" aria-hidden="true"></div>
         <p role="status">Loading converter…</p>
+        <p class="converter-loading-slow" hidden>
+          This is taking longer than usual.
+          <button type="button" onclick="location.reload()">Reload</button>
+        </p>
       </main>
     </div>
+    <script>
+      // If the app has not started after 12s (a stale cached page asking
+      // for files that no longer exist, or a dropped download), reload
+      // once with a fresh copy; after that, offer a Reload button.
+      (function () {
+        var KEY = 'ltb-boot-reload-at';
+        setTimeout(function () {
+          if (!document.querySelector('#root .converter-loading')) return;
+          var last = 0;
+          try { last = Number(sessionStorage.getItem(KEY) || 0); } catch (e) {}
+          if (Date.now() - last > 60000) {
+            try { sessionStorage.setItem(KEY, String(Date.now())); } catch (e) {}
+            var u = new URL(location.href);
+            u.searchParams.set('r', String(Date.now()));
+            location.replace(u.toString());
+            return;
+          }
+          var slow = document.querySelector('.converter-loading-slow');
+          if (slow) slow.hidden = false;
+        }, 12000);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
