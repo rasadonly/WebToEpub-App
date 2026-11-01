@@ -7,6 +7,8 @@ import {
   refreshSpaceJob,
   cancelSpaceJob,
   downloadSpaceEpub,
+  epubNameFor,
+  resolveJobTitle,
   getSpaceEpubFile,
   upsertSpaceJob,
   fetchPublicQueue,
@@ -58,6 +60,20 @@ export default function RawJobsPage() {
     }
   };
 
+  // Older jobs were saved under their original-script name;
+  // translate those once and store the English name.
+  const fixTitles = async () => {
+    const cjk = /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/;
+    const stale = loadSpaceJobs().filter((j) => cjk.test(j.title || ''));
+    for (const j of stale) {
+      const t = await resolveJobTitle(j.title, j.source || 'auto', j.target || 'en').catch(() => j.title);
+      if (t && t !== j.title && !cjk.test(t)) {
+        upsertSpaceJob({ ...j, title: t, originalTitle: j.originalTitle || j.title });
+        setJobsBoth(loadSpaceJobs());
+      }
+    }
+  };
+
   const load = async () => {
     setLoading(true);
     setError('');
@@ -65,6 +81,7 @@ export default function RawJobsPage() {
       setJobsBoth(loadSpaceJobs());
       await refreshActive();
       await loadQueue();
+      void fixTitles();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load jobs');
     } finally {
@@ -95,9 +112,20 @@ export default function RawJobsPage() {
         upsertSpaceJob(next);
         setJobsBoth(loadSpaceJobs());
       }
-      await downloadSpaceEpub(epubUrl, filename || 'book.epub');
+      await downloadSpaceEpub(epubUrl, epubNameFor(job.title, filename?.replace(/\.epub$/i, '') || 'book'));
     } catch {
       setError('Download failed');
+    }
+  };
+
+  // The library copy is a file link; opening it in a new tab
+  // looked like nothing happened. Download it with its name.
+  const onLibraryCopy = async (job: SpaceJob) => {
+    if (!job.libraryUrl) return;
+    try {
+      await downloadSpaceEpub(job.libraryUrl, epubNameFor(job.title));
+    } catch {
+      window.location.href = job.libraryUrl;
     }
   };
 
@@ -176,9 +204,9 @@ export default function RawJobsPage() {
                     </Button>
                   )}
                   {job.libraryStatus === 'saved' && job.libraryUrl && (
-                    <a href={job.libraryUrl} target="_blank" rel="noreferrer">
-                      <Button size="sm" variant="outline">Library copy</Button>
-                    </a>
+                    <Button size="sm" variant="outline" onClick={() => void onLibraryCopy(job)}>
+                      <Download className="w-4 h-4 mr-1" /> Library copy
+                    </Button>
                   )}
                   {job.libraryStatus === 'failed' && (
                     <span className="text-xs text-muted-foreground self-center">Library save failed: {job.libraryError || 'unknown'}</span>
@@ -214,7 +242,7 @@ export default function RawJobsPage() {
               return (
                 <li key={q.job_id} className="bg-gradient-card shadow-card border-0 rounded-xl p-4 space-y-2">
                   <p className="font-semibold text-sm break-words">
-                    {q.title}
+                    {jobs.find((j) => j.spaceJobId === q.job_id)?.title || q.title}
                     {mine && (
                       <span className="ml-2 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-semibold align-middle">Yours</span>
                     )}
