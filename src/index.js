@@ -1106,6 +1106,10 @@ async function finalizeRawJob(job) {
       job.libraryError = e.message;
     }
   }
+  // The upload attempt is over either way: the job card must read
+  // "Ready to download", not stick on "Saving a copy to the
+  // library" (cosmetic bug seen on production 2026-11-01).
+  job.phase = "Ready to download";
   job.updatedAt = Date.now();
   persistJob(job, true);
 }
@@ -1201,6 +1205,32 @@ async function startRawJob(job, spec) {
 // plus similar books already in the community library, searched
 // the usual way — so a book that is already translated never
 // needs a new job.
+const CJK_RE = /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/;
+// Search labels look like "Re:Zero — Japanese ncode.syosetu.com
+// (Ｒｅ：ゼロから始める異世界生活)" or "Title — host". Before the
+// user picks, translate the trailing parenthesised CJK title to
+// English (requested 2026-11-01: show English titles to choose
+// from). MyMemory via the Space is fast and is the proven title
+// path; all titles translate in parallel with an 8s per-call
+// budget, and anything untranslated keeps its original label
+// rather than delaying the search.
+async function translateResultTitles(choices) {
+  return Promise.all(
+    choices.map(async ([label, url]) => {
+      const m = String(label).match(/^(.*?) — (.*?) \(([^)]*)\)$/);
+      if (!m || !CJK_RE.test(m[3])) return { label, url };
+      try {
+        const outs = await callSpace("translate_text", [m[3], "auto", "en", "mymemory"], 8_000);
+        const translated = String((outs && outs[0]) || "").trim();
+        if (!translated || translated === m[3]) return { label, url };
+        return { label: `${translated} — ${m[2]} (${m[3]})`, url };
+      } catch {
+        return { label, url };
+      }
+    }),
+  );
+}
+
 app.post("/api/raw/search", async (req, res) => {
   try {
     const query = String((req.body || {}).query || "").trim();
@@ -1209,8 +1239,9 @@ app.post("/api/raw/search", async (req, res) => {
     const dropdown = outs && outs[0];
     const choices = Array.isArray(dropdown?.choices) ? dropdown.choices : [];
     const libraryResults = await searchLibrarySimilar(query).catch(() => []);
+    const results = await translateResultTitles(choices);
     res.json({
-      results: choices.map(([label, url]) => ({ label, url })),
+      results,
       status: String((outs && outs[1]) || ""),
       libraryResults,
     });
@@ -1260,7 +1291,20 @@ app.post("/api/raw/toc", async (req, res) => {
     let spaceError = null;
     let spaceToc = null;
     try {
-      spaceToc = await fetchSpaceToc(url);
+      // Heroku's router kills requests at 30s with an HTML 503
+      // (same reason the main /api/toc races at 24s), and a Space
+      // TOC fetch with retries takes 30-46s — that is exactly why
+      // Fetch TOC failed on production with "Failed to fetch"
+      // while it worked locally, where no router limit exists.
+      // So the Space gets a 24s budget: if it is slow, fall back
+      // to the parser at once instead of letting the connection
+      // die, and answer with JSON either way.
+      const spaceAttempt = fetchSpaceToc(url);
+      spaceAttempt.catch(() => {}); // keep the loser of the race from becoming an unhandled rejection
+      const spaceBudget = new Promise((_, rej) =>
+        setTimeout(() => rej(new Error("Space TOC fetch timed out (24s budget)")), 24_000),
+      );
+      spaceToc = await Promise.race([spaceAttempt, spaceBudget]);
       if (spaceTocUsable(spaceToc)) {
         return res.json({ ...spaceToc, source: "space" });
       }
