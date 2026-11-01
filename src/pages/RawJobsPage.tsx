@@ -29,7 +29,7 @@ export default function RawJobsPage() {
   useEffect(() => {
     document.title = 'Current Translation Jobs | LinkToEpub';
     load();
-    const t = window.setInterval(load, 30_000);
+    const t = window.setInterval(load, 10_000);
     return () => window.clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -71,6 +71,14 @@ export default function RawJobsPage() {
                   {job.status} · {job.phase} · {job.completed}/{job.total || '?'} chapters
                   {job.failed > 0 ? ` · ${job.failed} failed` : ''}
                 </p>
+                {job.total > 0 && (
+                  <div className="h-2 bg-secondary rounded-full overflow-hidden" role="progressbar" aria-valuenow={job.completed} aria-valuemin={0} aria-valuemax={job.total}>
+                    <div
+                      className="h-full bg-primary transition-all"
+                      style={{ width: `${Math.min(100, Math.round((job.completed / job.total) * 100))}%` }}
+                    />
+                  </div>
+                )}
                 {job.failedChapters && job.failedChapters.length > 0 && (
                   <p className="text-xs text-muted-foreground">Not translated: {job.failedChapters.join(', ')}</p>
                 )}

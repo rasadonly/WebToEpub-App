@@ -2414,42 +2414,60 @@ async function tocAllNovelFull(url) {
 }
 
 // --- Syosetu (ncode.syosetu.com): episode list on TOC page ---
+// Paginated: the TOC lists 100 episodes per page (?p=2, ?p=3, …).
+// Fetching only page 1 capped every book at 100 chapters (seen
+// on production 2026-11-01: Re:Zero showed 100 of 799) — so walk
+// pages until one yields no new episode links (max 50 pages,
+// matching the Translate Me Space's dedicated adapter).
+async function tocSyosetuPages(origin, ncode) {
+  const out = [];
+  const seen = new Set();
+  for (let p = 1; p <= 50; p++) {
+    const pageUrl = p === 1 ? `${origin}/${ncode}/` : `${origin}/${ncode}/?p=${p}`;
+    let html;
+    try {
+      html = await getText(pageUrl);
+    } catch (e) {
+      // Past the last page Syosetu answers 404 (e.g. ?p=9 for a
+      // 799-chapter book): that ends the list, it must not throw
+      // away the chapters already collected. A page-1 failure is
+      // a genuine TOC failure, so it still throws.
+      if (p === 1) throw e;
+      break;
+    }
+    const doc = parseHtml(html);
+    let added = 0;
+    const push = (a) => {
+      const href = a.getAttribute('href');
+      if (!href) return;
+      const url = absoluteUrl(origin, href);
+      if (seen.has(url)) return;
+      seen.add(url);
+      out.push({ url, title: textOf(a) });
+      added++;
+    };
+    // New design (2024+): .p-eplist__subtitle
+    doc.querySelectorAll('a.p-eplist__subtitle[href]').forEach(push);
+    if (!added) {
+      // Old design: dd.subtitle > a
+      doc.querySelectorAll('dl.novel_sublist2 dd.subtitle a, dl.novel_sublist a').forEach(push);
+    }
+    if (!added) break;
+  }
+  return out;
+}
+
 async function tocSyosetu(url) {
   const u = new URL(url);
   const ncode = u.pathname.split('/').filter(Boolean)[0];
-  const tocUrl = `https://ncode.syosetu.com/${ncode}/`;
-  const html = await getText(tocUrl);
-  const doc = parseHtml(html);
-  const origin = 'https://ncode.syosetu.com';
-  const out = [];
-  // New design (2024+): .p-eplist__subtitle
-  doc.querySelectorAll('a.p-eplist__subtitle[href]').forEach(a => {
-    const href = a.getAttribute('href');
-    if (href) out.push({ url: absoluteUrl(origin, href), title: textOf(a) });
-  });
-  if (out.length) return out;
-  // Old design: dd.subtitle > a
-  doc.querySelectorAll('dl.novel_sublist2 dd.subtitle a, dl.novel_sublist a').forEach(a => {
-    const href = a.getAttribute('href');
-    if (href) out.push({ url: absoluteUrl(origin, href), title: textOf(a) });
-  });
-  return out;
+  return tocSyosetuPages('https://ncode.syosetu.com', ncode);
 }
 
 // --- Novel18 (adult syosetu, same structure) ---
 async function tocNovel18(url) {
   const u = new URL(url);
   const ncode = u.pathname.split('/').filter(Boolean)[0];
-  const tocUrl = `https://novel18.syosetu.com/${ncode}/`;
-  const html = await getText(tocUrl);
-  const doc = parseHtml(html);
-  const origin = 'https://novel18.syosetu.com';
-  const out = [];
-  doc.querySelectorAll('a.p-eplist__subtitle[href], dl.novel_sublist2 dd.subtitle a').forEach(a => {
-    const href = a.getAttribute('href');
-    if (href) out.push({ url: absoluteUrl(origin, href), title: textOf(a) });
-  });
-  return out;
+  return tocSyosetuPages('https://novel18.syosetu.com', ncode);
 }
 
 // --- Kakuyomu (kakuyomu.jp): JSON in __NEXT_DATA__ ---

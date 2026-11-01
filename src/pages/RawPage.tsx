@@ -25,7 +25,10 @@ import {
 // linktoepub for 24 hours even when the library refuses it for
 // being under 100 KB.
 export default function RawPage() {
-  const [query, setQuery] = useState('');
+  // Single search bar, like the main page: a title searches, a
+  // pasted URL fetches its TOC. (Previously two separate inputs;
+  // on mobile the second one was easy to miss.)
+  const [input, setInput] = useState('');
   const [results, setResults] = useState<RawSearchResult[]>([]);
   const [libraryResults, setLibraryResults] = useState<RawLibraryResult[]>([]);
   const [searchStatus, setSearchStatus] = useState('');
@@ -48,6 +51,8 @@ export default function RawPage() {
   const [error, setError] = useState('');
   const [librarySuggestion, setLibrarySuggestion] = useState<{ title: string; url: string } | null>(null);
   const pollRef = useRef<number | null>(null);
+  const jobSectionRef = useRef<HTMLElement | null>(null);
+  const [translatingUrl, setTranslatingUrl] = useState('');
 
   useEffect(() => {
     document.title = 'Raw Translation — Translate Raw Novels to EPUB | LinkToEpub';
@@ -74,17 +79,20 @@ export default function RawPage() {
     }, 10_000);
   };
 
-  const onSearch = async () => {
-    if (!query.trim()) return;
+  const isUrlLike = (s: string) => /^https?:\/\//i.test(s.trim());
+
+  const onSearch = async (value: string) => {
+    const q = value.trim();
+    if (!q) return;
     setSearching(true);
     setError('');
     setNotice('');
     try {
-      const out = await rawSearch(query.trim());
+      const out = await rawSearch(q);
       setResults(out.results);
       setLibraryResults(out.libraryResults || []);
       setSearchStatus(out.status);
-      if (!out.results.length && !(out.libraryResults || []).length) setNotice('No results — try the original-language title, or paste a book URL directly below.');
+      if (!out.results.length && !(out.libraryResults || []).length) setNotice('No results — try the original-language title, or paste a book URL.');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Search failed');
     } finally {
@@ -92,14 +100,16 @@ export default function RawPage() {
     }
   };
 
-  const onFetchToc = async () => {
-    if (!url.trim()) return;
+  const onFetchToc = async (value: string) => {
+    const u = value.trim();
+    if (!u) return null;
     setFetchingToc(true);
     setError('');
     setNotice('');
     setLibrarySuggestion(null);
     try {
-      const out = await rawToc(url.trim());
+      const out = await rawToc(u);
+      setUrl(u);
       setTocTitle(out.title);
       setTocCount(out.count);
       setChaptersText(out.chaptersText);
@@ -107,29 +117,33 @@ export default function RawPage() {
       setTocSource(out.source);
       setTocNote(out.note || '');
       setTo(-1);
+      return out;
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to fetch TOC');
+      return null;
     } finally {
       setFetchingToc(false);
     }
   };
 
-  const onStart = async () => {
-    if (!url.trim()) return;
+  // The single bar's action: a URL fetches its TOC, anything else searches.
+  const onSingleAction = () => {
+    const v = input.trim();
+    if (!v) return;
+    if (isUrlLike(v)) void onFetchToc(v);
+    else void onSearch(v);
+  };
+
+  // Shared start logic: library/job suggestions, the one-job
+  // guard (409), polling, and scrolling the progress into view
+  // (on phones the job section sits below the fold).
+  const runStart = async (payload: { tocUrl: string; title?: string; source: string; target: string; from: number; to: number }) => {
     setStarting(true);
     setError('');
     setNotice('');
     setLibrarySuggestion(null);
     try {
-      const out = await rawStartJob({
-        tocUrl: url.trim(),
-        title: tocTitle || undefined,
-        source,
-        target,
-        // UI chapters are 1-based; the backend takes 0-based indices (-1 = end).
-        from: Math.max(0, from - 1),
-        to: to < 0 ? -1 : Math.max(0, to - 1),
-      });
+      const out = await rawStartJob(payload);
       if ('suggestion' in out && out.suggestion === 'library') {
         setLibrarySuggestion({ title: out.title, url: out.url });
         setNotice('This translation is already available in the community library — no need to translate it again.');
@@ -143,6 +157,7 @@ export default function RawPage() {
       }
       setJob(out as RawJob);
       pollJob((out as RawJob).id);
+      window.setTimeout(() => jobSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
     } catch (e) {
       const err = e as Error & { status?: number; body?: { job?: RawJob } };
       if (err.status === 409 && err.body?.job) {
@@ -154,6 +169,33 @@ export default function RawPage() {
       }
     } finally {
       setStarting(false);
+    }
+  };
+
+  const onStart = () => {
+    if (!url.trim()) return;
+    void runStart({
+      tocUrl: url.trim(),
+      title: tocTitle || undefined,
+      source,
+      target,
+      // UI chapters are 1-based; the backend takes 0-based indices (-1 = end).
+      from: Math.max(0, from - 1),
+      to: to < 0 ? -1 : Math.max(0, to - 1),
+    });
+  };
+
+  // One tap from a search result: fetch the TOC, then translate
+  // the whole book (chapter 1 to the end) and show its progress.
+  const onTranslateEpub = async (resultUrl: string) => {
+    setTranslatingUrl(resultUrl);
+    setInput(resultUrl);
+    try {
+      const toc = await onFetchToc(resultUrl);
+      if (!toc) return;
+      await runStart({ tocUrl: resultUrl, title: toc.title, source, target, from: 0, to: -1 });
+    } finally {
+      setTranslatingUrl('');
     }
   };
 
@@ -217,13 +259,13 @@ export default function RawPage() {
           <div className="flex gap-2">
             <input
               className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-sm"
-              placeholder="Search by title (e.g. Re:Zero, Solo Leveling)"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && onSearch()}
+              placeholder="Search by title or paste a book URL (e.g. Re:Zero, or https://ncode.syosetu.com/n2267be/)"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && onSingleAction()}
             />
-            <Button onClick={onSearch} disabled={searching || !query.trim()}>
-              {searching ? 'Searching…' : 'Search'}
+            <Button onClick={onSingleAction} disabled={searching || fetchingToc || !input.trim()}>
+              {fetchingToc ? 'Fetching…' : searching ? 'Searching…' : isUrlLike(input) ? 'Fetch TOC' : 'Search'}
             </Button>
           </div>
           {searchStatus && <p className="text-xs text-muted-foreground">{searchStatus}</p>}
@@ -247,32 +289,27 @@ export default function RawPage() {
               {results.map((r) => (
                 <li key={r.url} className="p-3 flex items-center justify-between gap-3">
                   <span className="text-sm">{r.label}</span>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setUrl(r.url);
-                      setTocTitle('');
-                      setChaptersText('');
-                    }}
-                  >
-                    Use this book
-                  </Button>
+                  <span className="flex gap-2 shrink-0">
+                    <Button
+                      onClick={() => void onTranslateEpub(r.url)}
+                      disabled={!!translatingUrl || !!jobActive}
+                    >
+                      {translatingUrl === r.url ? 'Starting…' : 'Translate & EPUB'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setInput(r.url);
+                        void onFetchToc(r.url);
+                      }}
+                    >
+                      Choose
+                    </Button>
+                  </span>
                 </li>
               ))}
             </ul>
           )}
-
-          <div className="flex gap-2">
-            <input
-              className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-sm"
-              placeholder="…or paste a book / TOC page URL directly"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-            />
-            <Button onClick={onFetchToc} disabled={fetchingToc || !url.trim()}>
-              {fetchingToc ? 'Fetching…' : 'Fetch TOC'}
-            </Button>
-          </div>
         </section>
 
         {tocTitle && (
@@ -321,13 +358,27 @@ export default function RawPage() {
         )}
 
         {job && (
-          <section className="bg-card border border-border rounded-xl p-6 space-y-3">
+          <section ref={jobSectionRef} className="bg-card border border-border rounded-xl p-6 space-y-3">
             <h2 className="font-bold">3. Translation job</h2>
             <p className="text-sm"><strong>{job.title}</strong>{job.originalTitle && job.originalTitle !== job.title ? ` (${job.originalTitle})` : ''}</p>
             <p className="text-sm text-muted-foreground">
               Status: {job.status} · {job.phase} · {job.completed}/{job.total || '?'} chapters
               {job.failed > 0 ? ` · ${job.failed} failed` : ''}
             </p>
+            {job.total > 0 && (
+              <div className="space-y-1">
+                <div className="h-2.5 bg-secondary rounded-full overflow-hidden" role="progressbar" aria-valuenow={job.completed} aria-valuemin={0} aria-valuemax={job.total}>
+                  <div
+                    className="h-full bg-primary transition-all"
+                    style={{ width: `${Math.min(100, Math.round((job.completed / job.total) * 100))}%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {jobActive ? 'Translating…' : 'Finished'} {job.completed}/{job.total} chapters
+                  {` (${Math.min(100, Math.round((job.completed / job.total) * 100))}%)`}
+                </p>
+              </div>
+            )}
             {job.failedChapters && job.failedChapters.length > 0 && (
               <div className="text-sm">
                 <p className="font-semibold">Chapters not translated (failed, not silently dropped):</p>
