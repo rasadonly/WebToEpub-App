@@ -23,6 +23,7 @@ import {
 import { buildEpub, sanitizeFilename, writeChapterFile, countEpubChapters } from "./epub.js";
 import { createWorkPool, DEFAULT_MAX_ACTIVE_JOBS } from "./workPool.js";
 import { uploadToLibrary, libraryEnabled, deleteFromLibrary, downloadFromLibrary } from "./library.js";
+import { callSpace, parseSpaceProgress, downloadSpaceFile } from "./spaceClient.js";
 import { sendEpub } from "./download.js";
 import { getLibraryIndex, startLibraryIndex, refreshLibraryIndex } from "./libraryIndex.js";
 
@@ -46,6 +47,10 @@ const chapterPool = createWorkPool(Number(process.env.GLOBAL_FETCH_CONCURRENCY |
 const packingPool = createWorkPool(1);
 const uploadPool = createWorkPool(1);
 const JOB_TTL_MS = Number(process.env.JOB_TTL_MS || 6 * 60 * 60 * 1000); // 6h
+// Raw translation jobs stay downloadable for 24h, not 6h: a book the
+// community library refuses (under 100 KB) must still be
+// downloadable from linktoepub for a full day after it finishes.
+const RAW_JOB_TTL_MS = Number(process.env.RAW_JOB_TTL_MS || 24 * 60 * 60 * 1000); // 24h
 const OUT_DIR = path.join(os.tmpdir(), "link-to-epub");
 fs.mkdirSync(OUT_DIR, { recursive: true });
 
@@ -86,7 +91,8 @@ function publicJob(job) {
 function cleanup() {
   const now = Date.now();
   for (const [id, job] of jobs) {
-    if (now - job.updatedAt > JOB_TTL_MS) {
+    const ttl = job.kind === "raw" ? RAW_JOB_TTL_MS : JOB_TTL_MS;
+    if (now - job.updatedAt > ttl) {
       if (job.file) fs.promises.unlink(job.file).catch(() => {});
       forgetJob(id);
     }
@@ -124,8 +130,13 @@ function isEpubBuffer(buf) {
   return probe.includes("application/epub+zip") && probe.includes("META-INF/container.xml");
 }
 
-/** Same title key the library UI dedupes by (bridge.ts). */
-const libraryTitleKey = (t) => String(t || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+/** Same title key the library UI dedupes by (bridge.ts).
+ * Unicode-aware (2026-11-01, /raw fix): the old ASCII-only
+ * [^a-z0-9] key collapsed every CJK title to "" so Japanese /
+ * Korean / Chinese books could never match a stored copy —
+ * duplicate detection and "already available" suggestions
+ * silently never fired for them. */
+const libraryTitleKey = (t) => String(t || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 
 /** Title for a stored library file, mirroring prettyTitleFromPath in bridge.ts. */
 function titleFromLibraryPath(p) {
@@ -621,6 +632,20 @@ async function spoolIsComplete(file) {
 }
 
 async function runJob(job, spec) {
+  // Raw (translation) jobs resume through the Space, not through
+  // the conversion pipeline: with a Space job id, polling on the
+  // next GET picks it up; without one, start it on the Space.
+  if (job.kind === "raw") {
+    if (job.spaceJobId) {
+      job.status = "running";
+      job.phase = "Resuming translation on Translate Me";
+      job.updatedAt = Date.now();
+      persistJob(job, true);
+    } else {
+      await startRawJob(job, spec);
+    }
+    return;
+  }
   const chapterDir = path.join(OUT_DIR, `${job.id}-chapters`);
   await fs.promises.mkdir(chapterDir, { recursive: true });
   // Heartbeat: job.updatedAt must keep moving while ANY chapter is in flight,
@@ -821,11 +846,16 @@ function restoreJobs() {
     try {
       const { job, spec } = JSON.parse(fs.readFileSync(path.join(STATE_DIR, f), "utf8"));
       if (!job?.id) continue;
-      if (Date.now() - (job.updatedAt || 0) > JOB_TTL_MS) {
+      const ttl = job.kind === "raw" ? RAW_JOB_TTL_MS : JOB_TTL_MS;
+      if (Date.now() - (job.updatedAt || 0) > ttl) {
         forgetJob(job.id);
         continue;
       }
-      if (job.status === "done" && job.file && fs.existsSync(job.file)) {
+      // A finished job (including a raw done_with_errors job, whose
+      // EPUB exists) stays as-is across restarts so its download
+      // survives for the full retention window. Anything else that
+      // was queued/running resumes below.
+      if ((job.status === "done" || job.status === "done_with_errors") && job.file && fs.existsSync(job.file)) {
         jobs.set(job.id, job);
         if (spec) jobSpecs.set(job.id, spec);
         continue;
@@ -873,10 +903,539 @@ app.post("/api/jobs/:id/cancel", (req, res) => {
 
 app.get("/api/jobs/:id/download", (req, res) => {
   const job = jobs.get(req.params.id);
-  if (!job || job.status !== "done" || !job.file) {
+  // Raw jobs also download when done_with_errors: the EPUB exists
+  // (translated chapters + a notes page for the failed ones) and
+  // refusing it would hide a usable book. Main jobs keep the
+  // strict "done" rule.
+  const downloadable =
+    job && job.file && (job.status === "done" || (job.kind === "raw" && job.status === "done_with_errors"));
+  if (!downloadable) {
     return res.status(404).json({ error: "epub not ready" });
   }
   sendEpub(res, job.file, job.filename);
+});
+
+// ---- /raw: translation jobs via the Translate Me Space -------------
+// The Space (Translate Me) is the translation backend: search, TOC,
+// translation and EPUB building all run there, through its Gradio
+// API (see spaceClient.js). linktoepub owns only the /raw UI,
+// its own job records, the one-at-a-time guard, the
+// already-available check against the community library, the
+// download serving, and the library save on completion.
+// Main conversion jobs are untouched and keep running in parallel;
+// the one-book-at-a-time rule applies to /raw jobs only.
+// Translation jobs deliberately do NOT repeat the old silent-drop
+// failure mode (failed chapters counted as completed, "100%"
+// with chapters missing): a partial job reports
+// status "done_with_errors" with its failed chapters named,
+// and a fully failed job reports "error".
+// Retention: a finished raw EPUB stays downloadable for 24h
+// (RAW_JOB_TTL_MS), even when the community library refuses it
+// for being under 100 KB — the library refusal never removes
+// the user's download.
+
+function rawJobs() {
+  return [...jobs.values()]
+    .filter((j) => j.kind === "raw")
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+}
+
+function publicRawJob(job) {
+  const pub = publicJob(job);
+  // publicJob's ready flag only covers status "done"; a
+  // done_with_errors raw job also has a downloadable EPUB.
+  pub.ready = (job.status === "done" || job.status === "done_with_errors") && Boolean(job.file);
+  return pub;
+}
+
+function activeRawJob() {
+  return rawJobs().find((j) => j.status === "queued" || j.status === "running") || null;
+}
+
+// \b does NOT work after CJK characters (they are not \w), so
+// "作品情報" never matched /...情報\b/ — the info-page retry and
+// the fallback check silently never fired until this helper.
+// CJK info titles match exactly; Latin ones use a word boundary.
+function isInfoPageTitle(t) {
+  const s = String(t || "").trim();
+  return s === "作品情報" || s === "作品信息" || /^(Information|Book info)\b/.test(s);
+}
+
+function parseTitleCount(titleCount) {
+  const m = String(titleCount || "").match(/^(.*) — (\d+) chapters$/);
+  if (m) return { title: m[1].trim(), count: Number(m[2]) };
+  return { title: String(titleCount || "").trim(), count: 0 };
+}
+
+// Fetch a TOC from the Space, retrying when the first entry is
+// the site's info page instead of a chapter. Known flake
+// (2026-11-01): the Space's Syosetu adapter intermittently
+// fails on its Worker stage and falls back to the generic
+// extractor, whose first "chapter" is the 作品情報 info page —
+// and chapter indices then shift, so a job started on that
+// TOC translates the info page instead of chapter 1. Retrying
+// a few times almost always lands the dedicated TOC.
+async function fetchSpaceToc(url) {
+  let last = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const outs = await callSpace("book_fetch_toc", [url], 300_000);
+    const { title, count } = parseTitleCount(outs && outs[0]);
+    const chaptersText = String((outs && outs[1]) || "");
+    const info = String((outs && outs[2]) || "");
+    last = { title, count, chaptersText, info };
+    const firstLine = chaptersText.split("\n")[0] || "";
+    const infoFirst = isInfoPageTitle(firstLine.replace(/^\d+\.\s*/, ""));
+    if (!infoFirst) return last;
+    console.warn(`[raw] TOC first entry is an info page (attempt ${attempt + 1}), retrying`);
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+  return last;
+}
+
+// Info-page markers: text that only ever appears on a book's
+// info/landing page, never in chapter prose. If a finished
+// "translation" is actually the info page, it must fail honestly
+// instead of being served (or library-saved) as a chapter.
+const INFO_PAGE_MARKERS = [
+  "Currently serializing",
+  "Total 799 episodes",
+  "Read Episode 1",
+  "Read Latest Episode",
+  "Send via LINE",
+];
+
+async function epubLooksLikeInfoPage(buffer) {
+  try {
+    const JSZip = (await import("jszip")).default;
+    const zip = await JSZip.loadAsync(buffer);
+    let text = "";
+    for (const name of Object.keys(zip.files)) {
+      if (/\.x?html$/i.test(name)) {
+        const html = await zip.files[name].async("string");
+        text += html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ") + " ";
+      }
+    }
+    return INFO_PAGE_MARKERS.some((m) => text.includes(m));
+  } catch {
+    return false;
+  }
+}
+
+// Similar books already in the community library, searched the
+// usual way: titles derived from stored paths with the shared
+// Unicode-aware helpers (titleFromLibraryPath + libraryTitleKey),
+// so non-Latin titles match too. Empty and one-letter query
+// keys are rejected — they would match nearly everything.
+// Exact title matches first, then starts-with, then contains.
+async function searchLibrarySimilar(query) {
+  const qkey = libraryTitleKey(query);
+  if (qkey.length < 2) return [];
+  const idx = await getLibraryIndex().catch(() => null);
+  if (!idx || !Array.isArray(idx.f)) return [];
+  const repo = process.env.HF_LIBRARY_REPO || "prasaduser/webtoepub-library";
+  const scored = [];
+  for (const [p, size] of idx.f) {
+    if (!/\.epub$/i.test(p)) continue;
+    const title = titleFromLibraryPath(p);
+    const key = libraryTitleKey(title);
+    // One-letter titles ("7", "2") would match nearly every query
+    // by containment — rejected, same as one-letter queries.
+    if (key.length < 2) continue;
+    let score = 0;
+    if (key === qkey) score = 3;
+    else if (key.startsWith(qkey) || qkey.startsWith(key)) score = 2;
+    else if (key.includes(qkey) || qkey.includes(key)) score = 1;
+    else continue;
+    scored.push({
+      score,
+      title,
+      path: p,
+      size: typeof size === "number" ? size : 0,
+      url: `https://huggingface.co/datasets/${repo}/resolve/main/${p}?download=true`,
+    });
+  }
+  scored.sort((a, b) => b.score - a.score || b.size - a.size);
+  return scored.slice(0, 10).map(({ score, ...rest }) => rest);
+}
+
+async function finalizeRawJob(job) {
+  // Download the finished EPUB from the Space into linktoepub's
+  // own out dir so /api/jobs/:id/download serves it, then save
+  // a copy to the community library under the correct
+  // (translated) title — best-effort, never fails the job.
+  // A library refusal (e.g. under 100 KB) only sets
+  // libraryStatus "failed"; the EPUB itself stays downloadable
+  // from linktoepub for the full 24h raw retention.
+  const outs = await callSpace("book_get_epub", [job.spaceJobId], 120_000);
+  const fileObj = outs && outs[0];
+  const buffer = await downloadSpaceFile(fileObj);
+  // Quality gate: never serve or library-save an info page
+  // mistaken for a chapter (see fetchSpaceToc note).
+  if (await epubLooksLikeInfoPage(buffer)) {
+    throw new Error(
+      "The Space returned the book's info page instead of chapter text " +
+        "(its TOC was incomplete this time) — please retry the job; " +
+        "no incorrect EPUB was saved.",
+    );
+  }
+  const file = path.join(OUT_DIR, `${job.id}.epub`);
+  await fs.promises.writeFile(file, buffer);
+  job.file = file;
+  job.size = buffer.length;
+  job.filename = `${sanitizeFilename(job.title || "book")}.epub`;
+  if (libraryEnabled()) {
+    job.phase = "Saving a copy to the library";
+    job.libraryStatus = "uploading";
+    job.updatedAt = Date.now();
+    persistJob(job, true);
+    try {
+      const up = await uploadPool.run(async () => {
+        const buf = await fs.promises.readFile(file);
+        return uploadToLibrary(buf, job.filename, {
+          title: job.title,
+          author: job.author || "",
+          source: job.tocUrl,
+        });
+      });
+      job.libraryUrl = up.url;
+      job.libraryPageUrl = up.pageUrl;
+      job.libraryStatus = "saved";
+    } catch (e) {
+      console.error("[raw] library upload failed:", e.message);
+      job.libraryStatus = "failed";
+      job.libraryError = e.message;
+    }
+  }
+  job.updatedAt = Date.now();
+  persistJob(job, true);
+}
+
+async function refreshRawJob(job, force = false) {
+  if (!job.spaceJobId) return;
+  if (job.status !== "queued" && job.status !== "running") return;
+  if (!force && job.lastSpacePoll && Date.now() - job.lastSpacePoll < 10_000) return;
+  job.lastSpacePoll = Date.now();
+  let text = "";
+  try {
+    const outs = await callSpace("book_check_progress", [job.spaceJobId], 60_000);
+    text = String((outs && outs[0]) || "");
+  } catch (e) {
+    console.warn("[raw] progress check failed:", e.message);
+    return;
+  }
+  const prog = parseSpaceProgress(text);
+  job.completed = prog.done;
+  job.failed = prog.failed;
+  job.total = prog.total || job.total;
+  job.failedChapters = prog.failedChapters;
+  const map = {
+    done: "done",
+    done_with_errors: "done_with_errors",
+    failed: "error",
+    stopped: "cancelled",
+  };
+  const next = map[prog.status];
+  if (next) {
+    job.status = next;
+    job.phase =
+      next === "done"
+        ? "Ready to download"
+        : next === "done_with_errors"
+          ? `Ready with ${prog.failed} failed chapter(s)`
+          : next === "error"
+            ? "Translation failed"
+            : "Cancelled";
+    if ((next === "done" || next === "done_with_errors") && prog.epubReady && !job.file) {
+      try {
+        await finalizeRawJob(job);
+      } catch (e) {
+        // A finalize failure (e.g. the info-page quality gate)
+        // means there is no valid EPUB: the job is an error,
+        // never a "done" job with nothing to download.
+        console.error("[raw] finalize failed:", e.message);
+        job.status = "error";
+        job.phase = "Failed";
+        job.error = e.message;
+        job.file = null;
+      }
+    }
+    if (next === "error") job.error = "Translation failed on the Space";
+  } else {
+    job.phase = `Translating (${prog.done}/${prog.total || "?"} chapters)`;
+  }
+  job.updatedAt = Date.now();
+  persistJob(job, true);
+}
+
+async function startRawJob(job, spec) {
+  try {
+    job.status = "running";
+    job.phase = "Starting translation on Translate Me";
+    job.updatedAt = Date.now();
+    persistJob(job, true);
+    const outs = await callSpace(
+      "book_start_job",
+      [spec.tocUrl, spec.source, spec.target, spec.engine, spec.from, spec.to],
+      300_000,
+    );
+    const spaceJobId = outs && outs[0];
+    const msg = String((outs && outs[1]) || "");
+    if (!spaceJobId) throw new Error(`Space did not return a job id: ${msg.slice(0, 200)}`);
+    job.spaceJobId = spaceJobId;
+    const total = msg.match(/(\d+) chapters/);
+    if (total) job.total = Number(total[1]);
+    job.phase = "Translating on Translate Me";
+    job.updatedAt = Date.now();
+    persistJob(job, true);
+  } catch (e) {
+    job.status = "error";
+    job.phase = "Failed to start";
+    job.error = e.message;
+    job.updatedAt = Date.now();
+    persistJob(job, true);
+  }
+}
+
+// Search original-language sites through the Space (same search
+// the Translate Me Books tab runs: per-site + translated search),
+// plus similar books already in the community library, searched
+// the usual way — so a book that is already translated never
+// needs a new job.
+app.post("/api/raw/search", async (req, res) => {
+  try {
+    const query = String((req.body || {}).query || "").trim();
+    if (!query) return res.status(400).json({ error: "query required" });
+    const outs = await callSpace("book_search", [query], 300_000);
+    const dropdown = outs && outs[0];
+    const choices = Array.isArray(dropdown?.choices) ? dropdown.choices : [];
+    const libraryResults = await searchLibrarySimilar(query).catch(() => []);
+    res.json({
+      results: choices.map(([label, url]) => ({ label, url })),
+      status: String((outs && outs[1]) || ""),
+      libraryResults,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Fetch a TOC for a pasted URL. First the Space (its TOC is what
+// the translation job itself uses, so its chapter indices are
+// authoritative). The Space result is only trusted when it looks
+// like a real chapter list; otherwise fall back to linktoepub's
+// own default parser (178 supported sites, proxy routes) — the
+// superior breadth — and say so. The job still translates
+// through the Space, whose own chapter order is what the range
+// then refers to.
+//
+// Distrust triggers, all found by live testing 2026-11-01:
+//  - 0 chapters (Space fetch failed outright)
+//  - under 5 chapters (a 1-entry "TOC" is footer junk, e.g.
+//    LightNovelHeaven returning "2019-2020" as its only chapter)
+//  - first entry is the site's info page (Syosetu's flaky 101
+//    generic TOC starts with 作品情報, and its indices shift)
+//  - chapters in descending numeric order (FreeWebNovel's 46
+//    latest-first list: chapter 1432 first, not chapter 1)
+function spaceTocUsable(toc) {
+  if (!toc || toc.count <= 0) return false;
+  if (toc.count < 5) return false;
+  const lines = toc.chaptersText.split("\n").filter((l) => l.trim());
+  if (!lines.length) return false;
+  const firstTitle = lines[0].replace(/^\d+\.\s*/, "");
+  if (isInfoPageTitle(firstTitle)) return false;
+  const num = (s) => {
+    const m = s.match(/(\d{1,5})/);
+    return m ? Number(m[1]) : null;
+  };
+  const firstNum = num(firstTitle);
+  const lastNum = num(lines[lines.length - 1].replace(/^\d+\.\s*/, ""));
+  if (firstNum !== null && lastNum !== null && firstNum > lastNum) return false;
+  return true;
+}
+
+app.post("/api/raw/toc", async (req, res) => {
+  try {
+    const url = String((req.body || {}).url || "").trim();
+    if (!url) return res.status(400).json({ error: "url required" });
+    let spaceError = null;
+    let spaceToc = null;
+    try {
+      spaceToc = await fetchSpaceToc(url);
+      if (spaceTocUsable(spaceToc)) {
+        return res.json({ ...spaceToc, source: "space" });
+      }
+      spaceError = spaceToc.count <= 0
+        ? "Space found no chapters"
+        : "Space returned an unusable chapter list (partial, reversed, or info page first)";
+    } catch (e) {
+      spaceError = e.message;
+    }
+    const { chapters, meta } = await getTocCached(url, "");
+    if (!chapters.length) {
+      throw new Error(spaceError || "No chapters found");
+    }
+    const title = meta.title || url;
+    const info = [meta.author ? `Author: ${meta.author}` : "", meta.description || ""]
+      .filter(Boolean)
+      .join("\n");
+    res.json({
+      title,
+      count: chapters.length,
+      chaptersText: chapters.slice(0, 30).map((c, i) => `${i + 1}. ${c.title}`).join("\n"),
+      info,
+      source: "linktoepub",
+      note: "TOC via linktoepub's parser (the Space could not fetch a usable chapter list for this URL: " +
+        `${spaceError}). The translation job still runs through the Space, ` +
+        "so chapter numbers follow the Space's own chapter order for this book.",
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Start a translation job: one book at a time, and only when the
+// translated book is not already available.
+app.post("/api/raw/jobs", async (req, res) => {
+  try {
+    const body = req.body || {};
+    const tocUrl = String(body.tocUrl || "").trim();
+    if (!tocUrl) return res.status(400).json({ error: "tocUrl required" });
+    const source = String(body.source || "auto");
+    const target = String(body.target || "en");
+    const engine = String(body.engine || "auto");
+    const from = Number.isFinite(Number(body.from)) ? Number(body.from) : 0;
+    const to = Number.isFinite(Number(body.to)) ? Number(body.to) : -1;
+
+    // One book at a time: an active raw job blocks a new one.
+    const active = activeRawJob();
+    if (active) {
+      return res.status(409).json({
+        error: "A translation job is already running — one book at a time.",
+        job: publicRawJob(active),
+      });
+    }
+    // Same book already translated here: point at that job.
+    const existing = rawJobs().find(
+      (j) => j.tocUrl === tocUrl && (j.status === "done" || j.status === "done_with_errors") && j.file,
+    );
+    if (existing) {
+      return res.json({ suggestion: "job", job: publicRawJob(existing) });
+    }
+
+    // Resolve the book title (frontend usually passes the title
+    // it got from /api/raw/toc; otherwise fetch it via the Space).
+    let originalTitle = String(body.title || "").trim();
+    if (!originalTitle) {
+      const toc = await fetchSpaceToc(tocUrl);
+      originalTitle = toc.title || tocUrl;
+    }
+    // Correct name for the finished book: the translated title
+    // (falling back to the original when title translation fails).
+    let title = originalTitle;
+    try {
+      const outs = await callSpace("translate_text", [originalTitle, source, target, engine], 120_000);
+      const translated = String((outs && outs[0]) || "").trim();
+      if (translated) title = translated;
+    } catch (e) {
+      console.warn("[raw] title translation failed, keeping original:", e.message);
+    }
+    // Already available in the community library? Suggest it
+    // instead of translating again (translated title first, then
+    // the original title for copies saved under it).
+    for (const candidate of [title, originalTitle]) {
+      const copies = await findLibraryCopies(candidate).catch(() => []);
+      if (copies.length) {
+        const biggest = copies.reduce((a, b) => (b.size > a.size ? b : a));
+        return res.json({
+          suggestion: "library",
+          title: candidate,
+          path: biggest.path,
+          url: `https://huggingface.co/datasets/prasaduser/webtoepub-library/resolve/main/${biggest.path}?download=true`,
+        });
+      }
+    }
+
+    const id = crypto.randomUUID();
+    const job = {
+      id,
+      kind: "raw",
+      status: "queued",
+      phase: "Queued",
+      title,
+      originalTitle,
+      tocUrl,
+      source,
+      target,
+      engine,
+      from,
+      to,
+      spaceJobId: null,
+      total: 0,
+      completed: 0,
+      failed: 0,
+      failedChapters: [],
+      error: null,
+      size: 0,
+      filename: `${sanitizeFilename(title || "book")}.epub`,
+      file: null,
+      libraryStatus: null,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    const spec = { kind: "raw", tocUrl, source, target, engine, from, to, title, originalTitle };
+    jobs.set(id, job);
+    jobSpecs.set(id, spec);
+    persistJob(job, true);
+    res.status(202).json(publicRawJob(job));
+    startRawJob(job, spec);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// List current translation jobs (refreshes active ones from the Space).
+app.get("/api/raw/jobs", async (_req, res) => {
+  const list = rawJobs();
+  for (const job of list) {
+    if (job.status === "queued" || job.status === "running") {
+      try {
+        await refreshRawJob(job);
+      } catch {
+        /* keep last known state */
+      }
+    }
+  }
+  res.json({ jobs: list.map(publicRawJob) });
+});
+
+app.get("/api/raw/jobs/:id", async (req, res) => {
+  const job = jobs.get(req.params.id);
+  if (!job || job.kind !== "raw") return res.status(404).json({ error: "raw job not found" });
+  if (job.status === "queued" || job.status === "running") {
+    try {
+      await refreshRawJob(job, true);
+    } catch {
+      /* keep last known state */
+    }
+  }
+  res.json(publicRawJob(job));
+});
+
+// Cancel tracking for a raw job. Note: there is no Space-side
+// stop, so a Space worker already running finishes in the Space's
+// /tmp; linktoepub simply stops following it and frees the
+// one-at-a-time slot.
+app.post("/api/raw/jobs/:id/cancel", (req, res) => {
+  const job = jobs.get(req.params.id);
+  if (!job || job.kind !== "raw") return res.status(404).json({ error: "raw job not found" });
+  if (job.status === "done" || job.status === "done_with_errors" || job.status === "error" || job.status === "cancelled") {
+    return res.json(publicRawJob(job));
+  }
+  job.status = "cancelled";
+  job.phase = "Cancelled";
+  job.updatedAt = Date.now();
+  persistJob(job, true);
+  res.json(publicRawJob(job));
 });
 
 restoreJobs();

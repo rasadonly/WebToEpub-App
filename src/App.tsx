@@ -20,6 +20,8 @@ const SitesPage = lazy(() => import("./pages/SitesPage"));
 const GuidePage = lazy(() => import("./pages/GuidePage"));
 const PrivacyPage = lazy(() => import("./pages/PrivacyPage"));
 const ConverterPage = lazy(() => import("./pages/ConverterPage"));
+const RawPage = lazy(() => import("./pages/RawPage"));
+const RawJobsPage = lazy(() => import("./pages/RawJobsPage"));
 const WebToEpubPage = lazy(() => import("./pages/WebToEpubPage"));
 const AlternativesPage = lazy(() => import("./pages/AlternativesPage"));
 
@@ -46,6 +48,7 @@ function NavBar() {
         <nav className="hidden sm:flex items-center gap-5">
           <Link to="/" className={linkClass("/")}>Home</Link>
           <Link to="/sites" className={linkClass("/sites")}>Sites</Link>
+          <Link to="/raw" className={linkClass("/raw")}>Raw</Link>
           <button type="button" onClick={() => openModal("library")} className={linkClass("/library")}>Library</button>
           <button type="button" onClick={() => openModal("forum")} className={linkClass("/forum")}>Forum</button>
           <Link to="/guide" className={linkClass("/guide")}>Guide</Link>
@@ -122,6 +125,8 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/converter" element={<ConverterPage />} />
+            <Route path="/raw" element={<RawPage />} />
+            <Route path="/raw/jobs" element={<RawJobsPage />} />
             <Route path="/web-to-epub" element={<WebToEpubPage />} />
             <Route path="/alternatives" element={<AlternativesPage />} />
             <Route path="/sites" element={<SitesPage />} />

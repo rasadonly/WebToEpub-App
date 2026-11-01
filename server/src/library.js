@@ -23,7 +23,12 @@ function slug(name) {
   return (
     String(name || "book")
       .normalize("NFKD")
-      .replace(/[^\w\s.-]+/g, "")
+      // Unicode-aware (2026-11-01, /raw fix): the old [^\w\s.-]
+      // stripped every CJK character, so a Japanese / Chinese /
+      // Korean book saved to the library as "book-<rand>.epub"
+      // instead of under its correct name. \p{L}\p{N} keeps
+      // letters and numbers in every script.
+      .replace(/[^\p{L}\p{N}_\s.-]+/gu, "")
       .trim()
       .replace(/\s+/g, "-")
       .replace(/-{2,}/g, "-")
