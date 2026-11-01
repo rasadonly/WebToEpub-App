@@ -28,6 +28,7 @@ import {
   refreshSpaceJob,
   cancelSpaceJob,
   downloadSpaceEpub,
+  epubNameFor,
   getSpaceEpubFile,
   upsertSpaceJob,
   findDoneJobForUrl,
@@ -386,7 +387,7 @@ export default function RawPage() {
         filename = ep.filename;
         setTrackedJob({ ...job, epubUrl, epubFilename: filename });
       }
-      await downloadSpaceEpub(epubUrl, filename || 'book.epub');
+      await downloadSpaceEpub(epubUrl, epubNameFor(job.title, filename?.replace(/\.epub$/i, '') || 'book'));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Download failed');
     }
