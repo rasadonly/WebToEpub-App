@@ -258,25 +258,34 @@
       </main>
     </div>
     <script>
-      // If the app has not started after 12s (a stale cached page asking
-      // for files that no longer exist, or a dropped download), reload
-      // once with a fresh copy; after that, offer a Reload button.
+      // Start-up guard: if one of the app's files fails to download
+      // (a stale cached page asking for files from an older version),
+      // reload once with a fresh copy. If the app still has not started
+      // after 15s, show a Reload button instead of a frozen screen.
       (function () {
         var KEY = 'ltb-boot-reload-at';
-        setTimeout(function () {
-          if (!document.querySelector('#root .converter-loading')) return;
+        function started() { return !document.querySelector('#root .converter-loading'); }
+        function freshReload() {
           var last = 0;
           try { last = Number(sessionStorage.getItem(KEY) || 0); } catch (e) {}
-          if (Date.now() - last > 60000) {
-            try { sessionStorage.setItem(KEY, String(Date.now())); } catch (e) {}
-            var u = new URL(location.href);
-            u.searchParams.set('r', String(Date.now()));
-            location.replace(u.toString());
-            return;
-          }
+          if (Date.now() - last < 60000) return false;
+          try { sessionStorage.setItem(KEY, String(Date.now())); } catch (e) {}
+          var u = new URL(location.href);
+          u.searchParams.set('r', String(Date.now()));
+          location.replace(u.toString());
+          return true;
+        }
+        function showButton() {
           var slow = document.querySelector('.converter-loading-slow');
           if (slow) slow.hidden = false;
-        }, 12000);
+        }
+        window.addEventListener('error', function (e) {
+          var t = e && e.target;
+          if (t && (t.tagName === 'SCRIPT' || t.tagName === 'LINK') && !started()) {
+            if (!freshReload()) showButton();
+          }
+        }, true);
+        setTimeout(function () { if (!started()) showButton(); }, 15000);
       })();
     </script>
     <script type="module" src="/src/main.tsx"></script>
