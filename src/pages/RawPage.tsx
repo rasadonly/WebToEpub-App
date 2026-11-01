@@ -1,36 +1,40 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Languages, Search, BookOpen, Download, X, AlertTriangle, CheckCircle2, Library as LibraryIcon } from 'lucide-react';
+import { Languages, Search, BookOpen, Download, X, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import {
-  rawSearch,
-  rawToc,
-  rawStartJob,
-  rawJobStatus,
-  rawCancelJob,
-  rawDownload,
-  type RawJob,
-  type RawSearchResult,
-  type RawLibraryResult,
-} from '@/utils/rawApi';
+  searchBooks,
+  fetchSpaceToc,
+  resolveJobTitle,
+  startSpaceJob,
+  refreshSpaceJob,
+  cancelSpaceJob,
+  downloadSpaceEpub,
+  getSpaceEpubFile,
+  upsertSpaceJob,
+  findDoneJobForUrl,
+  type SpaceJob,
+  type SpaceSearchResult,
+  type SpaceToc,
+} from '@/utils/spaceApi';
 
-// /raw — translate one raw (untranslated) book at a time, using
-// the Translate Me Space as the translation backend. The flow
-// mirrors the main converter: find a book, fetch its TOC, pick
-// a chapter range, start the job, follow it to an EPUB — except
-// only one translation job runs at a time, an already-available
-// book is suggested instead of re-translated, and the finished
-// EPUB is saved to the community library under its correct
-// (translated) title. The finished EPUB stays downloadable from
-// linktoepub for 24 hours even when the library refuses it for
-// being under 100 KB.
+// /raw — translate raw (untranslated) novels, with the Translate
+// Me Space as the translation backend. The browser talks to the
+// Space DIRECTLY for search, TOC, jobs, progress and EPUB
+// downloads (at the user's direction: separate backends, HF for
+// translation). The only call that still goes to linktoepub's own
+// backend is the library save, because it needs the library
+// token. There is no one-job-at-a-time guard, no library
+// suggestions, and no parser fallback any more — those lived on
+// the old proxy. Jobs are tracked per browser (localStorage), so
+// /raw/jobs lists jobs started in this browser. A finished book
+// is saved to the community library when it is big enough
+// (>= 100 KB); smaller books still download fine from the Space.
 export default function RawPage() {
   // Single search bar, like the main page: a title searches, a
-  // pasted URL fetches its TOC. (Previously two separate inputs;
-  // on mobile the second one was easy to miss.)
+  // pasted URL fetches its TOC.
   const [input, setInput] = useState('');
-  const [results, setResults] = useState<RawSearchResult[]>([]);
-  const [libraryResults, setLibraryResults] = useState<RawLibraryResult[]>([]);
+  const [results, setResults] = useState<SpaceSearchResult[]>([]);
   const [searchStatus, setSearchStatus] = useState('');
   const [searching, setSearching] = useState(false);
   const [url, setUrl] = useState('');
@@ -38,19 +42,17 @@ export default function RawPage() {
   const [tocCount, setTocCount] = useState(0);
   const [chaptersText, setChaptersText] = useState('');
   const [infoText, setInfoText] = useState('');
-  const [tocSource, setTocSource] = useState<'space' | 'linktoepub' | ''>('');
-  const [tocNote, setTocNote] = useState('');
   const [fetchingToc, setFetchingToc] = useState(false);
   const [source, setSource] = useState('auto');
   const [target, setTarget] = useState('en');
   const [from, setFrom] = useState(1);
   const [to, setTo] = useState(-1);
-  const [job, setJob] = useState<RawJob | null>(null);
+  const [job, setJob] = useState<SpaceJob | null>(null);
   const [starting, setStarting] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
-  const [librarySuggestion, setLibrarySuggestion] = useState<{ title: string; url: string } | null>(null);
   const pollRef = useRef<number | null>(null);
+  const jobRef = useRef<SpaceJob | null>(null);
   const jobSectionRef = useRef<HTMLElement | null>(null);
   const [translatingUrl, setTranslatingUrl] = useState('');
 
@@ -61,20 +63,31 @@ export default function RawPage() {
     };
   }, []);
 
+  const setTrackedJob = (next: SpaceJob | null) => {
+    jobRef.current = next;
+    setJob(next);
+    if (next) upsertSpaceJob(next);
+  };
+
   const stopPolling = () => {
     if (pollRef.current) window.clearInterval(pollRef.current);
     pollRef.current = null;
   };
 
-  const pollJob = (id: string) => {
+  const pollJob = (spaceJobId: string) => {
     stopPolling();
     pollRef.current = window.setInterval(async () => {
+      const current = jobRef.current;
+      if (!current || current.spaceJobId !== spaceJobId) {
+        stopPolling();
+        return;
+      }
       try {
-        const next = await rawJobStatus(id);
-        setJob(next);
+        const next = await refreshSpaceJob(current);
+        setTrackedJob(next);
         if (['done', 'done_with_errors', 'error', 'cancelled'].includes(next.status)) stopPolling();
       } catch {
-        /* keep polling; a transient backend hiccup is not a job failure */
+        /* keep polling; a transient Space hiccup is not a job failure */
       }
     }, 10_000);
   };
@@ -88,11 +101,10 @@ export default function RawPage() {
     setError('');
     setNotice('');
     try {
-      const out = await rawSearch(q);
+      const out = await searchBooks(q);
       setResults(out.results);
-      setLibraryResults(out.libraryResults || []);
       setSearchStatus(out.status);
-      if (!out.results.length && !(out.libraryResults || []).length) setNotice('No results — try the original-language title, or paste a book URL.');
+      if (!out.results.length) setNotice('No results — try the original-language title, or paste a book URL.');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Search failed');
     } finally {
@@ -100,22 +112,19 @@ export default function RawPage() {
     }
   };
 
-  const onFetchToc = async (value: string) => {
+  const onFetchToc = async (value: string): Promise<SpaceToc | null> => {
     const u = value.trim();
     if (!u) return null;
     setFetchingToc(true);
     setError('');
     setNotice('');
-    setLibrarySuggestion(null);
     try {
-      const out = await rawToc(u);
+      const out = await fetchSpaceToc(u);
       setUrl(u);
       setTocTitle(out.title);
       setTocCount(out.count);
       setChaptersText(out.chaptersText);
       setInfoText(out.info);
-      setTocSource(out.source);
-      setTocNote(out.note || '');
       setTo(-1);
       return out;
     } catch (e) {
@@ -134,39 +143,52 @@ export default function RawPage() {
     else void onSearch(v);
   };
 
-  // Shared start logic: library/job suggestions, the one-job
-  // guard (409), polling, and scrolling the progress into view
-  // (on phones the job section sits below the fold).
-  const runStart = async (payload: { tocUrl: string; title?: string; source: string; target: string; from: number; to: number }) => {
+  // Shared start logic: local duplicate check, title resolution,
+  // Space start, tracking, polling, and scrolling the progress
+  // into view (on phones the job section sits below the fold).
+  const runStart = async (payload: {
+    tocUrl: string;
+    originalTitle: string;
+    source: string;
+    target: string;
+    from: number;
+    to: number;
+  }) => {
     setStarting(true);
     setError('');
     setNotice('');
-    setLibrarySuggestion(null);
     try {
-      const out = await rawStartJob(payload);
-      if ('suggestion' in out && out.suggestion === 'library') {
-        setLibrarySuggestion({ title: out.title, url: out.url });
-        setNotice('This translation is already available in the community library — no need to translate it again.');
+      const existing = findDoneJobForUrl(payload.tocUrl);
+      if (existing) {
+        setTrackedJob(existing);
+        setNotice('You already translated this book in this browser — here is your EPUB.');
         return;
       }
-      if ('suggestion' in out && out.suggestion === 'job') {
-        setJob(out.job);
-        setNotice('This book already has a translation job here — following that job instead of starting a duplicate.');
-        if (['queued', 'running'].includes(out.job.status)) pollJob(out.job.id);
-        return;
-      }
-      setJob(out as RawJob);
-      pollJob((out as RawJob).id);
+      const title = await resolveJobTitle(payload.originalTitle, payload.source, payload.target, 'auto');
+      const spaceJobId = await startSpaceJob({ ...payload, engine: 'auto' });
+      const created: SpaceJob = {
+        spaceJobId,
+        title,
+        originalTitle: payload.originalTitle,
+        tocUrl: payload.tocUrl,
+        source: payload.source,
+        target: payload.target,
+        from: payload.from,
+        to: payload.to,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        status: 'queued',
+        phase: 'Queued',
+        completed: 0,
+        total: 0,
+        failed: 0,
+        failedChapters: [],
+      };
+      setTrackedJob(created);
+      pollJob(spaceJobId);
       window.setTimeout(() => jobSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
     } catch (e) {
-      const err = e as Error & { status?: number; body?: { job?: RawJob } };
-      if (err.status === 409 && err.body?.job) {
-        setJob(err.body.job);
-        setNotice('A translation job is already running — one book at a time. Following the running job.');
-        pollJob(err.body.job.id);
-      } else {
-        setError(err instanceof Error ? err.message : 'Failed to start translation job');
-      }
+      setError(e instanceof Error ? e.message : 'Failed to start translation job');
     } finally {
       setStarting(false);
     }
@@ -176,10 +198,10 @@ export default function RawPage() {
     if (!url.trim()) return;
     void runStart({
       tocUrl: url.trim(),
-      title: tocTitle || undefined,
+      originalTitle: tocTitle || url.trim(),
       source,
       target,
-      // UI chapters are 1-based; the backend takes 0-based indices (-1 = end).
+      // UI chapters are 1-based; the Space takes 0-based indices (-1 = end).
       from: Math.max(0, from - 1),
       to: to < 0 ? -1 : Math.max(0, to - 1),
     });
@@ -193,20 +215,33 @@ export default function RawPage() {
     try {
       const toc = await onFetchToc(resultUrl);
       if (!toc) return;
-      await runStart({ tocUrl: resultUrl, title: toc.title, source, target, from: 0, to: -1 });
+      await runStart({ tocUrl: resultUrl, originalTitle: toc.title, source, target, from: 0, to: -1 });
     } finally {
       setTranslatingUrl('');
     }
   };
 
-  const onCancel = async () => {
+  const onCancel = () => {
+    if (!job) return;
+    const next = cancelSpaceJob(job);
+    setTrackedJob(next);
+    stopPolling();
+  };
+
+  const onDownload = async () => {
     if (!job) return;
     try {
-      const next = await rawCancelJob(job.id);
-      setJob(next);
-      stopPolling();
+      let epubUrl = job.epubUrl;
+      let filename = job.epubFilename;
+      if (!epubUrl) {
+        const ep = await getSpaceEpubFile(job.spaceJobId);
+        epubUrl = ep.url;
+        filename = ep.filename;
+        setTrackedJob({ ...job, epubUrl, epubFilename: filename });
+      }
+      await downloadSpaceEpub(epubUrl, filename || 'book.epub');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Cancel failed');
+      setError(e instanceof Error ? e.message : 'Download failed');
     }
   };
 
@@ -224,9 +259,9 @@ export default function RawPage() {
             Translate a <span className="text-primary">Raw Novel</span> to EPUB
           </h1>
           <p className="text-muted-foreground max-w-2xl mx-auto">
-            Find a Japanese, Korean, or Chinese novel, translate it chapter by chapter, and get a clean English EPUB —
-            saved to the community library when it finishes. One book at a time, so every job gets full attention.
-            A finished book stays downloadable here for 24 hours even if the library refuses it for being too small.
+            Find a Japanese, Korean, or Chinese novel, translate it chapter by chapter, and get a clean English EPUB.
+            Translation runs on the Translate Me Space, and finished books are saved to the community library when
+            they are big enough.
           </p>
           <p className="text-xs text-muted-foreground">
             <Link to="/raw/jobs" className="text-primary hover:underline">View current translation jobs →</Link>
@@ -245,14 +280,6 @@ export default function RawPage() {
             <span>{notice}</span>
           </div>
         )}
-        {librarySuggestion && (
-          <div className="bg-card border border-border rounded-lg p-4 space-y-2">
-            <p className="font-semibold">Already available: {librarySuggestion.title}</p>
-            <a href={librarySuggestion.url} target="_blank" rel="noreferrer">
-              <Button>Download from the community library</Button>
-            </a>
-          </div>
-        )}
 
         <section className="bg-card border border-border rounded-xl p-6 space-y-4">
           <h2 className="font-bold flex items-center gap-2"><Search className="w-4 h-4" /> 1. Find the book</h2>
@@ -269,21 +296,6 @@ export default function RawPage() {
             </Button>
           </div>
           {searchStatus && <p className="text-xs text-muted-foreground">{searchStatus}</p>}
-          {libraryResults.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="font-semibold text-sm flex items-center gap-2"><LibraryIcon className="w-4 h-4" /> Already in the community library</h3>
-              <ul className="divide-y divide-border border border-border rounded-lg">
-                {libraryResults.map((r) => (
-                  <li key={r.path} className="p-3 flex items-center justify-between gap-3">
-                    <span className="text-sm">{r.title}</span>
-                    <a href={r.url} target="_blank" rel="noreferrer">
-                      <Button variant="outline">Download</Button>
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
           {results.length > 0 && (
             <ul className="divide-y divide-border border border-border rounded-lg">
               {results.map((r) => (
@@ -315,7 +327,6 @@ export default function RawPage() {
         {tocTitle && (
           <section className="bg-card border border-border rounded-xl p-6 space-y-4">
             <h2 className="font-bold flex items-center gap-2"><BookOpen className="w-4 h-4" /> 2. {tocTitle} — {tocCount} chapters</h2>
-            {tocSource === 'linktoepub' && tocNote && <p className="text-xs text-amber-500">{tocNote}</p>}
             {infoText && <p className="text-xs text-muted-foreground whitespace-pre-wrap">{infoText}</p>}
             <pre className="text-xs bg-background border border-border rounded-lg p-3 max-h-64 overflow-auto whitespace-pre-wrap">{chaptersText}</pre>
             <div className="grid sm:grid-cols-4 gap-3 text-sm">
@@ -389,8 +400,8 @@ export default function RawPage() {
             )}
             {job.error && <p className="text-sm text-destructive">{job.error}</p>}
             <div className="flex flex-wrap gap-2">
-              {jobFinished && job.ready && (
-                <Button onClick={() => rawDownload(job).catch((e) => setError(e instanceof Error ? e.message : 'Download failed'))}>
+              {jobFinished && (
+                <Button onClick={() => void onDownload()}>
                   <Download className="w-4 h-4 mr-1" /> Download EPUB
                 </Button>
               )}
@@ -400,7 +411,10 @@ export default function RawPage() {
                 </a>
               )}
               {job.libraryStatus === 'failed' && (
-                <span className="text-xs text-muted-foreground self-center">Library save failed: {job.libraryError || 'unknown'} — download here still works for 24 hours</span>
+                <span className="text-xs text-muted-foreground self-center">Library save failed: {job.libraryError || 'unknown'} — download from the Space still works</span>
+              )}
+              {job.libraryStatus === 'uploading' && (
+                <span className="text-xs text-muted-foreground self-center">Saving a copy to the community library…</span>
               )}
               {jobActive && (
                 <Button variant="outline" onClick={onCancel}>
