@@ -4306,7 +4306,11 @@ async function tocHoneyfeed(url) {
   const doc = parseHtml(await getText(`${base}/novels/${id}/chapters`));
   const byId = new Map();
   doc.querySelectorAll("a[href]").forEach((a) => {
-    const href = a.getAttribute("href") || "";
+    // Heroku egress may serve this page via the Lovable proxy, which
+    // percent-encodes every link (e.g. %2Fchapters%2F123); decode first
+    // so the chapter pattern matches both direct and proxied pages.
+    let href = a.getAttribute("href") || "";
+    try { href = decodeURIComponent(href); } catch { /* keep raw href */ }
     const mm = href.match(/\/chapters\/(\d+)/);
     if (!mm) return;
     const num = Number(mm[1]);
