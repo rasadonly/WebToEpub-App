@@ -1629,6 +1629,11 @@ export function supportedDomains() {
     "novelfull.net",
     "wattpad.com",
     "snowytranslations.com",
+    "honeyfeed.fm",
+    "mtlnovel.me",
+    "mtl-novel.com",
+    "wntl.net",
+    "novelnow.com",
     ...MAJOR_DOMAINS,
     ...Object.keys(SITE_CONFIGS),
   ]
@@ -4293,6 +4298,154 @@ async function bodyReadNovelMtl(url) {
 }
 
 // --- Novelight (novelight.net) ---
+async function tocHoneyfeed(url) {
+  const m = new URL(url).pathname.match(/\/novels\/(\d+)/);
+  if (!m) throw new Error("No Honeyfeed novel id in URL");
+  const id = m[1];
+  const base = "https://www.honeyfeed.fm";
+  const doc = parseHtml(await getText(`${base}/novels/${id}/chapters`));
+  const byId = new Map();
+  doc.querySelectorAll("a[href]").forEach((a) => {
+    const href = a.getAttribute("href") || "";
+    const mm = href.match(/\/chapters\/(\d+)/);
+    if (!mm) return;
+    const num = Number(mm[1]);
+    const title = (a.textContent || "").replace(/\s+/g, " ").trim();
+    if (!byId.has(num)) byId.set(num, { url: `${base}/chapters/${num}`, title });
+  });
+  // Numeric ids increase chronologically, so ascending order is the book order.
+  return [...byId.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([num, entry], i) => ({ url: entry.url, title: entry.title || `Chapter ${i + 1}` }));
+}
+
+async function tocMtlnovel(url) {
+  const parts = new URL(url).pathname.split("/").filter(Boolean);
+  const slug = parts[1];
+  if (!slug) throw new Error("No MTLNovel.me slug in URL");
+  const doc = parseHtml(await getText(`https://mtlnovel.me/ajax/chapters/?slug=${encodeURIComponent(slug)}`));
+  const out = [];
+  const seen = new Set();
+  doc.querySelectorAll("a[href]").forEach((a) => {
+    const href = a.getAttribute("href") || "";
+    if (!href.startsWith("/read/")) return;
+    const abs = absoluteUrl(url, href);
+    if (seen.has(abs)) return;
+    seen.add(abs);
+    const title = (a.textContent || "").replace(/\s+/g, " ").trim();
+    out.push({ url: abs, title });
+  });
+  return out;
+}
+
+async function tocWntl(url) {
+  const parts = new URL(url).pathname.split("/").filter(Boolean);
+  const id = parts[1];
+  if (!id) throw new Error("No WNTL novel id in URL");
+  const data = await getJson(`https://wntl.net/api/chapters/${encodeURIComponent(id)}`);
+  return (data?.chapters || []).map((c) => ({
+    url: `https://wntl.net/read/${id}/${c.id}`,
+    title: c.title || `Chapter ${c.number}`,
+  }));
+}
+
+async function tocNovelnow(url) {
+  const parts = new URL(url).pathname.split("/").filter(Boolean);
+  const story = parts[1] || "";
+  const id = story.split("_").pop();
+  if (!id) throw new Error("No NovelNow book id in URL");
+  const data = await getJson(
+    `https://api.lyramob.com/v1/chapters/${encodeURIComponent(id)}?risk=5&country=us&product=novelfun`
+  );
+  const chapters = data?.data?.chapters || data?.chapters || [];
+  const slugOf = (name) =>
+    String(name || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  return chapters.map((c) => ({
+    url: `https://www.novelnow.com/story/${story}/${slugOf(c.name)}_${c.id}`,
+    title: c.name || `Chapter`,
+  }));
+}
+
+function markdownToHtml(md) {
+  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const blocks = String(md || "")
+    .replace(/\r\n/g, "\n")
+    .split(/\n\s*\n/)
+    .map((b) => b.trim())
+    .filter(Boolean);
+  return blocks
+    .map((b) => {
+      if (/^#{1,3}\s/.test(b)) return `<h3>${esc(b.replace(/^#{1,3}\s*/, ""))}</h3>`;
+      return `<p>${esc(b).replace(/\n/g, "<br/>")}</p>`;
+    })
+    .join("\n");
+}
+
+async function bodyWntl(chapterUrl) {
+  const parts = new URL(chapterUrl).pathname.split("/").filter(Boolean);
+  const novel = parts[1];
+  const chapterId = parts[2];
+  let text = await getText(`https://wntl.net/api/chapter-content/${novel}/${chapterId}.md`);
+  if (text.trim().startsWith("{")) {
+    // Fall back to the chapter object's file field when the id.md guess misses.
+    const obj = await getJson(`https://wntl.net/api/chapters/${novel}/${chapterId}`);
+    const file = obj?.chapter?.file;
+    if (file) text = await getText(`https://wntl.net/api/chapter-content/${novel}/${file}`);
+  }
+  return markdownToHtml(text);
+}
+
+const NOVELNOW_CONTENT_KEY = "$+(hT5-?#k8D^*N3";
+
+async function bodyNovelnow(chapterUrl) {
+  const parts = new URL(chapterUrl).pathname.split("/").filter(Boolean);
+  const story = parts[1] || "";
+  const chapterName = parts[2] || "";
+  const bookId = story.split("_").pop();
+  const chapterId = chapterName.split("_").pop();
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 30000);
+  try {
+    const r = await fetch(
+      `https://s.lyramob.com/content/${bookId}/${chapterId}?risk=5&country=us&product=novelfun`,
+      { headers: { "User-Agent": "Mozilla/5.0" }, signal: ctrl.signal }
+    );
+    const buf = Buffer.from(await r.arrayBuffer());
+    const out = Buffer.alloc(buf.length);
+    for (let i = 0; i < buf.length; i++) out[i] = buf[i] ^ NOVELNOW_CONTENT_KEY.charCodeAt(i % NOVELNOW_CONTENT_KEY.length);
+    const text = out.toString("utf8");
+    const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return text
+      .split(/\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => `<p>${esc(line)}</p>`)
+      .join("\n");
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function tocMtlNovel(url) {
+  // Dedicated (not a siteConfigs entry) on purpose: the generic staged path
+  // runs its AI chapter filter over this site's list and drops real chapters
+  // (verified: 168 on the page, 165 out of the generic path, chapter 1 gone).
+  const doc = parseHtml(await getText(url));
+  const out = [];
+  const seen = new Set();
+  doc.querySelectorAll(".ch-list a.ch-link").forEach((a) => {
+    const abs = absoluteUrl(url, a.getAttribute("href"));
+    if (seen.has(abs)) return;
+    seen.add(abs);
+    const title = (a.textContent || "").replace(/\s+/g, " ").trim();
+    out.push({ url: abs, title });
+  });
+  return out;
+}
+
 async function tocNovelight(url) {
   const html = await getText(url);
   const origin = new URL(url).origin;
@@ -4357,6 +4510,8 @@ const MAJOR_DOMAINS = [
   "inkitt.com",
   "literotica.com",
   "akknovel.com",
+  "gravitytales.com",
+  "lunoxscans.com",
 ];
 
 /** Chapter-body selectors for the dedicated sites, tried in order. */
@@ -4548,6 +4703,11 @@ export function siteKey(hostname) {
   if (host.includes("literotica.com")) return "literotica";
   if (host.includes("69shuba.com")) return "69shuba";
   if (host.includes("novelight.net")) return "novelight";
+  if (host.includes("honeyfeed.fm")) return "honeyfeed";
+  if (host.includes("mtlnovel.me")) return "mtlnovel";
+  if (host.includes("mtl-novel.com")) return "mtlnovelcom";
+  if (host.includes("wntl.net")) return "wntl";
+  if (host.includes("novelnow.com")) return "novelnow";
 
   for (const [re, key] of MAJOR_SITES) {
     if (re.test(host)) return key;
@@ -4754,6 +4914,16 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         return toc69shuba(tocUrl);
       case "novelight":
         return tocNovelight(tocUrl);
+      case "honeyfeed":
+        return tocHoneyfeed(tocUrl);
+      case "mtlnovel":
+        return tocMtlnovel(tocUrl);
+      case "mtlnovelcom":
+        return tocMtlNovel(tocUrl);
+      case "wntl":
+        return tocWntl(tocUrl);
+      case "novelnow":
+        return tocNovelnow(tocUrl);
 
       default:
         return [];
@@ -4904,6 +5074,10 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
         return bodyNeobook(chapterUrl);
       case "novelight":
         return bodyNovelight(chapterUrl);
+      case "wntl":
+        return bodyWntl(chapterUrl);
+      case "novelnow":
+        return bodyNovelnow(chapterUrl);
 
       default:
         if (MAJOR_BODY_SELECTORS[key]) {
@@ -5032,6 +5206,52 @@ export async function fetchBookMeta(tocUrl) {
             .replace(/<[^>]+>/g, " ")
             .replace(/\s+/g, " ")
             .trim(),
+        };
+      }
+    }
+  } catch {
+    /* fall through to HTML scraping */
+  }
+  // WNTL series pages are client-side shells with no book meta in the HTML;
+  // take the meta from the same novels API the TOC parser uses.
+  try {
+    const host = new URL(tocUrl).hostname;
+    if (host.includes("wntl.net")) {
+      const id = new URL(tocUrl).pathname.split("/").filter(Boolean)[1];
+      const data = await getJson("https://wntl.net/api/novels");
+      const novel = (data?.novels || []).find((n) => n.id === id);
+      if (novel?.title) {
+        return {
+          title: novel.title,
+          author: novel.author || "",
+          cover: novel.cover ? `https://wntl.net${novel.cover}` : "",
+          description: String(novel.description || "").replace(/\s+/g, " ").trim(),
+        };
+      }
+    }
+  } catch {
+    /* fall through to HTML scraping */
+  }
+  // NovelNow story pages are client-side shells with no book meta in the HTML;
+  // take the meta from the detail API the TOC parser uses.
+  try {
+    const host = new URL(tocUrl).hostname;
+    if (host.includes("novelnow.com")) {
+      const story = new URL(tocUrl).pathname.split("/").filter(Boolean)[1] || "";
+      const id = story.split("_").pop();
+      const d = await getJson(
+        `https://api.lyramob.com/v1/detail/${encodeURIComponent(id)}?risk=5&country=us&product=novelfun`
+      );
+      const info = d?.data || {};
+      if (info?.name) {
+        const cover = info.cover
+          ? `https://s.lyramob.com/images/${String(info.cover).replace(/\.(jpg|gif)$/i, ".webp")}`
+          : "";
+        return {
+          title: info.name,
+          author: info.author || "",
+          cover,
+          description: String(info.description || "").replace(/\s+/g, " ").trim(),
         };
       }
     }

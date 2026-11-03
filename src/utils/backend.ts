@@ -38,7 +38,7 @@ export const BACKEND_SUPPORTED_HOSTS: readonly string[] = [
   'zenithtls.com',
 ];
 
-/** Domains reported live by the backend's /api/sites (178 entries). */
+/** Domains reported live by the backend's /api/sites (185 entries). */
 const SITES_CACHE_KEY = 'backend_sites_v1';
 let dynamicHosts: Set<string> | null = null;
 let dynamicHostsPromise: Promise<Set<string>> | null = null;
@@ -92,7 +92,7 @@ function matches(host: string, hosts: Iterable<string>): boolean {
   return false;
 }
 
-/** Synchronous check — returns true for any valid web URL. Backend handles all sites (178 site parsers + generic fallback). */
+/** Synchronous check — returns true for any valid web URL. Backend handles all sites (185 site parsers + generic fallback). */
 export function isBackendSupportedUrl(url: string): boolean {
   try {
     const u = new URL(url);
