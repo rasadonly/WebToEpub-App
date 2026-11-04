@@ -373,11 +373,14 @@ export async function startSpaceEpubJob(
   engine: string,
 ): Promise<{ spaceJobId: string; title: string; chapters: number; origName: string }> {
   const path = await uploadSpaceFile(file);
+  // Gradio 6 validates file inputs with meta: the dict must carry
+  // meta._type or the queue rejects it before the function runs.
   const fileData = {
     path,
     orig_name: file.name,
     size: file.size,
     mime_type: file.type || 'application/epub+zip',
+    meta: { _type: 'gradio.FileData' },
   };
   const outs = await callSpace('book_start_epub_job', [fileData, source, target, engine], 300_000);
   const id = String((outs && outs[0]) || '').trim();
