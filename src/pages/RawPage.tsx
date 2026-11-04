@@ -10,6 +10,7 @@ import {
   Search,
   BookOpen,
   Download,
+  Upload,
   X,
   AlertTriangle,
   CheckCircle2,
@@ -24,6 +25,7 @@ import {
   fetchSpaceToc,
   resolveJobTitle,
   startSpaceJob,
+  startSpaceEpubJob,
   trackOnServer,
   refreshSpaceJob,
   cancelSpaceJob,
@@ -91,6 +93,8 @@ export default function RawPage() {
   const [pickingEnd, setPickingEnd] = useState(false);
   const [job, setJob] = useState<SpaceJob | null>(null);
   const [starting, setStarting] = useState(false);
+  const [epubFile, setEpubFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
@@ -354,6 +358,68 @@ export default function RawPage() {
     }
   };
 
+  // Upload an EPUB file and translate it to English: the file goes
+  // to the Space, which parses it into chapters and runs the same
+  // job system as URL books (progress + download + public queue).
+  // Target is always English here, whatever the page's language
+  // selectors say — that is what the upload button promises.
+  const onUploadEpub = async () => {
+    if (!epubFile || uploading || jobActive) return;
+    if (!/\.epub$/i.test(epubFile.name)) {
+      setError('Please choose an .epub file.');
+      return;
+    }
+    setUploading(true);
+    setError('');
+    setNotice('');
+    try {
+      const existing = findDoneJobForUrl(`epub:${epubFile.name}`);
+      if (existing) {
+        setTrackedJob(existing);
+        setNotice('You already translated this EPUB in this browser — here is your English version.');
+        return;
+      }
+      const started = await startSpaceEpubJob(epubFile, 'auto', 'en', 'auto');
+      const created: SpaceJob = {
+        spaceJobId: started.spaceJobId,
+        title: started.title,
+        originalTitle: started.title,
+        tocUrl: `epub:${epubFile.name}`,
+        source: 'auto',
+        target: 'en',
+        from: 0,
+        to: -1,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        status: 'queued',
+        phase: 'Queued',
+        completed: 0,
+        total: started.chapters,
+        failed: 0,
+        failedChapters: [],
+      };
+      setTrackedJob(created);
+      pollJob(started.spaceJobId);
+      window.setTimeout(() => jobSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+      void Promise.race([
+        resolveJobTitle(started.title, 'auto', 'en', 'auto'),
+        new Promise<string>((r) => window.setTimeout(() => r(started.title), 20_000)),
+      ])
+        .catch(() => started.title)
+        .then((title) => {
+          trackOnServer(started.spaceJobId, title);
+          if (title && title !== started.title) {
+            const cur = jobRef.current;
+            if (cur && cur.spaceJobId === started.spaceJobId) setTrackedJob({ ...cur, title });
+          }
+        });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to start EPUB translation');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const onCancel = () => {
     if (!job) return;
     const next = cancelSpaceJob(job);
@@ -470,6 +536,37 @@ export default function RawPage() {
             <p className="mt-2.5 text-center text-xs">
               <Link to="/raw/jobs" className="text-primary hover:underline font-medium">See translations in progress</Link>
             </p>
+            <Card className="mt-6 w-full max-w-2xl mx-auto p-4 sm:p-6 bg-gradient-card shadow-card border-0 space-y-3">
+              <h2 className="text-base font-semibold flex items-center gap-2">
+                <Upload className="w-5 h-5 text-primary shrink-0" />
+                <span>Or upload an EPUB</span>
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Choose an EPUB file and get back an English EPUB, translated chapter by chapter.
+                Progress and download work like any other translation on this page.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm cursor-pointer hover:border-primary/60">
+                  <Upload className="w-4 h-4 text-primary" />
+                  <span className="max-w-[220px] truncate">{epubFile ? epubFile.name : 'Choose EPUB file…'}</span>
+                  <input
+                    type="file"
+                    accept=".epub,application/epub+zip"
+                    className="hidden"
+                    onChange={(e) => setEpubFile(e.target.files?.[0] ?? null)}
+                  />
+                </label>
+                <Button onClick={onUploadEpub} disabled={!epubFile || uploading || !!jobActive} className="bg-gradient-primary hover:shadow-glow transition-smooth shrink-0">
+                  {uploading ? (
+                    <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Uploading…</>
+                  ) : jobActive ? (
+                    'A translation is running…'
+                  ) : (
+                    'Upload & translate to English'
+                  )}
+                </Button>
+              </div>
+            </Card>
             {!tocTitle && !job && (
               <div className="mt-6 grid gap-3 sm:grid-cols-3 text-left">
                 {[

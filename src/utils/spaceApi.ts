@@ -343,6 +343,59 @@ export async function startSpaceJob(payload: {
   return id;
 }
 
+/** Upload a file to the Space (Gradio upload endpoint). Returns
+ * the server-side temp path the Space function reads. The Space
+ * parses the EPUB immediately at job start, so the temp file is
+ * not needed after that call. */
+export async function uploadSpaceFile(file: File): Promise<string> {
+  const form = new FormData();
+  form.append('files', file);
+  const res = await fetch(`${SPACE_URL}/gradio_api/upload`, {
+    method: 'POST',
+    body: form,
+    signal: AbortSignal.timeout(120_000),
+  });
+  if (!res.ok) throw new Error(`Space upload failed (${res.status})`);
+  const paths = (await res.json().catch(() => null)) as unknown;
+  const path = Array.isArray(paths) ? String(paths[0] || '') : '';
+  if (!path) throw new Error('Space upload returned no file path');
+  return path;
+}
+
+/** Start an EPUB translation job on the Space. The /raw upload
+ * button passes auto/en/auto: the uploaded EPUB comes back as
+ * an English EPUB. Returns the job id plus the EPUB's parsed
+ * title and chapter count from the Space. */
+export async function startSpaceEpubJob(
+  file: File,
+  source: string,
+  target: string,
+  engine: string,
+): Promise<{ spaceJobId: string; title: string; chapters: number; origName: string }> {
+  const path = await uploadSpaceFile(file);
+  const fileData = {
+    path,
+    orig_name: file.name,
+    size: file.size,
+    mime_type: file.type || 'application/epub+zip',
+  };
+  const outs = await callSpace('book_start_epub_job', [fileData, source, target, engine], 300_000);
+  const id = String((outs && outs[0]) || '').trim();
+  if (!id) throw new Error(`Failed to start EPUB job on the Space: ${String((outs && outs[1]) || '')}`);
+  let info: { title?: string; chapters?: number; orig_name?: string } = {};
+  try {
+    info = JSON.parse(String((outs && outs[2]) || '{}')) as typeof info;
+  } catch {
+    /* keep defaults */
+  }
+  return {
+    spaceJobId: id,
+    title: info.title || file.name.replace(/\.epub$/i, ''),
+    chapters: Number(info.chapters || 0),
+    origName: info.orig_name || file.name,
+  };
+}
+
 export interface SpaceProgress {
   status: SpaceJobStatus;
   phase: string;
