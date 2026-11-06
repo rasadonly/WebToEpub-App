@@ -460,6 +460,29 @@ export async function getSpaceEpubFile(
   return { url: full, filename: fileObj?.orig_name || `${spaceJobId}.epub` };
 }
 
+/** Re-run only a finished job's failed chapters, in place.
+ * Done chapters are never re-translated; the EPUB is rebuilt
+ * from all done chapters when the retry finishes. Returns the
+ * Space's status message. */
+export async function retryFailedChapters(spaceJobId: string): Promise<string> {
+  let outs: unknown[];
+  try {
+    outs = await callSpace('book_retry_failed', [spaceJobId], 120_000);
+  } catch (e) {
+    // Same stale fn_index cache as the queue: a browser that
+    // loaded the page before the Space gained the retry
+    // function retries once with a fresh map.
+    if (e instanceof Error && e.message.includes('has no function')) {
+      fnIndexCache = null;
+      fnIndexAt = 0;
+      outs = await callSpace('book_retry_failed', [spaceJobId], 120_000);
+    } else {
+      throw e;
+    }
+  }
+  return String((outs && outs[0]) || '');
+}
+
 /** Download an EPUB from a Space file URL in the browser. */
 /** Readable "<Title>.epub" name from a job title. */
 export function epubNameFor(title: string, fallback = 'book'): string {
@@ -515,6 +538,58 @@ export async function saveToLibrary(
     throw new Error(body && typeof body.error === 'string' ? body.error : `Library save failed (${r.status})`);
   }
   return body as { libraryUrl: string; libraryPageUrl?: string; path?: string };
+}
+
+/** Find a finished job's EPUB in the community library by
+ * title. The library is the durable copy: it survives Space
+ * restarts, so a finished public job stays downloadable from
+ * there even after its Space EPUB is gone. Matches by the
+ * same exact title key the server dedupes by (Unicode-aware:
+ * lowercase, drop every non-letter/non-digit — so "King's"
+ * and the slug "king_s" both key as "kings"), and picks the
+ * largest file when several copies share a title. Returns
+ * null when the book is not in the library yet. */
+let libraryIndexPromise: Promise<{ repo: string; f: [string, number | null][] }> | null = null;
+function libraryTitleKey(t: string): string {
+  return String(t || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+}
+function titleFromLibraryPath(p: string): string {
+  const file = String(p || '').split('/').pop() || '';
+  return file
+    .replace(/\.epub(\.txt)?$/i, '')
+    .replace(/-[a-z0-9]{6}$/i, '')
+    .replace(/[_-]+/g, ' ')
+    .trim();
+}
+export async function findLibraryCopy(title: string): Promise<{ url: string; filename: string } | null> {
+  const key = libraryTitleKey(title);
+  if (!key) return null;
+  if (!libraryIndexPromise) {
+    libraryIndexPromise = (async () => {
+      const r = await fetch(`${getBackendUrl().replace(/\/$/, '')}/api/library`, {
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!r.ok) throw new Error(`Library lookup failed (${r.status})`);
+      return r.json() as Promise<{ repo: string; f: [string, number | null][] }>;
+    })();
+    libraryIndexPromise.catch(() => {
+      libraryIndexPromise = null;
+    });
+  }
+  const idx = await libraryIndexPromise;
+  const repo = idx.repo || 'prasaduser/webtoepub-library';
+  let best: { path: string; size: number } | null = null;
+  for (const [p, size] of idx.f || []) {
+    if (!/\.epub$/i.test(p)) continue;
+    if (libraryTitleKey(titleFromLibraryPath(p)) !== key) continue;
+    const s = typeof size === 'number' ? size : 0;
+    if (!best || s > best.size) best = { path: p, size: s };
+  }
+  if (!best) return null;
+  return {
+    url: `https://huggingface.co/datasets/${repo}/resolve/main/${best.path}?download=true`,
+    filename: epubNameFor(title),
+  };
 }
 
 // ---- Job tracking, per browser (localStorage). The Space holds

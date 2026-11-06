@@ -10,6 +10,8 @@ import {
   epubNameFor,
   resolveJobTitle,
   getSpaceEpubFile,
+  findLibraryCopy,
+  retryFailedChapters,
   upsertSpaceJob,
   fetchPublicQueue,
   type SpaceJob,
@@ -29,6 +31,8 @@ export default function RawJobsPage() {
   const [queueError, setQueueError] = useState('');
   const [queueUpdatedAt, setQueueUpdatedAt] = useState(0);
   const [downloadingPublic, setDownloadingPublic] = useState<string | null>(null);
+  const [libraryLookup, setLibraryLookup] = useState<Record<string, 'loading' | 'missing'>>({});
+  const [retryingId, setRetryingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const jobsRef = useRef<SpaceJob[]>([]);
@@ -137,6 +141,52 @@ export default function RawJobsPage() {
     setJobsBoth(loadSpaceJobs());
   };
 
+  // Re-run only the failed chapters of a finished job, in
+  // place. The row flips back to running on the next refresh.
+  const onRetry = async (spaceJobId: string) => {
+    setRetryingId(spaceJobId);
+    try {
+      await retryFailedChapters(spaceJobId);
+      await refreshActive();
+      await loadQueue();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Retry failed');
+    } finally {
+      setRetryingId(null);
+    }
+  };
+
+  // A finished job's durable copy: the community library
+  // survives Space restarts, so it stays downloadable even
+  // after the Space EPUB is gone. Looked up by title on tap.
+  const onLibraryCopyPublic = async (q: PublicQueueJob) => {
+    setLibraryLookup((prev) => ({ ...prev, [q.job_id]: 'loading' }));
+    try {
+      const found = await findLibraryCopy(q.title);
+      if (!found) {
+        setLibraryLookup((prev) => ({ ...prev, [q.job_id]: 'missing' }));
+        return;
+      }
+      setLibraryLookup((prev) => {
+        const next = { ...prev };
+        delete next[q.job_id];
+        return next;
+      });
+      try {
+        await downloadSpaceEpub(found.url, found.filename);
+      } catch {
+        window.location.href = found.url;
+      }
+    } catch {
+      setLibraryLookup((prev) => {
+        const next = { ...prev };
+        delete next[q.job_id];
+        return next;
+      });
+      setError('Library lookup failed');
+    }
+  };
+
   // A finished job in the public queue belongs to nobody in
   // particular: resolve its EPUB from the Space by job id and
   // download it under its title. Not stored in this browser's
@@ -221,6 +271,17 @@ export default function RawJobsPage() {
                       <Download className="w-4 h-4 mr-1" /> Download EPUB
                     </Button>
                   )}
+                  {finished && job.failed > 0 && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void onRetry(job.spaceJobId)}
+                      disabled={retryingId === job.spaceJobId}
+                    >
+                      <RefreshCw className="w-4 h-4 mr-1" />
+                      {retryingId === job.spaceJobId ? 'Retrying…' : `Retry ${job.failed} failed`}
+                    </Button>
+                  )}
                   {job.libraryStatus === 'saved' && job.libraryUrl && (
                     <Button size="sm" variant="outline" onClick={() => void onLibraryCopy(job)}>
                       <Download className="w-4 h-4 mr-1" /> Library copy
@@ -244,7 +305,8 @@ export default function RawJobsPage() {
           <h2 className="text-lg font-bold">Public queue — all jobs on the Space</h2>
           <p className="text-muted-foreground text-sm">
             Every job currently translating or recently finished, from all users — active jobs first.
-            Finished jobs can be downloaded by anyone, right from this list.
+            Finished jobs can be downloaded by anyone, right from this list. The library copy is the
+            durable one: it survives Space restarts, while the Space EPUB does not.
             {queueUpdatedAt > 0 && (
               <> Last updated {new Date(queueUpdatedAt).toLocaleTimeString()} · refreshes every 10s.</>
             )}
@@ -284,17 +346,42 @@ export default function RawJobsPage() {
                       />
                     </div>
                   )}
-                  {finished && q.epub_ready && (
+                  {finished && (
                     <div className="flex flex-wrap gap-2">
+                      {q.epub_ready && (
+                        <Button
+                          size="sm"
+                          onClick={() => void onDownloadPublic(q)}
+                          disabled={downloadingPublic === q.job_id}
+                        >
+                          <Download className="w-4 h-4 mr-1" />
+                          {downloadingPublic === q.job_id ? 'Downloading…' : 'Download EPUB'}
+                        </Button>
+                      )}
                       <Button
                         size="sm"
-                        onClick={() => void onDownloadPublic(q)}
-                        disabled={downloadingPublic === q.job_id}
+                        variant="outline"
+                        onClick={() => void onLibraryCopyPublic(q)}
+                        disabled={libraryLookup[q.job_id] === 'loading'}
                       >
                         <Download className="w-4 h-4 mr-1" />
-                        {downloadingPublic === q.job_id ? 'Downloading…' : 'Download EPUB'}
+                        {libraryLookup[q.job_id] === 'loading' ? 'Finding…' : 'Library copy'}
                       </Button>
+                      {q.failed > 0 && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void onRetry(q.job_id)}
+                          disabled={retryingId === q.job_id}
+                        >
+                          <RefreshCw className="w-4 h-4 mr-1" />
+                          {retryingId === q.job_id ? 'Retrying…' : `Retry ${q.failed} failed`}
+                        </Button>
+                      )}
                     </div>
+                  )}
+                  {libraryLookup[q.job_id] === 'missing' && (
+                    <p className="text-xs text-muted-foreground">Not in the community library yet.</p>
                   )}
                 </li>
               );
