@@ -563,8 +563,10 @@ export function findDoneJobForUrl(tocUrl: string): SpaceJob | null {
 
 /** One row of the Space's public queue (book_list_jobs).
  * Deliberately minimal: no source URL, no error text, no
- * EPUB path — so a finished book's EPUB stays downloadable
- * only from the browser that started the job. */
+ * EPUB path. A finished job whose EPUB still exists on the
+ * Space carries epub_ready, and /raw/jobs offers it for
+ * download to anyone — jobs store no user identity, so
+ * there is nothing personal to protect by hiding it. */
 export interface PublicQueueJob {
   job_id: string;
   title: string;
@@ -575,6 +577,7 @@ export interface PublicQueueJob {
   percent: number;
   current_chapter: string;
   created_at: number;
+  epub_ready: boolean;
 }
 
 /** Every job on the Space, active first — the public queue. */

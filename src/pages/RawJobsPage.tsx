@@ -19,14 +19,16 @@ import {
 // /raw/jobs — two lists: jobs started in THIS browser (with
 // downloads and library status), and below them the Space's
 // public queue, so anyone can see what is translating right
-// now. Public rows never carry a download button: a finished
-// book's EPUB stays with the browser that started the job.
-// Active jobs and the queue both refresh every 10s.
+// now. A finished public job can be downloaded by anyone:
+// the Space resolves the EPUB through book_get_epub by job
+// id, and jobs store no user identity. Active jobs and the
+// queue both refresh every 10s.
 export default function RawJobsPage() {
   const [jobs, setJobs] = useState<SpaceJob[]>([]);
   const [queue, setQueue] = useState<PublicQueueJob[]>([]);
   const [queueError, setQueueError] = useState('');
   const [queueUpdatedAt, setQueueUpdatedAt] = useState(0);
+  const [downloadingPublic, setDownloadingPublic] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const jobsRef = useRef<SpaceJob[]>([]);
@@ -135,6 +137,22 @@ export default function RawJobsPage() {
     setJobsBoth(loadSpaceJobs());
   };
 
+  // A finished job in the public queue belongs to nobody in
+  // particular: resolve its EPUB from the Space by job id and
+  // download it under its title. Not stored in this browser's
+  // job list — it isn't one of our jobs.
+  const onDownloadPublic = async (q: PublicQueueJob) => {
+    setDownloadingPublic(q.job_id);
+    try {
+      const ep = await getSpaceEpubFile(q.job_id);
+      await downloadSpaceEpub(ep.url, epubNameFor(q.title));
+    } catch {
+      setError('Download failed');
+    } finally {
+      setDownloadingPublic(null);
+    }
+  };
+
   return (
     <div
       className="min-h-screen bg-background relative overflow-x-hidden"
@@ -226,7 +244,7 @@ export default function RawJobsPage() {
           <h2 className="text-lg font-bold">Public queue — all jobs on the Space</h2>
           <p className="text-muted-foreground text-sm">
             Every job currently translating or recently finished, from all users — active jobs first.
-            Downloads stay on your own jobs above; this list shows status only.
+            Finished jobs can be downloaded by anyone, right from this list.
             {queueUpdatedAt > 0 && (
               <> Last updated {new Date(queueUpdatedAt).toLocaleTimeString()} · refreshes every 10s.</>
             )}
@@ -238,6 +256,7 @@ export default function RawJobsPage() {
           <ul className="space-y-3">
             {queue.map((q) => {
               const active = ['queued', 'running'].includes(q.status);
+              const finished = ['done', 'done_with_errors'].includes(q.status);
               const mine = jobs.some((j) => j.spaceJobId === q.job_id);
               return (
                 <li key={q.job_id} className="bg-gradient-card shadow-card border-0 rounded-xl p-4 space-y-2">
@@ -263,6 +282,18 @@ export default function RawJobsPage() {
                         className="h-full bg-primary transition-all"
                         style={{ width: `${Math.min(100, q.percent)}%` }}
                       />
+                    </div>
+                  )}
+                  {finished && q.epub_ready && (
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => void onDownloadPublic(q)}
+                        disabled={downloadingPublic === q.job_id}
+                      >
+                        <Download className="w-4 h-4 mr-1" />
+                        {downloadingPublic === q.job_id ? 'Downloading…' : 'Download EPUB'}
+                      </Button>
                     </div>
                   )}
                 </li>
