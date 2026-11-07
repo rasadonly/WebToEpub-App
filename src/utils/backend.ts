@@ -243,6 +243,30 @@ async function api<T>(path: string, init?: RequestInit, timeoutMs = 60_000, base
   }
 }
 
+export interface LncrawlSearchResult {
+  title: string;
+  url: string;
+  chapters: number;
+  author: string;
+  language: string;
+  source: string;
+}
+
+/**
+ * Search the lncrawl catalogue (existing novels only — no cross-source
+ * search job) on the server. The server holds the lncrawl login, so
+ * this needs the backend to be up; it throws when it is not.
+ */
+export async function searchLncrawlBooks(
+  query: string,
+  limit = 10
+): Promise<LncrawlSearchResult[]> {
+  const data = await api<{ results: LncrawlSearchResult[] }>(
+    `/api/lncrawl/search?q=${encodeURIComponent(query)}&limit=${limit}`
+  );
+  return data?.results || [];
+}
+
 async function pingBackend(base: string, timeoutMs = 15_000): Promise<boolean> {
   const ctrl = new AbortController();
   const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);

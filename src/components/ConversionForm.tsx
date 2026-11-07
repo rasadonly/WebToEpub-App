@@ -13,7 +13,7 @@ import { BookOpen, Globe, Settings, Hash, Type, List, Search, Sparkles, ArrowRig
 import { engineSearch, cancelSearch, engineLoadMetadata, EngineSearchResult } from '@/utils/webtoepub/bridge';
 import LibrarySuggestion from './LibrarySuggestion';
 import { normalizeBookSearch } from '@/utils/librarySearch';
-import { backendToc, isBackendEnabled } from '@/utils/backend';
+import { backendToc, isBackendEnabled, searchLncrawlBooks } from '@/utils/backend';
 import { LiveStats } from '@/components/LiveStats';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 
@@ -326,25 +326,54 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
     const currentQuery = query;
     try {
       const seen = new Set<string>();
-      await engineSearch(
-        query,
-        (partial) => {
-          setSearchResults(prev => {
-            const merged = [...prev];
-            for (const r of partial) {
-              if (!seen.has(r.url)) {
-                seen.add(r.url);
-                merged.push(r);
-              }
+      const mergeLncrawl = (items: { title: string; url: string; chapters: number; author: string; source: string }[]) => {
+        if (!items.length) return;
+        const mapped: EngineSearchResult[] = items.map((n) => ({
+          title: n.title,
+          url: n.url,
+          source: 'lncrawl.bitanon.dev',
+          snippet: [n.author, n.chapters ? `${n.chapters} chapters` : '', n.source]
+            .filter(Boolean)
+            .join(' · '),
+        }));
+        setSearchResults(prev => {
+          const merged = [...prev];
+          for (const r of mapped) {
+            if (!seen.has(r.url)) {
+              seen.add(r.url);
+              merged.push(r);
             }
-            return rankResults(merged, currentQuery);
-          });
-        },
-        (site, status, progress) => {
-          if (progress) setSearchProgress({ done: progress.done, total: progress.total });
-          setSearchStatus(`${site}: ${status}`);
-        }
-      );
+          }
+          return rankResults(merged, currentQuery);
+        });
+      };
+      // Lncrawl catalogue search (existing novels only) runs alongside
+      // the engine search; a failure here must not break the main search.
+      const lncrawlPromise = isBackendEnabled()
+        ? searchLncrawlBooks(query, 10).then(mergeLncrawl).catch(() => {})
+        : Promise.resolve();
+      await Promise.all([
+        engineSearch(
+          query,
+          (partial) => {
+            setSearchResults(prev => {
+              const merged = [...prev];
+              for (const r of partial) {
+                if (!seen.has(r.url)) {
+                  seen.add(r.url);
+                  merged.push(r);
+                }
+              }
+              return rankResults(merged, currentQuery);
+            });
+          },
+          (site, status, progress) => {
+            if (progress) setSearchProgress({ done: progress.done, total: progress.total });
+            setSearchStatus(`${site}: ${status}`);
+          }
+        ),
+        lncrawlPromise,
+      ]);
       setSearchStatus('');
     } catch (err) {
       if (err instanceof Error && err.message === '__cancelled__') {
