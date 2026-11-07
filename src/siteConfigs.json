@@ -581,6 +581,16 @@
       ".long-text"
     ]
   },
+  "lncrawl.bitanon.dev": {
+    "parser": "LncrawlParser",
+    "toc": [
+      "a[href*='/read/']"
+    ],
+    "content": [
+      "article",
+      "main"
+    ]
+  },
   "lnmtl.com": {
     "parser": "LnmtlParser",
     "toc": [
