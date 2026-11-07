@@ -225,10 +225,38 @@ export async function writeChapterFile(file, chapter) {
 }
 
 /**
- * Counts the chapters (spine documents) of an EPUB held in a Buffer.
- * Returns 0 when the file cannot be read as an EPUB — callers must treat 0
- * as "unknown", never as a real chapter count.
+ * Reads the dc:title of an EPUB held in a Buffer. Returns null when
+ * the file cannot be read or carries no usable title — callers must
+ * fall back to their own title, never fail over this.
  */
+export async function epubTitle(buffer) {
+  try {
+    const zip = await JSZip.loadAsync(buffer);
+    let opfPath = "OEBPS/content.opf";
+    const container = zip.file("META-INF/container.xml");
+    if (container) {
+      const xml = await container.async("string");
+      const m = xml.match(/full-path="([^"]+)"/);
+      if (m) opfPath = m[1];
+    }
+    const opf = zip.file(opfPath);
+    if (!opf) return null;
+    const xml = await opf.async("string");
+    const m = xml.match(/<dc:title[^>]*>([\s\S]*?)<\/dc:title>/i);
+    if (!m) return null;
+    const title = m[1]
+      .replace(/<[^>]*>/g, "")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;|&apos;/g, "'")
+      .trim();
+    return title || null;
+  } catch {
+    return null;
+  }
+}
 export async function countEpubChapters(buffer) {
   try {
     const zip = await JSZip.loadAsync(buffer);

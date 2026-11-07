@@ -22,7 +22,7 @@ import {
   searchLncrawl,
   lncrawlAuthHeader,
 } from "./fetcher.js";
-import { buildEpub, sanitizeFilename, writeChapterFile, countEpubChapters } from "./epub.js";
+import { buildEpub, sanitizeFilename, writeChapterFile, countEpubChapters, epubTitle } from "./epub.js";
 import { createWorkPool, DEFAULT_MAX_ACTIVE_JOBS } from "./workPool.js";
 import { uploadToLibrary, libraryEnabled, deleteFromLibrary, downloadFromLibrary } from "./library.js";
 import { sendEpub } from "./download.js";
@@ -963,8 +963,21 @@ async function saveSpaceEpub(spaceFileUrl, title) {
   if (buffer.length < 4 || buffer[0] !== 0x50 || buffer[1] !== 0x4b || buffer[2] !== 0x03 || buffer[3] !== 0x04) {
     throw Object.assign(new Error("spaceFileUrl did not return an EPUB file"), { status: 400 });
   }
-  const filename = `${sanitizeFilename(title || "book")}.epub`;
-  const up = await uploadToLibrary(buffer, filename, { title });
+  // Name the library copy by the EPUB's own title — the title the
+  // Space queue and the EPUB itself carry — not the title the
+  // browser stored when the job started. The start-time title is
+  // the raw translated page title and can be a different
+  // translation of the same book (e.g. "The Sentiments of a Young
+  // Girl Are Always Poetry..." vs "A Girl's Feelings Are Always
+  // Poetic..."), which made the file unfindable by title lookup.
+  // Falls back to the passed title when the EPUB carries none, so
+  // a save never fails over this. Covers both callers (the browser
+  // library-save endpoint and the server-side tracker) — they both
+  // funnel through here.
+  const epubTitleText = await epubTitle(buffer);
+  const finalTitle = (epubTitleText || title || "book").trim() || "book";
+  const filename = `${sanitizeFilename(finalTitle)}.epub`;
+  const up = await uploadToLibrary(buffer, filename, { title: finalTitle });
   return { libraryUrl: up.url, libraryPageUrl: up.pageUrl, path: up.path };
 }
 
