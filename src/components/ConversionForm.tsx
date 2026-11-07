@@ -164,7 +164,9 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
         const value = info[key];
         if (!value) return;
         const current = prev[key];
-        if (!current || current === autoFilledRef.current[key]) {
+        // 'Unknown Author' is the default placeholder, not a user edit,
+        // so a real author from the server/parser must replace it.
+        if (!current || current === autoFilledRef.current[key] || current === 'Unknown Author') {
           (next[key] as string) = value as string;
           (autoFilledRef.current[key] as string) = value as string;
         }
@@ -192,13 +194,22 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
     }
     setIsAnalysing(true);
     try {
-      // NovGo's analysis already fetches its entire TOC. Reuse the server
-      // result for the following chapter fetch instead of loading both engines.
+      // NovGo's and Lncrawl's analysis already fetches the entire TOC.
+      // Reuse the server result for the following chapter fetch instead
+      // of loading both engines. The server meta (title/author/cover)
+      // is the reliable source here — the browser parser's metadata
+      // for these SPA/API sites is flaky.
       let info;
-      if (isBackendEnabled() && /(^|\.)novgo\.(net|com|org)$/i.test(new URL(url).hostname)) {
+      const host = new URL(url).hostname;
+      const useServerToc =
+        isBackendEnabled() &&
+        (/(^|\.)novgo\.(net|com|org)$/i.test(host) ||
+          host === 'lncrawl.bitanon.dev' ||
+          host.endsWith('.lncrawl.bitanon.dev'));
+      if (useServerToc) {
         try {
           const result = await backendToc(url, getSiteConfig(url)?.tocSelector || tocSelector);
-          if (!result.chapters.length) throw new Error('No NovGo chapters found');
+          if (!result.chapters.length) throw new Error('No chapters found');
           info = {
             ...result.meta,
             title: result.meta.title || extractTitleFromUrl(url),
