@@ -230,7 +230,21 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
         fileName: info.fileName || '',
         coverUrl: info.coverUrl || '',
       });
-      if (!silent) {
+      // Most lncrawl catalogue novels list chapters that were never
+      // fetched — the chapter list exists but there is no readable
+      // content. Warn clearly instead of letting the user convert
+      // an empty book.
+      const lncrawlNoContent =
+        (host === 'lncrawl.bitanon.dev' || host.endsWith('.lncrawl.bitanon.dev')) &&
+        (info as Record<string, unknown>).hasContent === false;
+      if (lncrawlNoContent) {
+        toast({
+          title: 'No chapters fetched yet on lncrawl',
+          description:
+            'This novel lists chapters, but none of them have been fetched on lncrawl.bitanon.dev yet, so there is nothing to convert. Open it there and fetch the chapters first, then try again.',
+          variant: 'destructive',
+        });
+      } else if (!silent) {
         toast({
           title: 'Metadata loaded',
           description: info.title ? `Detected: ${info.title}` : 'Fields populated from the page.',

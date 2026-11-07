@@ -1134,6 +1134,23 @@ export async function searchLncrawl(query, limit = 10) {
 
 async function lncrawlNovelMeta(novelId) {
   const n = await lncrawlGet(`/novel/${novelId}`);
+  // Most catalogue novels list chapters that were never crawled
+  // (is_available=false), so the chapter list exists but there is no
+  // readable content. Check the first chapter so the caller can warn
+  // the user instead of letting them convert an empty book.
+  let hasContent = null;
+  try {
+    const c = await Promise.race([
+      lncrawlGet(`/novel/${novelId}/chapters?offset=0&limit=1`),
+      new Promise((_, rej) =>
+        setTimeout(() => rej(new Error("check timeout")), 5000)
+      ),
+    ]);
+    const first = (c?.items || [])[0];
+    hasContent = first ? first.is_available === true : null;
+  } catch {
+    hasContent = null;
+  }
   return {
     title: n?.title || "",
     author: n?.authors || "",
@@ -1142,6 +1159,10 @@ async function lncrawlNovelMeta(novelId) {
       .replace(/<[^>]+>/g, " ")
       .replace(/\s+/g, " ")
       .trim(),
+    // true = first chapter has content (novel is crawled/usable),
+    // false = first chapter has no content (bare listing, not fetched),
+    // null = could not check.
+    hasContent,
   };
 }
 
@@ -1150,7 +1171,6 @@ async function tocLncrawl(url) {
   if (!novelId)
     throw new Error("Lncrawl: could not read the novel id from the URL");
   const items = [];
-  let available = 0;
   let offset = 0;
   const limit = 100;
   for (;;) {
@@ -1160,9 +1180,6 @@ async function tocLncrawl(url) {
     const chaps = data?.items || [];
     for (const ch of chaps) {
       if (!ch?.id) continue;
-      // is_available = the chapter text was actually crawled and is on
-      // disk. Most catalogue novels list chapters that were never fetched.
-      if (ch.is_available === true) available++;
       items.push({
         url: `https://lncrawl.bitanon.dev/read/${ch.id}`,
         title: ch.title || `Chapter ${ch.serial ?? items.length + 1}`,
@@ -1177,13 +1194,6 @@ async function tocLncrawl(url) {
   }
   if (!items.length)
     throw new Error("Lncrawl: no chapters found for this novel");
-  // A novel whose chapters were never fetched has a full chapter list but
-  // zero readable content — converting it would produce an empty EPUB.
-  // Fail here with a clear, actionable message instead.
-  if (available === 0)
-    throw new Error(
-      `Lncrawl: this novel's chapters haven't been fetched yet (0 of ${items.length} chapters have content). Open it on lncrawl.bitanon.dev and fetch the chapters first, then try again.`
-    );
   return items;
 }
 
