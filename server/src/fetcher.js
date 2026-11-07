@@ -1033,6 +1033,146 @@ async function tocNovelBuddy(url) {
     }));
 }
 
+// --- Lightnovel Crawler (lncrawl.bitanon.dev): existing catalogue only.
+// The instance is a hosted Lightnovel Crawler (FastAPI + React SPA), so
+// TOC/chapters come from its REST API, not from HTML — the pages are
+// client-side shells. Auth is HTTP Basic (email + password) from the
+// Heroku config vars LNCRAWL_EMAIL / LNCRAWL_PASSWORD; the backend
+// accepts Basic auth and it never expires (unlike the 7-day JWT).
+// ONLY the existing catalogue (/api/novels) is used — the slow
+// cross-source search job is never started. Chapter text comes from
+// GET /api/chapter/{id}/read (plain prose or HTML, handled both ways).
+const LNCRAWL_API = "https://lncrawl.bitanon.dev/api";
+
+export function lncrawlAuthHeader() {
+  const email = (process.env.LNCRAWL_EMAIL || "").trim();
+  const password = (process.env.LNCRAWL_PASSWORD || "").trim();
+  if (!email || !password) return null;
+  return (
+    "Basic " +
+    Buffer.from(`${email}:${password}`, "utf8").toString("base64")
+  );
+}
+
+async function lncrawlGet(path) {
+  const auth = lncrawlAuthHeader();
+  if (!auth) {
+    throw new Error(
+      "Lncrawl: set LNCRAWL_EMAIL and LNCRAWL_PASSWORD in the server config to fetch from lncrawl.bitanon.dev"
+    );
+  }
+  const res = await fetch(`${LNCRAWL_API}${path}`, {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+      Accept: "application/json",
+      Authorization: auth,
+    },
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!res.ok) throw new Error(`Lncrawl API HTTP ${res.status} for ${path}`);
+  return res.json();
+}
+
+function lncrawlNovelId(url) {
+  const m = String(url || "").match(/\/novel\/([0-9a-f-]{36})/i);
+  return m ? m[1] : null;
+}
+
+function lncrawlChapterId(url) {
+  const m = String(url || "").match(/\/read\/([0-9a-f-]{36})/i);
+  return m ? m[1] : null;
+}
+
+/** Search the existing catalogue only (no cross-source search job). */
+export async function searchLncrawl(query, limit = 10) {
+  const q = String(query || "").trim();
+  if (!q) return [];
+  const data = await lncrawlGet(
+    `/novels?search=${encodeURIComponent(q)}&offset=0&limit=${limit}&sort=updated`
+  );
+  return (data?.items || []).map((n) => ({
+    title: n?.title || "",
+    url: n?.id ? `https://lncrawl.bitanon.dev/novel/${n.id}` : n?.url || "",
+    chapters: typeof n?.chapter_count === "number" ? n.chapter_count : 0,
+    author: n?.authors || "",
+    language: n?.language || "",
+    source: n?.domain || "",
+  }));
+}
+
+async function lncrawlNovelMeta(novelId) {
+  const n = await lncrawlGet(`/novel/${novelId}`);
+  return {
+    title: n?.title || "",
+    author: n?.authors || "",
+    cover: n?.cover_url || "",
+    description: String(n?.synopsis || "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim(),
+  };
+}
+
+async function tocLncrawl(url) {
+  const novelId = lncrawlNovelId(url);
+  if (!novelId)
+    throw new Error("Lncrawl: could not read the novel id from the URL");
+  const items = [];
+  let offset = 0;
+  const limit = 100;
+  for (;;) {
+    const data = await lncrawlGet(
+      `/novel/${novelId}/chapters?offset=${offset}&limit=${limit}`
+    );
+    const chaps = data?.items || [];
+    for (const ch of chaps) {
+      if (!ch?.id) continue;
+      items.push({
+        url: `https://lncrawl.bitanon.dev/read/${ch.id}`,
+        title: ch.title || `Chapter ${ch.serial ?? items.length + 1}`,
+        _num: typeof ch.serial === "number" ? ch.serial : items.length + 1,
+      });
+    }
+    offset += chaps.length;
+    const total = typeof data?.total === "number" ? data.total : null;
+    if (chaps.length === 0) break;
+    if (total !== null && offset >= total) break;
+    if (total === null && chaps.length < limit) break;
+  }
+  if (!items.length)
+    throw new Error("Lncrawl: no chapters found for this novel");
+  return items;
+}
+
+function lncrawlTextToHtml(text) {
+  const esc = String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  return esc
+    .split(/\n\s*\n/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => `<p>${p.replace(/\n/g, "<br>")}</p>`)
+    .join("");
+}
+
+async function bodyLncrawl(url) {
+  const chapterId = lncrawlChapterId(url);
+  if (!chapterId)
+    throw new Error("Lncrawl: could not read the chapter id from the URL");
+  const data = await lncrawlGet(`/chapter/${chapterId}/read`);
+  const content = data?.content || "";
+  if (!content.trim())
+    throw new Error(
+      "Lncrawl: this chapter has no readable content yet — open it once in the lncrawl reader, or use Fetch Latest on the novel page, then try again"
+    );
+  // The API returns either HTML (with <p>/<br>) or plain prose text.
+  if (/<(p|br|div|span)[\s>]/.test(content)) return sanitizeHtml(content);
+  return lncrawlTextToHtml(content);
+}
+
 // --- CrescentMoon: the TOC is prose, not a chapter list. Headings read
 // "Chapter N : title" and are followed by Part links (or, for single-part
 // chapters, the heading itself is the link). The generic sweep returned
@@ -4712,6 +4852,7 @@ export function siteKey(hostname) {
   if (host.includes("mtl-novel.com")) return "mtlnovelcom";
   if (host.includes("wntl.net")) return "wntl";
   if (host.includes("novelnow.com")) return "novelnow";
+  if (host.includes("lncrawl.bitanon.dev")) return "lncrawl";
 
   for (const [re, key] of MAJOR_SITES) {
     if (re.test(host)) return key;
@@ -4761,6 +4902,8 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         return tocNovGo(tocUrl);
       case "novelbuddy":
         return tocNovelBuddy(tocUrl);
+      case "lncrawl":
+        return tocLncrawl(tocUrl);
       case "crescentmoon":
         return tocCrescentMoon(tocUrl);
       case "novelarrow":
@@ -5025,6 +5168,8 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
         return bodyNovGo(chapterUrl);
       case "novelbuddy":
         return bodyNovelBuddy(chapterUrl);
+      case "lncrawl":
+        return bodyLncrawl(chapterUrl);
       case "crescentmoon":
         return bodyGeneric(chapterUrl, ".entry-content");
       case "novelarrow":
@@ -5211,6 +5356,20 @@ export async function fetchBookMeta(tocUrl) {
             .replace(/\s+/g, " ")
             .trim(),
         };
+      }
+    }
+  } catch {
+    /* fall through to HTML scraping */
+  }
+  // Lncrawl pages are client-side shells with no book meta in the HTML;
+  // take the meta from the same API the TOC parser uses.
+  try {
+    const host = new URL(tocUrl).hostname;
+    if (host.includes("lncrawl.bitanon.dev")) {
+      const novelId = lncrawlNovelId(tocUrl);
+      if (novelId) {
+        const meta = await lncrawlNovelMeta(novelId);
+        if (meta.title) return meta;
       }
     }
   } catch {

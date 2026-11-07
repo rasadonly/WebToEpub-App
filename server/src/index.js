@@ -19,6 +19,8 @@ import {
   smartGetText,
   siteKey,
   detectChapterSelectors,
+  searchLncrawl,
+  lncrawlAuthHeader,
 } from "./fetcher.js";
 import { buildEpub, sanitizeFilename, writeChapterFile, countEpubChapters } from "./epub.js";
 import { createWorkPool, DEFAULT_MAX_ACTIVE_JOBS } from "./workPool.js";
@@ -283,6 +285,24 @@ app.get("/api/sites/lookup", (req, res) => {
   res.json({ hostname, config: lookupSiteConfig(hostname) });
 });
 
+// Search the lncrawl catalogue (existing novels only — no cross-source
+// search job). Uses the server-held lncrawl login (LNCRAWL_EMAIL /
+// LNCRAWL_PASSWORD in the server config).
+app.get("/api/lncrawl/search", async (req, res) => {
+  try {
+    const q = String(req.query.q || "").trim();
+    if (!q) return res.status(400).json({ error: "q required" });
+    const limit = Math.min(
+      Math.max(parseInt(String(req.query.limit || "10"), 10) || 10, 1),
+      50
+    );
+    const results = await searchLncrawl(q, limit);
+    res.json({ results });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 
 // ── CORS proxy ────────────────────────────────────────────────────────────────
 // The browser can't fetch most novel sites directly due to CORS restrictions.
@@ -305,6 +325,17 @@ app.get("/api/proxy", async (req, res) => {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 8000);
   try {
+    // Lncrawl's API needs auth; the server holds the login (Heroku
+    // config), so inject it here for the browser engine's parser calls.
+    // The credential never reaches the browser.
+    let lncrawlAuth = null;
+    try {
+      if (new URL(target).hostname === "lncrawl.bitanon.dev") {
+        lncrawlAuth = lncrawlAuthHeader();
+      }
+    } catch {
+      /* invalid url already handled above */
+    }
     const upstream = await fetch(target, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -322,6 +353,7 @@ app.get("/api/proxy", async (req, res) => {
         "Sec-Ch-Ua-Mobile": "?0",
         "Sec-Ch-Ua-Platform": '"Windows"',
         ...(req.headers["x-proxy-cookie"] ? { Cookie: String(req.headers["x-proxy-cookie"]) } : {}),
+        ...(lncrawlAuth ? { Authorization: lncrawlAuth } : {}),
       },
       redirect: "follow",
       signal: ctrl.signal,
