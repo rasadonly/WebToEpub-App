@@ -561,6 +561,35 @@ function titleFromLibraryPath(p: string): string {
     .replace(/[_-]+/g, ' ')
     .trim();
 }
+/** The server's filename pipeline for a library save
+ * (server/src/epub.js sanitizeFilename + server/src/library.js
+ * slug): a job title becomes the stored file's base name.
+ * Long titles are cut to 80 chars, so the stored base can be a
+ * prefix of the title — the exact title key above then fails
+ * even though it is the same book. Mirrored here so the lookup
+ * compares what the server actually stored. */
+function librarySlugBase(title: string): string {
+  const sanitized =
+    String(title || 'book')
+      .replace(/[<>:\"/\\|?*]/g, '_')
+      .replace(/\s+/g, '_')
+      .toLowerCase() || 'book';
+  return (
+    sanitized
+      .normalize('NFKD')
+      .replace(/[^\p{L}\p{N}_\s.-]+/gu, '')
+      .trim()
+      .replace(/\s+/g, '-')
+      .replace(/-{2,}/g, '-')
+      .slice(0, 80) || 'book'
+  );
+}
+/** A stored library file's base name (without the -<rand6>
+ * suffix the server appends and the extension). */
+function libraryStoredBase(p: string): string {
+  const file = String(p || '').split('/').pop() || '';
+  return file.replace(/\.epub(\.txt)?$/i, '').replace(/-[a-z0-9]{6}$/i, '');
+}
 export async function findLibraryCopy(title: string): Promise<{ url: string; filename: string } | null> {
   const key = libraryTitleKey(title);
   if (!key) return null;
@@ -578,10 +607,14 @@ export async function findLibraryCopy(title: string): Promise<{ url: string; fil
   }
   const idx = await libraryIndexPromise;
   const repo = idx.repo || 'prasaduser/webtoepub-library';
+  const wantSlug = librarySlugBase(title);
   let best: { path: string; size: number } | null = null;
   for (const [p, size] of idx.f || []) {
     if (!/\.epub$/i.test(p)) continue;
-    if (libraryTitleKey(titleFromLibraryPath(p)) !== key) continue;
+    // Exact title key first (short titles, older names); the
+    // slug-base match second (long titles cut to 80 chars by
+    // the server, so the stored base is a prefix of the title).
+    if (libraryTitleKey(titleFromLibraryPath(p)) !== key && libraryStoredBase(p) !== wantSlug) continue;
     const s = typeof size === 'number' ? size : 0;
     if (!best || s > best.size) best = { path: p, size: s };
   }
