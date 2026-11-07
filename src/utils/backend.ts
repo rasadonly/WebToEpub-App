@@ -250,6 +250,10 @@ export interface LncrawlSearchResult {
   author: string;
   language: string;
   source: string;
+  // true = first chapter has content (novel is crawled/usable),
+  // false = first chapter has no content (bare listing, not fetched),
+  // null/undefined = could not check.
+  hasContent?: boolean | null;
 }
 
 /**

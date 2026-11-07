@@ -337,13 +337,21 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
     const currentQuery = query;
     try {
       const seen = new Set<string>();
-      const mergeLncrawl = (items: { title: string; url: string; chapters: number; author: string; source: string }[]) => {
+      const mergeLncrawl = (items: { title: string; url: string; chapters: number; author: string; source: string; hasContent?: boolean | null }[]) => {
         if (!items.length) return;
         const mapped: EngineSearchResult[] = items.map((n) => ({
           title: n.title,
           url: n.url,
           source: 'lncrawl.bitanon.dev',
-          snippet: [n.author, n.chapters ? `${n.chapters} chapters` : '', n.source]
+          snippet: [
+            n.author,
+            n.chapters ? `${n.chapters} chapters` : '',
+            // Most catalogue novels list chapters that were never fetched;
+            // flag the bare listings so the user can tell them apart from
+            // novels that actually have readable chapters.
+            n.hasContent === false ? 'no chapters fetched yet' : '',
+            n.source,
+          ]
             .filter(Boolean)
             .join(' · '),
         }));

@@ -1091,14 +1091,45 @@ export async function searchLncrawl(query, limit = 10) {
   const data = await lncrawlGet(
     `/novels?search=${encodeURIComponent(q)}&offset=0&limit=${limit}&sort=updated`
   );
-  return (data?.items || []).map((n) => ({
-    title: n?.title || "",
-    url: n?.id ? `https://lncrawl.bitanon.dev/novel/${n.id}` : n?.url || "",
-    chapters: typeof n?.chapter_count === "number" ? n.chapter_count : 0,
-    author: n?.authors || "",
-    language: n?.language || "",
-    source: n?.domain || "",
-  }));
+  const novels = data?.items || [];
+  // A catalogue entry only lists chapters; the content may never have been
+  // crawled (is_available=false), so most novels are bare listings with no
+  // readable chapters. Check the first chapter of each novel so the caller
+  // can tell a usable novel from a bare listing. One small parallel call
+  // per novel (5s cap each); a failure/timeout means "unknown", not "no".
+  const checks = await Promise.allSettled(
+    novels.map(async (n) => {
+      if (!n?.id) return null;
+      try {
+        const c = await Promise.race([
+          lncrawlGet(`/novel/${n.id}/chapters?offset=0&limit=1`),
+          new Promise((_, rej) =>
+            setTimeout(() => rej(new Error("check timeout")), 5000)
+          ),
+        ]);
+        const first = (c?.items || [])[0];
+        return first ? first.is_available === true : null;
+      } catch {
+        return null;
+      }
+    })
+  );
+  return novels.map((n, i) => {
+    const hasContent =
+      checks[i]?.status === "fulfilled" ? checks[i].value : null;
+    return {
+      title: n?.title || "",
+      url: n?.id ? `https://lncrawl.bitanon.dev/novel/${n.id}` : n?.url || "",
+      chapters: typeof n?.chapter_count === "number" ? n.chapter_count : 0,
+      author: n?.authors || "",
+      language: n?.language || "",
+      source: n?.domain || "",
+      // true = first chapter has content (novel is crawled/usable),
+      // false = first chapter has no content (bare listing, not fetched),
+      // null = could not check.
+      hasContent,
+    };
+  });
 }
 
 async function lncrawlNovelMeta(novelId) {
@@ -1119,6 +1150,7 @@ async function tocLncrawl(url) {
   if (!novelId)
     throw new Error("Lncrawl: could not read the novel id from the URL");
   const items = [];
+  let available = 0;
   let offset = 0;
   const limit = 100;
   for (;;) {
@@ -1128,6 +1160,9 @@ async function tocLncrawl(url) {
     const chaps = data?.items || [];
     for (const ch of chaps) {
       if (!ch?.id) continue;
+      // is_available = the chapter text was actually crawled and is on
+      // disk. Most catalogue novels list chapters that were never fetched.
+      if (ch.is_available === true) available++;
       items.push({
         url: `https://lncrawl.bitanon.dev/read/${ch.id}`,
         title: ch.title || `Chapter ${ch.serial ?? items.length + 1}`,
@@ -1142,6 +1177,13 @@ async function tocLncrawl(url) {
   }
   if (!items.length)
     throw new Error("Lncrawl: no chapters found for this novel");
+  // A novel whose chapters were never fetched has a full chapter list but
+  // zero readable content — converting it would produce an empty EPUB.
+  // Fail here with a clear, actionable message instead.
+  if (available === 0)
+    throw new Error(
+      `Lncrawl: this novel's chapters haven't been fetched yet (0 of ${items.length} chapters have content). Open it on lncrawl.bitanon.dev and fetch the chapters first, then try again.`
+    );
   return items;
 }
 
