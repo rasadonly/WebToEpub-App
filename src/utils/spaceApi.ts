@@ -584,12 +584,6 @@ function librarySlugBase(title: string): string {
       .slice(0, 80) || 'book'
   );
 }
-/** A stored library file's base name (without the -<rand6>
- * suffix the server appends and the extension). */
-function libraryStoredBase(p: string): string {
-  const file = String(p || '').split('/').pop() || '';
-  return file.replace(/\.epub(\.txt)?$/i, '').replace(/-[a-z0-9]{6}$/i, '');
-}
 export async function findLibraryCopy(title: string): Promise<{ url: string; filename: string } | null> {
   const key = libraryTitleKey(title);
   if (!key) return null;
@@ -614,7 +608,11 @@ export async function findLibraryCopy(title: string): Promise<{ url: string; fil
     // Exact title key first (short titles, older names); the
     // slug-base match second (long titles cut to 80 chars by
     // the server, so the stored base is a prefix of the title).
-    if (libraryTitleKey(titleFromLibraryPath(p)) !== key && libraryStoredBase(p) !== wantSlug) continue;
+    // Both sides are compared by title key, so the two naming
+    // styles the server produces (underscores/lowercase from
+    // library-save, hyphens/title-case from a share) match.
+    const storedKey = libraryTitleKey(titleFromLibraryPath(p));
+    if (storedKey !== key && storedKey !== libraryTitleKey(wantSlug)) continue;
     const s = typeof size === 'number' ? size : 0;
     if (!best || s > best.size) best = { path: p, size: s };
   }
