@@ -9,7 +9,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { SUPPORTED_SITES, getSiteConfig, extractDomain } from '@/utils/siteConfigs';
 import { NovelSite, EpubMetadata } from '@/types';
-import { BookOpen, Globe, Settings, Hash, Type, List, Search, Sparkles, ArrowRight, ExternalLink, X, BookOpenCheck, MoreVertical, Library as LibraryIcon, BookMarked, Download, MessagesSquare, Wand2 } from 'lucide-react';
+import { BookOpen, Globe, Settings, Hash, Type, List, Search, Sparkles, ArrowRight, ExternalLink, X, BookOpenCheck, MoreVertical, Library as LibraryIcon, BookMarked, Download, MessagesSquare, Wand2, AlertTriangle } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { engineSearch, cancelSearch, engineLoadMetadata, EngineSearchResult } from '@/utils/webtoepub/bridge';
 import LibrarySuggestion from './LibrarySuggestion';
 import { normalizeBookSearch } from '@/utils/librarySearch';
@@ -121,6 +122,10 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
 
   // "Load & Analyse" state — auto-fetches book metadata like WebToEpub
   const [isAnalysing, setIsAnalysing] = useState(false);
+  // Persistent flag for lncrawl books with no fetched chapters. The toast
+  // warning for these vanishes after ~5s and never re-fires on Refetch,
+  // so the banner below is the warning that stays until the URL changes.
+  const [lncrawlNoContent, setLncrawlNoContent] = useState(false);
   // Remembers what auto-fill wrote, so we never clobber a value the user typed.
   const autoFilledRef = useRef<Partial<EpubMetadata>>({});
   const analysedUrlRef = useRef<string>('');
@@ -193,6 +198,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
       return;
     }
     setIsAnalysing(true);
+    setLncrawlNoContent(false);
     try {
       // NovGo's and Lncrawl's analysis already fetches the entire TOC.
       // Reuse the server result for the following chapter fetch instead
@@ -238,6 +244,10 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
         (host === 'lncrawl.bitanon.dev' || host.endsWith('.lncrawl.bitanon.dev')) &&
         (info as Record<string, unknown>).hasContent === false;
       if (lncrawlNoContent) {
+        // Keep the warning visible as a banner too: the toast above
+        // auto-dismisses after ~5s and analyse() does not re-run on
+        // Fetch/Refetch, so without this the user can miss it entirely.
+        setLncrawlNoContent(true);
         toast({
           title: 'No chapters fetched yet on lncrawl',
           description:
@@ -766,7 +776,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                 autoCapitalize="off"
                 spellCheck={false}
                 value={tocUrl}
-                onChange={(e) => setTocUrl(e.target.value)}
+                onChange={(e) => { setTocUrl(e.target.value); setLncrawlNoContent(false); }}
                 placeholder="Paste TOC URL or search a novel…"
                 className="h-11 sm:h-13 pl-11 sm:pl-13 pr-24 sm:pr-28 text-sm sm:text-base rounded-full border-0 bg-transparent shadow-none focus-visible:ring-0 text-foreground placeholder:text-muted-foreground/70"
               />
@@ -1107,6 +1117,16 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
                   </div>
                 </Suspense>
               </div>
+            )}
+
+            {lncrawlNoContent && (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>No chapters fetched yet on lncrawl</AlertTitle>
+                <AlertDescription>
+                  This novel lists chapters, but none of them have been fetched on lncrawl.bitanon.dev yet, so there is nothing to convert. Open it there and fetch the chapters first, then try again.
+                </AlertDescription>
+              </Alert>
             )}
 
             <Button
