@@ -271,6 +271,29 @@ export async function searchLncrawlBooks(
   return data?.results || [];
 }
 
+export interface NoveliSearchResult {
+  title: string;
+  url: string;
+  chapters: number;
+  author: string;
+  language: string;
+  source: string;
+}
+
+/**
+ * Search noveli.to's catalogue on the server (open API, no login).
+ * Needs the backend to be up; it throws when it is not.
+ */
+export async function searchNoveliBooks(
+  query: string,
+  limit = 10
+): Promise<NoveliSearchResult[]> {
+  const data = await api<{ results: NoveliSearchResult[] }>(
+    `/api/noveli/search?q=${encodeURIComponent(query)}&limit=${limit}`
+  );
+  return data?.results || [];
+}
+
 async function pingBackend(base: string, timeoutMs = 15_000): Promise<boolean> {
   const ctrl = new AbortController();
   const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);

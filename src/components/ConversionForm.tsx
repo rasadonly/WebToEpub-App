@@ -14,7 +14,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { engineSearch, cancelSearch, engineLoadMetadata, EngineSearchResult } from '@/utils/webtoepub/bridge';
 import LibrarySuggestion from './LibrarySuggestion';
 import { normalizeBookSearch } from '@/utils/librarySearch';
-import { backendToc, isBackendEnabled, searchLncrawlBooks } from '@/utils/backend';
+import { backendToc, isBackendEnabled, searchLncrawlBooks, searchNoveliBooks } from '@/utils/backend';
 import { LiveStats } from '@/components/LiveStats';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 
@@ -211,7 +211,9 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
         isBackendEnabled() &&
         (/(^|\.)novgo\.(net|com|org)$/i.test(host) ||
           host === 'lncrawl.bitanon.dev' ||
-          host.endsWith('.lncrawl.bitanon.dev'));
+          host.endsWith('.lncrawl.bitanon.dev') ||
+          host === 'noveli.to' ||
+          host.endsWith('.noveli.to'));
       if (useServerToc) {
         try {
           const result = await backendToc(url, getSiteConfig(url)?.tocSelector || tocSelector);
@@ -395,6 +397,35 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
       const lncrawlPromise = isBackendEnabled()
         ? searchLncrawlBooks(query, 10).then(mergeLncrawl).catch(() => {})
         : Promise.resolve();
+      // Noveli.to catalogue search runs alongside too; same guarantee.
+      const mergeNoveli = (items: { title: string; url: string; chapters: number; author: string; source: string }[]) => {
+        if (!items.length) return;
+        const mapped: EngineSearchResult[] = items.map((n) => ({
+          title: n.title,
+          url: n.url,
+          source: 'noveli.to',
+          snippet: [
+            n.author,
+            n.chapters ? `${n.chapters} chapters` : '',
+            n.source,
+          ]
+            .filter(Boolean)
+            .join(' · '),
+        }));
+        setSearchResults(prev => {
+          const merged = [...prev];
+          for (const r of mapped) {
+            if (!seen.has(r.url)) {
+              seen.add(r.url);
+              merged.push(r);
+            }
+          }
+          return rankResults(merged, currentQuery);
+        });
+      };
+      const noveliPromise = isBackendEnabled()
+        ? searchNoveliBooks(query, 10).then(mergeNoveli).catch(() => {})
+        : Promise.resolve();
       await Promise.all([
         engineSearch(
           query,
@@ -416,6 +447,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
           }
         ),
         lncrawlPromise,
+        noveliPromise,
       ]);
       setSearchStatus('');
     } catch (err) {

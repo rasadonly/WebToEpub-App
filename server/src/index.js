@@ -20,6 +20,7 @@ import {
   siteKey,
   detectChapterSelectors,
   searchLncrawl,
+  searchNoveli,
   lncrawlAuthHeader,
 } from "./fetcher.js";
 import { buildEpub, sanitizeFilename, writeChapterFile, countEpubChapters, epubTitle } from "./epub.js";
@@ -297,6 +298,22 @@ app.get("/api/lncrawl/search", async (req, res) => {
       50
     );
     const results = await searchLncrawl(q, limit);
+    res.json({ results });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Search noveli.to's catalogue (open API, no login).
+app.get("/api/noveli/search", async (req, res) => {
+  try {
+    const q = String(req.query.q || "").trim();
+    if (!q) return res.status(400).json({ error: "q required" });
+    const limit = Math.min(
+      Math.max(parseInt(String(req.query.limit || "10"), 10) || 10, 1),
+      50
+    );
+    const results = await searchNoveli(q, limit);
     res.json({ results });
   } catch (e) {
     res.status(500).json({ error: e.message });

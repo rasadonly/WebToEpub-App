@@ -1225,6 +1225,164 @@ async function bodyLncrawl(url) {
   return lncrawlTextToHtml(content);
 }
 
+// --- Noveli.to (noveli.to / "Novelito"): a Vite SPA whose pages are
+// client-side shells, so TOC/chapters come from its open REST API.
+// No login needed. The chapter-content endpoint returns 403 to plain
+// requests ("automated scraping agents are strictly prohibited"), so
+// every API call sends a browser User-Agent + Referer.
+//   GET /api/novels/<slug>                        -> novel meta (title,
+//     author, cover_image [relative], description [HTML], chapter_count)
+//   GET /api/novels/<slug>/chapters               -> ALL chapters in one
+//     call (limit/offset are ignored); each has chapter_number, title,
+//     slug. Reader URL: /novel/<novel-slug>/<chapter-slug>.
+//   GET /api/novels/<slug>/chapters/<chapter-slug> -> chapter detail;
+//     the prose is in `paragraphs` (a list of {id, text, html}), NOT
+//     in content/raw_content/compressed_content (all null). The first
+//     paragraphs are reader-settings UI that leaked into the list
+//     ("Provided by Noveli.to", "Settings", "Font Size", "A", "16px",
+//     "Font Family", "Background Color") plus a support footer at the
+//     end — filtered by exact text. Paragraphs also carry zero-width
+//     characters (U+200B/U+200C/U+200D), stripped here.
+//   GET /api/novels/search?q=&limit=              -> search results.
+// NOTE: a chapter slug's embedded number is the SOURCE site's number
+// and does NOT match noveli's chapter_number (ch. 500's slug says 503),
+// so chapters are always fetched by slug, never by parsed number.
+const NOVELI_API = "https://noveli.to/api";
+const NOVELI_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
+
+async function noveliGet(path, novelSlug) {
+  const res = await fetch(`${NOVELI_API}${path}`, {
+    headers: {
+      "User-Agent": NOVELI_UA,
+      Accept: "application/json",
+      Referer: novelSlug
+        ? `https://noveli.to/novel/${novelSlug}`
+        : "https://noveli.to/",
+    },
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!res.ok) throw new Error(`Noveli API HTTP ${res.status} for ${path}`);
+  return res.json();
+}
+
+function noveliNovelSlug(url) {
+  const m = String(url || "").match(/\/novel\/([^/?#]+)/i);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+function noveliChapterSlug(url) {
+  // Reader URLs are /novel/<novel-slug>/<chapter-slug>.
+  const m = String(url || "").match(/\/novel\/[^/?#]+\/([^/?#]+)/i);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+/** Search noveli.to's catalogue. */
+export async function searchNoveli(query, limit = 10) {
+  const q = String(query || "").trim();
+  if (!q) return [];
+  const data = await noveliGet(
+    `/novels/search?q=${encodeURIComponent(q)}&limit=${limit}`
+  );
+  const novels = data?.data || [];
+  return novels.map((n) => ({
+    title: n?.title || "",
+    url: n?.slug ? `https://noveli.to/novel/${n.slug}` : "",
+    chapters:
+      typeof n?.chapter_count === "number" ? n.chapter_count : 0,
+    author: n?.author || "",
+    language: n?.original_language || "",
+    source: n?.source_type || "",
+  }));
+}
+
+async function noveliNovelMeta(novelSlug) {
+  const n =
+    (await noveliGet(`/novels/${encodeURIComponent(novelSlug)}`, novelSlug))
+      ?.data || {};
+  const cover = n?.cover_image
+    ? n.cover_image.startsWith("http")
+      ? n.cover_image
+      : `https://noveli.to${n.cover_image.startsWith("/") ? "" : "/"}${n.cover_image}`
+    : "";
+  return {
+    title: n?.title || "",
+    author: n?.author || "",
+    cover,
+    description: String(n?.description || "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim(),
+  };
+}
+
+async function tocNoveli(url) {
+  const novelSlug = noveliNovelSlug(url);
+  if (!novelSlug)
+    throw new Error("Noveli: could not read the novel slug from the URL");
+  const data = await noveliGet(
+    `/novels/${encodeURIComponent(novelSlug)}/chapters`,
+    novelSlug
+  );
+  const chaps = data?.chapters || [];
+  if (!chaps.length)
+    throw new Error("Noveli: no chapters found for this novel");
+  return chaps
+    .filter((ch) => ch?.slug)
+    .map((ch) => ({
+      url: `https://noveli.to/novel/${novelSlug}/${ch.slug}`,
+      title: ch.title || `Chapter ${ch.chapter_number ?? ""}`.trim(),
+      _num:
+        typeof ch.chapter_number === "number"
+          ? ch.chapter_number
+          : undefined,
+    }));
+}
+
+// Reader-settings UI that leaks into the chapter `paragraphs` list,
+// plus the support footer. Matched on exact trimmed text.
+const NOVELI_JUNK_PARAGRAPHS = new Set([
+  "Provided by Noveli.to",
+  "Settings",
+  "Font Size",
+  "A",
+  "16px",
+  "Font Family",
+  "Background Color",
+  "If you want to support more free releases please read on Noveli.to",
+]);
+
+async function bodyNoveli(url) {
+  const novelSlug = noveliNovelSlug(url);
+  const chapterSlug = noveliChapterSlug(url);
+  if (!novelSlug || !chapterSlug)
+    throw new Error(
+      "Noveli: could not read the novel/chapter slug from the URL"
+    );
+  const data = await noveliGet(
+    `/novels/${encodeURIComponent(novelSlug)}/chapters/${encodeURIComponent(chapterSlug)}`,
+    novelSlug
+  );
+  const paras = data?.chapter?.paragraphs || [];
+  const texts = paras
+    .map((p) => (typeof p === "string" ? p : p?.text || ""))
+    // Strip zero-width characters used as invisible watermarking.
+    .map((t) => t.replace(/[\u200B\u200C\u200D\uFEFF]/g, ""))
+    .map((t) => t.trim())
+    .filter((t) => t && !NOVELI_JUNK_PARAGRAPHS.has(t));
+  if (!texts.length)
+    throw new Error("Noveli: this chapter has no readable content");
+  return texts
+    .map(
+      (t) =>
+        `<p>${t
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")}</p>`
+    )
+    .join("");
+}
+
 // --- CrescentMoon: the TOC is prose, not a chapter list. Headings read
 // "Chapter N : title" and are followed by Part links (or, for single-part
 // chapters, the heading itself is the link). The generic sweep returned
@@ -4905,6 +5063,7 @@ export function siteKey(hostname) {
   if (host.includes("wntl.net")) return "wntl";
   if (host.includes("novelnow.com")) return "novelnow";
   if (host.includes("lncrawl.bitanon.dev")) return "lncrawl";
+  if (host.includes("noveli.to")) return "noveli";
 
   for (const [re, key] of MAJOR_SITES) {
     if (re.test(host)) return key;
@@ -4956,6 +5115,8 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         return tocNovelBuddy(tocUrl);
       case "lncrawl":
         return tocLncrawl(tocUrl);
+      case "noveli":
+        return tocNoveli(tocUrl);
       case "crescentmoon":
         return tocCrescentMoon(tocUrl);
       case "novelarrow":
@@ -5222,6 +5383,8 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
         return bodyNovelBuddy(chapterUrl);
       case "lncrawl":
         return bodyLncrawl(chapterUrl);
+      case "noveli":
+        return bodyNoveli(chapterUrl);
       case "crescentmoon":
         return bodyGeneric(chapterUrl, ".entry-content");
       case "novelarrow":
@@ -5421,6 +5584,20 @@ export async function fetchBookMeta(tocUrl) {
       const novelId = lncrawlNovelId(tocUrl);
       if (novelId) {
         const meta = await lncrawlNovelMeta(novelId);
+        if (meta.title) return meta;
+      }
+    }
+  } catch {
+    /* fall through to HTML scraping */
+  }
+  // Noveli.to pages are client-side shells with no book meta in the HTML;
+  // take the meta from the same API the TOC parser uses.
+  try {
+    const host = new URL(tocUrl).hostname;
+    if (host.includes("noveli.to")) {
+      const novelSlug = noveliNovelSlug(tocUrl);
+      if (novelSlug) {
+        const meta = await noveliNovelMeta(novelSlug);
         if (meta.title) return meta;
       }
     }

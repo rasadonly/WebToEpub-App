@@ -591,6 +591,16 @@
       "main"
     ]
   },
+  "noveli.to": {
+    "parser": "NoveliParser",
+    "toc": [
+      "a[href*='/novel/']"
+    ],
+    "content": [
+      "article",
+      "main"
+    ]
+  },
   "lnmtl.com": {
     "parser": "LnmtlParser",
     "toc": [
