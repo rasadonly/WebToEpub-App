@@ -94,7 +94,7 @@ let fnIndexAt = 0;
 
 async function getFnIndex(): Promise<Record<string, number>> {
   if (fnIndexCache && Date.now() - fnIndexAt < 60 * 60_000) return fnIndexCache;
-  const res = await fetch(`${SPACE_URL}/config`, { signal: AbortSignal.timeout(30_000) });
+  const res = await fetch(`${SPACE_URL}/config`, { signal: AbortSignal.timeout(60_000) });
   if (!res.ok) throw new Error(`Space /config failed (${res.status})`);
   const cfg = await res.json();
   const map: Record<string, number> = {};
@@ -686,11 +686,15 @@ export interface PublicQueueJob {
   epub_ready: boolean;
 }
 
-/** Every job on the Space, active first — the public queue. */
+/** Every job on the Space, active first — the public queue.
+ * The Space can take minutes to answer when a big job is
+ * running (its web server shares the process with the job),
+ * so this waits up to 3 minutes instead of timing out and
+ * blanking the page after 60s. */
 export async function fetchPublicQueue(): Promise<PublicQueueJob[]> {
   let outs: unknown[];
   try {
-    outs = await callSpace('book_list_jobs', [], 60_000);
+    outs = await callSpace('book_list_jobs', [], 180_000);
   } catch (e) {
     // The fn_index map is cached for an hour; a browser that
     // loaded the page before the Space gained book_list_jobs
@@ -698,7 +702,7 @@ export async function fetchPublicQueue(): Promise<PublicQueueJob[]> {
     if (e instanceof Error && e.message.includes('has no function')) {
       fnIndexCache = null;
       fnIndexAt = 0;
-      outs = await callSpace('book_list_jobs', [], 60_000);
+      outs = await callSpace('book_list_jobs', [], 180_000);
     } else {
       throw e;
     }

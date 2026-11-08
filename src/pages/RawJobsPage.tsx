@@ -35,7 +35,17 @@ export default function RawJobsPage() {
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [queueLoading, setQueueLoading] = useState(false);
   const jobsRef = useRef<SpaceJob[]>([]);
+  // In-flight guards: the page polls every 10s, but a slow
+  // Space can take minutes to answer. Without these, a new
+  // request piled onto every poll while the previous one was
+  // still waiting — up to 18 overlapping calls — which made
+  // the slow Space slower and every poll time out, leaving
+  // the queue blank. Now a poll is skipped while one is
+  // already running, so each request gets a fair chance.
+  const queueInFlight = useRef(false);
+  const activeInFlight = useRef(false);
 
   const setJobsBoth = (next: SpaceJob[]) => {
     jobsRef.current = next;
@@ -43,19 +53,28 @@ export default function RawJobsPage() {
   };
 
   const refreshActive = async () => {
+    if (activeInFlight.current) return;
     const current = loadSpaceJobs();
     const actives = current.filter((j) => ['queued', 'running'].includes(j.status));
     if (!actives.length) return;
-    const updated = await Promise.all(
-      actives.map((j) => refreshSpaceJob(j).catch(() => j)),
-    );
-    const byId = new Map(updated.map((j) => [j.spaceJobId, j]));
-    const next = current.map((j) => byId.get(j.spaceJobId) || j);
-    next.forEach((j) => upsertSpaceJob(j));
-    setJobsBoth(next);
+    activeInFlight.current = true;
+    try {
+      const updated = await Promise.all(
+        actives.map((j) => refreshSpaceJob(j).catch(() => j)),
+      );
+      const byId = new Map(updated.map((j) => [j.spaceJobId, j]));
+      const next = current.map((j) => byId.get(j.spaceJobId) || j);
+      next.forEach((j) => upsertSpaceJob(j));
+      setJobsBoth(next);
+    } finally {
+      activeInFlight.current = false;
+    }
   };
 
   const loadQueue = async () => {
+    if (queueInFlight.current) return;
+    queueInFlight.current = true;
+    setQueueLoading(true);
     try {
       const q = await fetchPublicQueue();
       setQueue(q);
@@ -63,6 +82,9 @@ export default function RawJobsPage() {
       setQueueError('');
     } catch (e) {
       setQueueError(e instanceof Error ? e.message : 'Failed to load public queue');
+    } finally {
+      queueInFlight.current = false;
+      setQueueLoading(false);
     }
   };
 
@@ -312,7 +334,10 @@ export default function RawJobsPage() {
             )}
           </p>
           {queueError && <p className="text-sm text-destructive text-center">{queueError}</p>}
-          {queue.length === 0 && !queueError && (
+          {queue.length === 0 && !queueError && queueLoading && (
+            <p className="text-center text-muted-foreground text-sm">Loading public queue… the Space can be slow while a big book is running.</p>
+          )}
+          {queue.length === 0 && !queueError && !queueLoading && (
             <p className="text-center text-muted-foreground text-sm">No jobs on the Space right now.</p>
           )}
           <ul className="space-y-3">
