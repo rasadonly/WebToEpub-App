@@ -1251,19 +1251,44 @@ const NOVELI_API = "https://noveli.to/api";
 const NOVELI_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
 
+// noveli.to sits behind Cloudflare, which blocks the Heroku server's
+// datacenter IP (403) even with a browser User-Agent. Route the API
+// calls through a CORS proxy instead. Proxy behaviour is endpoint-
+// specific (verified live 2026-11-08): the self-hosted CF Worker
+// proxy opens the list/meta/search endpoints but noveli.to refuses
+// chapter DETAIL through it ("direct chapter extraction is not
+// permitted"), while the Lovable proxy opens all four endpoints.
+// So try Lovable first, then the CF Worker, then direct (direct works
+// from non-Heroku environments).
+const NOVELI_PROXIES = [
+  "https://loveable-proxy-forwebtoepub.lovable.app/api/proxy?url=",
+  "https://epub-cors-proxy.telegram-cf-proxy.workers.dev/api/proxy?url=",
+  "",
+];
+
 async function noveliGet(path, novelSlug) {
-  const res = await fetch(`${NOVELI_API}${path}`, {
-    headers: {
-      "User-Agent": NOVELI_UA,
-      Accept: "application/json",
-      Referer: novelSlug
-        ? `https://noveli.to/novel/${novelSlug}`
-        : "https://noveli.to/",
-    },
-    signal: AbortSignal.timeout(30000),
-  });
-  if (!res.ok) throw new Error(`Noveli API HTTP ${res.status} for ${path}`);
-  return res.json();
+  const target = `${NOVELI_API}${path}`;
+  let lastErr = null;
+  for (const proxy of NOVELI_PROXIES) {
+    try {
+      const res = await fetch(buildUrl(proxy, target), {
+        headers: {
+          "User-Agent": NOVELI_UA,
+          Accept: "application/json",
+          Referer: novelSlug
+            ? `https://noveli.to/novel/${novelSlug}`
+            : "https://noveli.to/",
+        },
+        signal: AbortSignal.timeout(30000),
+      });
+      if (!res.ok)
+        throw new Error(`Noveli API HTTP ${res.status} for ${path}`);
+      return res.json();
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error(`Noveli API failed for ${path}`);
 }
 
 function noveliNovelSlug(url) {
