@@ -1395,6 +1395,32 @@ async function bodyNoveli(url) {
     .map((t) => t.replace(/[\u200B\u200C\u200D\uFEFF]/g, ""))
     .map((t) => t.trim())
     .filter((t) => t && !NOVELI_JUNK_PARAGRAPHS.has(t));
+  // Some chapters were never fully imported into noveli.to: the API
+  // returns only the reader chrome and the chapter title (word_count
+  // ~20, no prose). The full text still lives on the chapter's source
+  // site (source_url, e.g. novelbuddy), so fetch it there instead of
+  // shipping an empty chapter. A chapter counts as empty when nothing
+  // survives the junk filter, when all that survives is the title
+  // itself, or when the surviving text is under 100 chars.
+  const chapterTitle = (data?.chapter?.title || "").trim();
+  const onlyTitle =
+    texts.length > 0 &&
+    chapterTitle.length > 0 &&
+    texts.every((t) => chapterTitle.includes(t) || t.includes(chapterTitle));
+  const proseLen = texts.join(" ").length;
+  const sourceUrl = data?.chapter?.source_url || "";
+  if ((!texts.length || onlyTitle || proseLen < 100) && sourceUrl) {
+    try {
+      const srcHost = new URL(sourceUrl).hostname;
+      if (srcHost && !srcHost.includes("noveli.to")) {
+        const html = await fetchChapterContent(sourceUrl);
+        if (html && html.replace(/<[^>]+>/g, "").trim().length >= 100)
+          return html;
+      }
+    } catch {
+      /* source fetch failed — fall through to the noveli text below */
+    }
+  }
   if (!texts.length)
     throw new Error("Noveli: this chapter has no readable content");
   return texts
