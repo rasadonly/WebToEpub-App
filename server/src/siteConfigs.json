@@ -591,16 +591,6 @@
       "main"
     ]
   },
-  "noveli.to": {
-    "parser": "NoveliParser",
-    "toc": [
-      "a[href*='/novel/']"
-    ],
-    "content": [
-      "article",
-      "main"
-    ]
-  },
   "lnmtl.com": {
     "parser": "LnmtlParser",
     "toc": [
@@ -880,6 +870,16 @@
     ],
     "content": [
       "#readcontent #showReading"
+    ]
+  },
+  "noveli.to": {
+    "parser": "NoveliParser",
+    "toc": [
+      "a[href*='/novel/']"
+    ],
+    "content": [
+      "article",
+      "main"
     ]
   },
   "novelib.com": {
@@ -1555,6 +1555,17 @@
     ],
     "content": [
       "div[id^='chapter']"
+    ]
+  },
+  "wordrain69.com": {
+    "parser": "MadaraParser",
+    "toc": [
+      "li.wp-manga-chapter a"
+    ],
+    "content": [
+      "div.reading-content .text-left",
+      "div.reading-content",
+      "div.entry-content"
     ]
   },
   "wtnovels.com": {

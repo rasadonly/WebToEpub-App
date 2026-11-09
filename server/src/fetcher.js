@@ -5039,7 +5039,7 @@ const MAJOR_SITES = [
   [/(^|\.)webnovel\.com$/, "webnovel"],
   [/(^|\.)(readnovelfull\.com|wuxiabox\.com)$/, "readnovelfull"],
     [
-    /(^|\.)(wuxiaworld\.site|novelnice\.com|woopread\.com|sonicmtl\.com|hiraethtranslation\.com|wetriedtls\.com|mvlempyr\.com)$/,
+    /(^|\.)(wuxiaworld\.site|novelnice\.com|woopread\.com|sonicmtl\.com|hiraethtranslation\.com|wetriedtls\.com|mvlempyr\.com|wordrain69\.com)$/,
     "madara",
   ],
   [/(^|\.)ncode\.syosetu\.com$/, "syosetu"],
