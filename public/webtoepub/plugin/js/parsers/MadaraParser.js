@@ -2,7 +2,6 @@
 
 parserFactory.register("listnovel.com", () => new MadaraParser());
 parserFactory.register("novelnice.com", () => new NovelniceParser());
-parserFactory.register("wordrain69.com", () => new MadaraParser());
 //dead url
 parserFactory.register("wuxiaworld.site", () => new MadaraParser());
 //dead url

@@ -213,9 +213,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
           host === 'lncrawl.bitanon.dev' ||
           host.endsWith('.lncrawl.bitanon.dev') ||
           host === 'noveli.to' ||
-          host.endsWith('.noveli.to') ||
-          host === 'wordrain69.com' ||
-          host.endsWith('.wordrain69.com'));
+          host.endsWith('.noveli.to'));
       if (useServerToc) {
         try {
           const result = await backendToc(url, getSiteConfig(url)?.tocSelector || tocSelector);
