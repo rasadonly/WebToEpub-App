@@ -760,7 +760,13 @@ async function convertJob(job, { tocUrl, providedChapters, metadata, options, se
   // ~250 KB chapter pages: at full concurrency every fetch fell into the
   // multi-proxy retry cascade and the job appeared stuck (observed frozen at
   // 33 of 317 with all 16 pool slots wedged). Gentle pacing avoids the burst.
-  const gentle = /snowytranslations\.com/i.test(list[0]?.url || "");
+  // wordrain69.com (Cloudflare) is the same: a 162-chapter job froze at
+  // 13/162, then after the CF_PROTECTED fix at 23/162 — the 16-way burst
+  // trips Cloudflare's rate-limit and every pool slot wedges on a fetch
+  // that never answers. Same gentle pool of 2.
+  const gentle =
+    /snowytranslations\.com/i.test(list[0]?.url || "") ||
+    /wordrain69\.com/i.test(list[0]?.url || "");
   const poolSize = gentle ? 2 : CONCURRENCY;
 
   const results = await mapPool(list, poolSize, async (c, i) => {
