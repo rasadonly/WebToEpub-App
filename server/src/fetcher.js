@@ -143,6 +143,11 @@ const CF_PROTECTED = [
   // Ridi 403s / Cloudflare-challenges direct requests from datacenter IPs
   // on every host (series pages, GraphQL API, viewer) — proxies first.
   /(^|\.)ridibooks\.com$/i,
+  // wordrain69.com is behind Cloudflare: direct fetches from the Heroku
+  // datacenter IP hang (H12/504) and the site rate-limits the server after
+  // a burst of requests. Go through the proxies / stealth chain first
+  // instead of wasting time on a direct fetch that never answers.
+  /(^|\.)wordrain69\.com$/i,
 ];
 
 function isCfProtected(host) {
