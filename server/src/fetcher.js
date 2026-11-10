@@ -1292,13 +1292,14 @@ async function noveliGet(path, novelSlug) {
 }
 
 function noveliNovelSlug(url) {
-  const m = String(url || "").match(/\/novel\/([^/?#]+)/i);
+  const m = String(url || "").match(/\/novels?\/([^/?#]+)/i);
   return m ? decodeURIComponent(m[1]) : null;
 }
 
 function noveliChapterSlug(url) {
-  // Reader URLs are /novel/<novel-slug>/<chapter-slug>.
-  const m = String(url || "").match(/\/novel\/[^/?#]+\/([^/?#]+)/i);
+  // Reader URLs are /novel/<novel-slug>/<chapter-slug> (the site also
+  // serves /novels/<slug> for novel pages, so accept both).
+  const m = String(url || "").match(/\/novels?\/[^/?#]+\/([^/?#]+)/i);
   return m ? decodeURIComponent(m[1]) : null;
 }
 

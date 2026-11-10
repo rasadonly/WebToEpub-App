@@ -36,12 +36,12 @@ class NoveliParser extends Parser {
     }
 
     static novelSlugFromUrl(url) {
-        let m = String(url || "").match(/\/novel\/([^/?#]+)/i);
+        let m = String(url || "").match(/\/novels?\/([^/?#]+)/i);
         return m ? decodeURIComponent(m[1]) : null;
     }
 
     static chapterSlugFromUrl(url) {
-        let m = String(url || "").match(/\/novel\/[^/?#]+\/([^/?#]+)/i);
+        let m = String(url || "").match(/\/novels?\/[^/?#]+\/([^/?#]+)/i);
         return m ? decodeURIComponent(m[1]) : null;
     }
 
