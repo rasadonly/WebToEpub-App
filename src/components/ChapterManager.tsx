@@ -40,11 +40,7 @@ export default function ChapterManager({
   const [rangeEnd, setRangeEnd] = useState(chapters.length);
   const cardRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const shouldFollowStreamRef = useRef(true);
   const hasMountScrolledRef = useRef(false);
-
-  const isNearBottom = (el: HTMLDivElement) =>
-    el.scrollHeight - el.scrollTop - el.clientHeight < 80;
 
   // Only draw the rows in view; thousands of rows at once freeze the page.
   const ROW_H = 57;
@@ -52,8 +48,6 @@ export default function ChapterManager({
   const handleListScroll = () => {
     const el = listRef.current;
     if (el) setScrollTop(el.scrollTop);
-    if (!el || !isStreaming) return;
-    shouldFollowStreamRef.current = isNearBottom(el);
   };
 
   // On first mount (chapters just appeared), scroll the PAGE to bring the
@@ -70,21 +64,15 @@ export default function ChapterManager({
     }
   }, [chapters.length]);
 
-  // Inside the chapter list box only: auto-scroll to bottom while streaming
-  // and the user hasn't manually scrolled up in the list. Guard with the
-  // ref so a user scroll immediately stops the follow, avoiding a snap-back
-  // that feels like a scroll lock.
-  useEffect(() => {
-    const el = listRef.current;
-    if (isStreaming && el && shouldFollowStreamRef.current) {
-      // Use direct assignment (no smooth behavior) so it doesn't hijack wheel.
-      el.scrollTop = el.scrollHeight;
-    }
-  }, [chapters.length, isStreaming]);
-
-  useEffect(() => {
-    if (!isStreaming) shouldFollowStreamRef.current = true;
-  }, [isStreaming]);
+  // No auto-scroll while chapters stream in. The list used to jump to the
+  // bottom on every new batch: the follow flag started true, so the very
+  // first batch yanked a reader sitting at chapter 1 down to the end, and
+  // the finished list was left near the last chapter instead of chapter 1.
+  // That snap-back is what looked like the list refetching while scrolling.
+  // New chapters now just appear below; the count and "fetching…" indicator
+  // show progress, and the reader scrolls down when they choose to.
+  // (A new fetch clears the chapter list first, so this component remounts
+  // fresh at the top for each book — no reset needed here.)
 
   // Keep newly streamed chapters selected by default.
   useEffect(() => {
