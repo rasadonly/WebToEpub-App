@@ -38,6 +38,13 @@ export default function ChapterManager({
   );
   const [rangeStart, setRangeStart] = useState(1);
   const [rangeEnd, setRangeEnd] = useState(chapters.length);
+  // Text the user is typing in the From/To boxes, kept separate from the
+  // numeric range. The old `parseInt(v) || fallback` reset an emptied box
+  // to 1 / the last chapter on every keystroke, so clearing a box to type
+  // a fresh number snapped it straight back — a new value could never be
+  // typed. Now typing is free; the number is committed on blur / apply.
+  const [rangeStartText, setRangeStartText] = useState("1");
+  const [rangeEndText, setRangeEndText] = useState(String(chapters.length));
   const cardRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const hasMountScrolledRef = useRef(false);
@@ -95,7 +102,10 @@ export default function ChapterManager({
     const sel = nextSel ?? syncSelected(next, selected);
     setSelected(sel);
     onChange(next);
-    if (rangeEnd > next.length) setRangeEnd(next.length);
+    if (rangeEnd > next.length) {
+      setRangeEnd(next.length);
+      setRangeEndText(String(next.length));
+    }
   };
 
   const toggle = (id: string) => {
@@ -112,9 +122,20 @@ export default function ChapterManager({
     setSelected(next);
   };
 
+  // Commit the typed From/To text into the numeric range, clamping to the
+  // list. An empty or unparseable box falls back to 1 / the last chapter.
+  const commitRangeText = () => {
+    const s = Math.max(1, Math.min(parseInt(rangeStartText, 10) || 1, chapters.length));
+    const e = Math.max(s, Math.min(parseInt(rangeEndText, 10) || chapters.length, chapters.length));
+    setRangeStart(s);
+    setRangeEnd(e);
+    setRangeStartText(String(s));
+    setRangeEndText(String(e));
+    return { s, e };
+  };
+
   const applyRange = () => {
-    const s = Math.max(1, Math.min(rangeStart, chapters.length));
-    const e = Math.max(s, Math.min(rangeEnd, chapters.length));
+    const { s, e } = commitRangeText();
     const next = new Set<string>();
     chapters.slice(s - 1, e).forEach(c => next.add(c.id));
     setSelected(next);
@@ -221,8 +242,9 @@ export default function ChapterManager({
             type="number"
             min={1}
             max={chapters.length}
-            value={rangeStart}
-            onChange={e => setRangeStart(parseInt(e.target.value) || 1)}
+            value={rangeStartText}
+            onChange={e => setRangeStartText(e.target.value)}
+            onBlur={commitRangeText}
             className="w-24 h-8"
           />
         </div>
@@ -233,8 +255,9 @@ export default function ChapterManager({
             type="number"
             min={1}
             max={chapters.length}
-            value={rangeEnd}
-            onChange={e => setRangeEnd(parseInt(e.target.value) || chapters.length)}
+            value={rangeEndText}
+            onChange={e => setRangeEndText(e.target.value)}
+            onBlur={commitRangeText}
             className="w-24 h-8"
           />
         </div>
