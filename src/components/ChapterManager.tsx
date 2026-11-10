@@ -45,25 +45,23 @@ export default function ChapterManager({
   // typed. Now typing is free; the number is committed on blur / apply.
   const [rangeStartText, setRangeStartText] = useState("1");
   const [rangeEndText, setRangeEndText] = useState(String(chapters.length));
-  // While chapters stream in, keep "To" at the end of the list — but only
-  // if the user hasn't typed a custom value. The component mounts on the
-  // first batch (e.g. 100 chapters), so without this the "To" box sticks
-  // at 100 even after all 1,178 have loaded. A typed value is untouched:
-  // it only follows when rangeEnd still equals the previous length.
-  const rangeEndRef = useRef(rangeEnd);
-  rangeEndRef.current = rangeEnd;
-  const prevLenRef = useRef(chapters.length);
+  // When loading finishes, snap "To" to the full list — unless the user
+  // already typed a custom value. The component mounts on the first batch
+  // (e.g. 100 chapters), so without this the "To" box sticks at 100 even
+  // after all 1,178 have loaded. (An earlier attempt synced it on every
+  // batch, but startTransition batches the streamed updates, so the
+  // per-batch effect never saw the intermediate lengths — correcting
+  // once, when streaming ends, is the reliable point.) A typed value is
+  // untouched: it only follows when the user hasn't typed in the boxes.
+  const rangeTouchedRef = useRef(false);
   useEffect(() => {
-    const prev = prevLenRef.current;
-    prevLenRef.current = chapters.length;
-    if (chapters.length > prev && rangeEndRef.current === prev) {
+    if (!isStreaming && chapters.length > 0 && !rangeTouchedRef.current) {
       setRangeEnd(chapters.length);
       setRangeEndText(String(chapters.length));
     }
-  }, [chapters.length]);
+  }, [isStreaming, chapters.length]);
   const cardRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const hasMountScrolledRef = useRef(false);
 
   // Only draw the rows in view; thousands of rows at once freeze the page.
   const ROW_H = 57;
@@ -73,19 +71,12 @@ export default function ChapterManager({
     if (el) setScrollTop(el.scrollTop);
   };
 
-  // On first mount (chapters just appeared), scroll the PAGE to bring the
-  // ChapterManager card into view — using an instant scroll so we don't steal
-  // wheel/touch input from the user with a long smooth-scroll animation.
-  useEffect(() => {
-    if (!hasMountScrolledRef.current && chapters.length > 0 && cardRef.current) {
-      hasMountScrolledRef.current = true;
-      requestAnimationFrame(() => {
-        const rect = cardRef.current!.getBoundingClientRect();
-        const scrollTarget = window.scrollY + rect.top - 16;
-        window.scrollTo({ top: Math.max(0, scrollTarget), behavior: 'auto' });
-      });
-    }
-  }, [chapters.length]);
+  // No auto-scroll of the page when chapters appear. The old mount effect
+  // scrolled the window to the ChapterManager card every time the list
+  // (re)mounted — including on Refetch, where the reader is already at
+  // the chapter section, so the page jumped away (to the FAQ/footer when
+  // the layout was still shifting). The reader scrolls where they want;
+  // nothing here moves the page.
 
   // No auto-scroll while chapters stream in. The list used to jump to the
   // bottom on every new batch: the follow flag started true, so the very
@@ -141,6 +132,7 @@ export default function ChapterManager({
   // Commit the typed From/To text into the numeric range, clamping to the
   // list. An empty or unparseable box falls back to 1 / the last chapter.
   const commitRangeText = () => {
+    rangeTouchedRef.current = true;
     const s = Math.max(1, Math.min(parseInt(rangeStartText, 10) || 1, chapters.length));
     const e = Math.max(s, Math.min(parseInt(rangeEndText, 10) || chapters.length, chapters.length));
     setRangeStart(s);
@@ -259,7 +251,7 @@ export default function ChapterManager({
             min={1}
             max={chapters.length}
             value={rangeStartText}
-            onChange={e => setRangeStartText(e.target.value)}
+            onChange={e => { rangeTouchedRef.current = true; setRangeStartText(e.target.value); }}
             onBlur={commitRangeText}
             className="w-24 h-8"
           />
@@ -272,7 +264,7 @@ export default function ChapterManager({
             min={1}
             max={chapters.length}
             value={rangeEndText}
-            onChange={e => setRangeEndText(e.target.value)}
+            onChange={e => { rangeTouchedRef.current = true; setRangeEndText(e.target.value); }}
             onBlur={commitRangeText}
             className="w-24 h-8"
           />
