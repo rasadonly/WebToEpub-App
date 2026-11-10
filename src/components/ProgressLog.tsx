@@ -16,10 +16,16 @@ interface ProgressLogProps {
 
 export default function ProgressLog({ progress, logs, onStop, serverJob, onDownload }: ProgressLogProps) {
 
-  const logsEndRef = useRef<HTMLDivElement>(null);
+  const logsContainerRef = useRef<HTMLDivElement>(null);
 
+  // Keep the latest log line visible inside the log box. The old code used
+  // scrollIntoView on the end marker, which also scrolled the whole PAGE —
+  // on every refetch the viewport jumped to the FAQ/footer at the bottom
+  // while chapters were loading. Scrolling the box itself leaves the page
+  // where the reader is.
   useEffect(() => {
-    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = logsContainerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [logs]);
 
   const getStatusIcon = () => {
@@ -132,7 +138,7 @@ export default function ProgressLog({ progress, logs, onStop, serverJob, onDownl
             <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
               Conversion Log
             </h4>
-            <div className="bg-muted/30 rounded-lg p-4 max-h-64 overflow-y-auto">
+            <div ref={logsContainerRef} className="bg-muted/30 rounded-lg p-4 max-h-64 overflow-y-auto">
               <div className="space-y-1 font-mono text-sm">
                 {logs.map((log, index) => (
                   <div
@@ -143,7 +149,6 @@ export default function ProgressLog({ progress, logs, onStop, serverJob, onDownl
                     <span className="text-primary">•</span> {log}
                   </div>
                 ))}
-                <div ref={logsEndRef} />
               </div>
             </div>
           </div>

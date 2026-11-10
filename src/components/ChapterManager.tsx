@@ -45,6 +45,22 @@ export default function ChapterManager({
   // typed. Now typing is free; the number is committed on blur / apply.
   const [rangeStartText, setRangeStartText] = useState("1");
   const [rangeEndText, setRangeEndText] = useState(String(chapters.length));
+  // While chapters stream in, keep "To" at the end of the list — but only
+  // if the user hasn't typed a custom value. The component mounts on the
+  // first batch (e.g. 100 chapters), so without this the "To" box sticks
+  // at 100 even after all 1,178 have loaded. A typed value is untouched:
+  // it only follows when rangeEnd still equals the previous length.
+  const rangeEndRef = useRef(rangeEnd);
+  rangeEndRef.current = rangeEnd;
+  const prevLenRef = useRef(chapters.length);
+  useEffect(() => {
+    const prev = prevLenRef.current;
+    prevLenRef.current = chapters.length;
+    if (chapters.length > prev && rangeEndRef.current === prev) {
+      setRangeEnd(chapters.length);
+      setRangeEndText(String(chapters.length));
+    }
+  }, [chapters.length]);
   const cardRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const hasMountScrolledRef = useRef(false);
