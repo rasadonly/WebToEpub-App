@@ -294,6 +294,21 @@ export async function searchNoveliBooks(
   return data?.results || [];
 }
 
+/**
+ * Search lightnovel.to's catalogue on the server (parses the site's
+ * server-rendered search page; its /api/search returns no results).
+ * Needs the backend to be up; it throws when it is not.
+ */
+export async function searchLightNovelToBooks(
+  query: string,
+  limit = 10
+): Promise<NoveliSearchResult[]> {
+  const data = await api<{ results: NoveliSearchResult[] }>(
+    `/api/lightnovelto/search?q=${encodeURIComponent(query)}&limit=${limit}`
+  );
+  return data?.results || [];
+}
+
 async function pingBackend(base: string, timeoutMs = 15_000): Promise<boolean> {
   const ctrl = new AbortController();
   const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);

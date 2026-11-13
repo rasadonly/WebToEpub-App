@@ -1435,6 +1435,94 @@ async function bodyNoveli(url) {
     .join("");
 }
 
+// --- LightNovel.to (lightnovel.to): a Next.js site with an open chapters
+// API. The novel page only renders 16 chapters (first 4 + last 12); the
+// full list comes from GET /api/novel-chapters?slug=<slug>, which the
+// site's own "Show all" button calls (verified live: 216 chapters for
+// Ascendance of a Bookworm, each {id, slug, number, title}). Chapter
+// prose lives in the .ln-prose div of the chapter page. The /api/search
+// endpoint exists but returns {"total":0,"results":[]} for every query
+// (verified in a real browser too), so search parses the
+// server-rendered /search?q=... page instead.
+const LIGHTNOVELTO_API = "https://lightnovel.to/api";
+const LIGHTNOVELTO_ORIGIN = "https://lightnovel.to";
+
+function lightNovelToNovelSlug(url) {
+  const m = String(url || "").match(/\/novel\/([^/?#]+)/i);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+/** Search lightnovel.to's catalogue via the server-rendered search page. */
+export async function searchLightNovelTo(query, limit = 10) {
+  const q = String(query || "").trim();
+  if (!q) return [];
+  const html = await getText(
+    `${LIGHTNOVELTO_ORIGIN}/search?q=${encodeURIComponent(q)}`
+  );
+  const doc = parseHtml(html);
+  const out = [];
+  for (const card of doc.querySelectorAll("a.ln-ncard")) {
+    const href = card.getAttribute("href") || "";
+    const m = href.match(/^\/novel\/([^/?#]+)/i);
+    if (!m) continue;
+    const slug = decodeURIComponent(m[1]);
+    const title =
+      card.querySelector("h3")?.textContent?.trim() ||
+      card.querySelector("img")?.getAttribute("alt")?.trim() ||
+      "";
+    if (!title) continue;
+    const countText = card.querySelector("p")?.textContent?.trim() || "";
+    const chapters = parseInt(countText.replace(/[^0-9]/g, ""), 10) || 0;
+    out.push({
+      title,
+      url: `${LIGHTNOVELTO_ORIGIN}/novel/${slug}`,
+      chapters,
+      author: "",
+      language: "",
+      source: "",
+    });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+async function tocLightNovelTo(url) {
+  const novelSlug = lightNovelToNovelSlug(url);
+  if (!novelSlug)
+    throw new Error(
+      "LightNovel.to: could not read the novel slug from the URL"
+    );
+  const res = await httpGet(
+    `${LIGHTNOVELTO_API}/novel-chapters?slug=${encodeURIComponent(novelSlug)}`,
+    {
+      Accept: "application/json",
+      Referer: `${LIGHTNOVELTO_ORIGIN}/novel/${novelSlug}`,
+    }
+  );
+  if (!res.ok)
+    throw new Error(`LightNovel.to chapters API HTTP ${res.status}`);
+  const data = await res.json();
+  const chaps = Array.isArray(data) ? data : data?.chapters || [];
+  if (!chaps.length)
+    throw new Error("LightNovel.to: no chapters found for this novel");
+  return chaps
+    .filter((ch) => ch?.slug)
+    .map((ch) => ({
+      url: `${LIGHTNOVELTO_ORIGIN}/novel/${novelSlug}/${ch.slug}`,
+      title: ch.title || `Chapter ${ch.number ?? ""}`.trim(),
+      _num: typeof ch.number === "number" ? ch.number : undefined,
+    }));
+}
+
+async function bodyLightNovelTo(url) {
+  const html = await getText(url);
+  const doc = parseHtml(html);
+  const content = extractWithSelector(doc, ".ln-prose");
+  if (!content || content.replace(/<[^>]+>/g, "").trim().length < 30)
+    throw new Error("LightNovel.to: this chapter has no readable content");
+  return content;
+}
+
 // --- CrescentMoon: the TOC is prose, not a chapter list. Headings read
 // "Chapter N : title" and are followed by Part links (or, for single-part
 // chapters, the heading itself is the link). The generic sweep returned
@@ -5116,6 +5204,7 @@ export function siteKey(hostname) {
   if (host.includes("novelnow.com")) return "novelnow";
   if (host.includes("lncrawl.bitanon.dev")) return "lncrawl";
   if (host.includes("noveli.to")) return "noveli";
+  if (host.includes("lightnovel.to")) return "lightnovelto";
 
   for (const [re, key] of MAJOR_SITES) {
     if (re.test(host)) return key;
@@ -5169,6 +5258,8 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         return tocLncrawl(tocUrl);
       case "noveli":
         return tocNoveli(tocUrl);
+      case "lightnovelto":
+        return tocLightNovelTo(tocUrl);
       case "crescentmoon":
         return tocCrescentMoon(tocUrl);
       case "novelarrow":
@@ -5437,6 +5528,8 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
         return bodyLncrawl(chapterUrl);
       case "noveli":
         return bodyNoveli(chapterUrl);
+      case "lightnovelto":
+        return bodyLightNovelTo(chapterUrl);
       case "crescentmoon":
         return bodyGeneric(chapterUrl, ".entry-content");
       case "novelarrow":

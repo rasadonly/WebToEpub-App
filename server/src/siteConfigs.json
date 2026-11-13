@@ -550,6 +550,17 @@
       "div.txt"
     ]
   },
+  "lightnovel.to": {
+    "parser": "LightNovelToParser",
+    "toc": [
+      "a[href*='/novel/'][href*='/chapter-']"
+    ],
+    "content": [
+      ".ln-prose",
+      "article",
+      "main"
+    ]
+  },
   "lightnovelstranslations.com": {
     "parser": "LightNovelsTranslationsParser",
     "toc": [

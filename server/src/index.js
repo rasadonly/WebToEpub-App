@@ -21,6 +21,7 @@ import {
   detectChapterSelectors,
   searchLncrawl,
   searchNoveli,
+  searchLightNovelTo,
   lncrawlAuthHeader,
 } from "./fetcher.js";
 import { buildEpub, sanitizeFilename, writeChapterFile, countEpubChapters, epubTitle } from "./epub.js";
@@ -314,6 +315,23 @@ app.get("/api/noveli/search", async (req, res) => {
       50
     );
     const results = await searchNoveli(q, limit);
+    res.json({ results });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Search lightnovel.to's catalogue (parses the server-rendered search
+// page; the site's /api/search endpoint returns no results).
+app.get("/api/lightnovelto/search", async (req, res) => {
+  try {
+    const q = String(req.query.q || "").trim();
+    if (!q) return res.status(400).json({ error: "q required" });
+    const limit = Math.min(
+      Math.max(parseInt(String(req.query.limit || "10"), 10) || 10, 1),
+      50
+    );
+    const results = await searchLightNovelTo(q, limit);
     res.json({ results });
   } catch (e) {
     res.status(500).json({ error: e.message });
