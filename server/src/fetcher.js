@@ -1756,7 +1756,9 @@ export async function searchNovelPing(query, limit = 10) {
   const out = [];
   const seen = new Set();
   for (const a of doc.querySelectorAll("a[href]")) {
-    const href = a.getAttribute("href") || "";
+    // Unwrap proxy-rewritten hrefs first (the Lovable proxy
+    // percent-encodes the real URL inside ?url=).
+    const href = unwrapProxyUrl(a.getAttribute("href") || "");
     const m = href.match(/\/book\/([^/?#]+)(?:[/?#]|$)/i);
     if (!m || /chapter-\d/i.test(href)) continue;
     const abs = absoluteUrl(NOVELPING_ORIGIN, href);
@@ -1797,22 +1799,31 @@ async function tocNovelPing(url) {
   const seen = new Set();
   // Each chapter link is an <a> with a title="Chapter N: ..." attribute
   // (the visible text is nested in spans, so the title attribute is the
-  // reliable source for the chapter title).
-  const anchorRe = new RegExp(
-    `<a[^>]*href="([^"]*\\/book\\/${slug}\\/chapter-(\\d+)-[^"]*)"[^>]*>`,
-    "gi"
+  // reliable source for the chapter title). Match EVERY anchor first,
+  // then unwrap proxy-rewritten hrefs: the Lovable proxy percent-encodes
+  // the real URL inside ?url=, so the literal /book/<slug>/chapter-
+  // shape is absent from its HTML and a regex baked into the anchor
+  // match finds 0 links there (verified: 0 matches on Lovable HTML vs
+  // 1,625 on direct/CF-Worker HTML).
+  const anchorRe = /<a[^>]*href="([^"]*)"[^>]*>/gi;
+  const chapterRe = new RegExp(
+    `\\/book\\/${slug}\\/chapter-(\\d+)(?:-|$)`,
+    "i"
   );
   let m;
   while ((m = anchorRe.exec(html)) !== null) {
-    const abs = absoluteUrl(NOVELPING_ORIGIN, m[1]);
+    const href = unwrapProxyUrl(m[1]);
+    const cm = href.match(chapterRe);
+    if (!cm) continue;
+    const abs = absoluteUrl(NOVELPING_ORIGIN, href);
     if (seen.has(abs)) continue;
     seen.add(abs);
     const titleAttr = m[0].match(/title="([^"]*)"/i);
     out.push({
       url: abs,
       title:
-        (titleAttr ? titleAttr[1].trim() : "") || `Chapter ${m[2]}`,
-      _num: parseInt(m[2], 10),
+        (titleAttr ? titleAttr[1].trim() : "") || `Chapter ${cm[1]}`,
+      _num: parseInt(cm[1], 10),
     });
   }
   if (!out.length)
