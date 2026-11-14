@@ -143,6 +143,9 @@ const CF_PROTECTED = [
   // Ridi 403s / Cloudflare-challenges direct requests from datacenter IPs
   // on every host (series pages, GraphQL API, viewer) — proxies first.
   /(^|\.)ridibooks\.com$/i,
+  // WebNovelFree 403s direct requests from datacenter IPs; the CF Worker
+  // and Lovable proxies return the real pages — proxies first.
+  /(^|\.)webnovelfree\.com$/i,
 ];
 
 function isCfProtected(host) {
@@ -1520,6 +1523,453 @@ async function bodyLightNovelTo(url) {
   const content = extractWithSelector(doc, ".ln-prose");
   if (!content || content.replace(/<[^>]+>/g, "").trim().length < 30)
     throw new Error("LightNovel.to: this chapter has no readable content");
+  return content;
+}
+
+// --- ReadAllNovel.online ---
+// The novel page server-renders the FULL chapter list: /novel/<slug> has
+// every /novel/<slug>/chapter/<n> link (verified: A Court Of Lost Stars,
+// 1,232 chapters, contiguous 1..1232). Chapter prose lives in
+// .reader-content. The site's search API (/api.php?endpoint=search and
+// /api/search) 404s server-side, so there is no dedicated server search
+// here — the generic engine search covers it.
+const READALLNOVEL_ORIGIN = "https://readallnovel.online";
+
+function readAllNovelSlug(url) {
+  const m = String(url || "").match(/\/novel\/([^/?#]+)/i);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+async function tocReadAllNovel(url) {
+  const slug = readAllNovelSlug(url);
+  if (!slug)
+    throw new Error(
+      "ReadAllNovel: could not read the novel slug from the URL"
+    );
+  // The novel page is large (~430 KB) and the site is slow to answer
+  // (~7 s), so allow a longer per-attempt timeout than the 7 s default.
+  const doc = parseHtml(
+    await smartGetText(`${READALLNOVEL_ORIGIN}/novel/${slug}`, 15000, 45000)
+  );
+  const out = [];
+  const seen = new Set();
+  for (const a of doc.querySelectorAll("a[href]")) {
+    const href = a.getAttribute("href") || "";
+    const m = href.match(
+      new RegExp(`/novel/${slug}/chapter/(\\d+)(?:[/?#]|$)`, "i")
+    );
+    if (!m) continue;
+    const abs = absoluteUrl(READALLNOVEL_ORIGIN, href);
+    if (seen.has(abs)) continue;
+    seen.add(abs);
+    out.push({
+      url: abs,
+      title: (a.textContent || "").trim() || `Chapter ${m[1]}`,
+      _num: parseInt(m[1], 10),
+    });
+  }
+  if (!out.length)
+    throw new Error("ReadAllNovel: no chapters found for this novel");
+  out.sort((x, y) => (x._num ?? 0) - (y._num ?? 0));
+  return out;
+}
+
+async function bodyReadAllNovel(url) {
+  const doc = parseHtml(await getText(url));
+  const content = extractWithSelector(doc, ".reader-content");
+  if (!content || content.replace(/<[^>]+>/g, "").trim().length < 30)
+    throw new Error("ReadAllNovel: this chapter has no readable content");
+  return content;
+}
+
+// --- NovelRoll ---
+// Laravel Livewire site. The novel page only renders the first/last few
+// chapters; the full list is paginated at /book/<slug>?toc (page 1) and
+// ?toc&page=2..N, 1,000 chapters per page (verified: Chaotic Sword God,
+// 4,038 chapters across 5 pages). A real chapter link is
+// /book/<slug>/chapter-<n>-<title>; the unreleased "forecast" chapter is
+// just /book/<slug>/chapter-<n> with no title slug, so requiring the
+// trailing hyphen after the number excludes it. Chapter prose lives in
+// article.prose. Search is the /book?q=... page.
+const NOVELROLL_ORIGIN = "https://novelroll.com";
+
+function novelRollSlug(url) {
+  const m = String(url || "").match(/\/book\/([^/?#]+)/i);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+/** Search novelroll.com's catalogue via the /book?q=... page. */
+export async function searchNovelRoll(query, limit = 10) {
+  const q = String(query || "").trim();
+  if (!q) return [];
+  const doc = parseHtml(
+    await smartGetText(
+      `${NOVELROLL_ORIGIN}/book?q=${encodeURIComponent(q)}`,
+      15000,
+      45000
+    )
+  );
+  const out = [];
+  const seen = new Set();
+  for (const a of doc.querySelectorAll("a[href]")) {
+    const href = a.getAttribute("href") || "";
+    // Links may be relative (/book/<slug>) or absolute; match the
+    // /book/<slug> portion either way.
+    const m = href.match(/\/book\/([^/?#]+)(?:[/?#]|$)/i);
+    if (!m || /chapter-\d/i.test(href)) continue;
+    const slug = decodeURIComponent(m[1]);
+    const abs = absoluteUrl(NOVELROLL_ORIGIN, href);
+    if (seen.has(abs)) continue;
+    // The card link often wraps only an <img> (no text); fall back to
+    // the image alt or the link's own title attribute.
+    let title = (a.textContent || "").trim();
+    if (!title) {
+      const img = a.querySelector("img[alt]");
+      title = (img?.getAttribute("alt") || "").trim();
+    }
+    if (!title) title = (a.getAttribute("title") || "").trim();
+    if (!title) continue;
+    // Image alts read "<Title> webnovel cover" — strip that suffix.
+    title = title.replace(/\s+webnovel cover$/i, "").trim();
+    if (!title) continue;
+    seen.add(abs);
+    out.push({
+      title,
+      url: abs,
+      chapters: 0,
+      author: "",
+      language: "",
+      source: "",
+    });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+async function tocNovelRoll(url) {
+  const slug = novelRollSlug(url);
+  if (!slug)
+    throw new Error("NovelRoll: could not read the book slug from the URL");
+  const out = [];
+  const seen = new Set();
+  const collect = (html) => {
+    const doc = parseHtml(html);
+    let added = 0;
+    for (const a of doc.querySelectorAll("a[href]")) {
+      const href = a.getAttribute("href") || "";
+      // Real chapter links are /book/<slug>/chapter-<n>-<title>, but
+      // ~106 chapters have no title slug (/book/<slug>/chapter-<n>).
+      // Both are real chapters (verified: ch. 2249 loads full prose).
+      // The only non-chapter of that shape is the unreleased "forecast":
+      // its button reads "When will Chapter N come out ?" and its list
+      // entry carries class text-secondary. Exclude both forms.
+      const m = href.match(
+        new RegExp(`/book/${slug}/chapter-(\\d+)(?:-|[/?#]|$)`, "i")
+      );
+      if (!m) continue;
+      const text = (a.textContent || "").trim();
+      const cls = a.getAttribute("class") || "";
+      if (/when will chapter \d+ come out/i.test(text)) continue;
+      if (/\btext-secondary\b/i.test(cls)) continue;
+      const abs = absoluteUrl(NOVELROLL_ORIGIN, href);
+      if (seen.has(abs)) continue;
+      seen.add(abs);
+      out.push({
+        url: abs,
+        title: text || `Chapter ${m[1]}`,
+        _num: parseInt(m[1], 10),
+      });
+      added++;
+    }
+    return added;
+  };
+  const firstHtml = await smartGetText(
+    `${NOVELROLL_ORIGIN}/book/${slug}?toc`,
+    15000,
+    45000
+  );
+  collect(firstHtml);
+  // The ?toc page paginates as ?toc&page=2..N; read the max page from its
+  // pagination links, then fetch the rest in parallel.
+  let maxPage = 1;
+  for (const a of parseHtml(firstHtml).querySelectorAll("a[href]")) {
+    const href = a.getAttribute("href") || "";
+    const m = href.match(/[?&]page=(\d+)/i);
+    if (m) maxPage = Math.max(maxPage, parseInt(m[1], 10));
+  }
+  if (maxPage > 1) {
+    const pageUrls = [];
+    for (let p = 2; p <= maxPage; p++)
+      pageUrls.push(`${NOVELROLL_ORIGIN}/book/${slug}?toc&page=${p}`);
+    const htmls = await mapPool(pageUrls, 4, async (u) => {
+      try {
+        return await smartGetText(u, 15000, 45000);
+      } catch {
+        return "";
+      }
+    });
+    htmls.forEach((h) => h && collect(h));
+  }
+  if (!out.length)
+    throw new Error("NovelRoll: no chapters found for this book");
+  out.sort((x, y) => (x._num ?? 0) - (y._num ?? 0));
+  return out;
+}
+
+async function bodyNovelRoll(url) {
+  const doc = parseHtml(await getText(url));
+  const content = extractWithSelector(doc, "article.prose");
+  if (!content || content.replace(/<[^>]+>/g, "").trim().length < 30)
+    throw new Error("NovelRoll: this chapter has no readable content");
+  return content;
+}
+
+// --- NovelPing ---
+// Laravel site. The novel page only renders the first 30 chapters; the
+// full list comes from GET /ajax/chapter-archive?novelId=<slug> (verified:
+// A Foodie Transmigrated into the Palace, all 1,648 chapters in one
+// call). Chapter prose lives in .chr-c. Search is
+// GET /ajax/search-novel?keyword=... (an HTML fragment of book links).
+const NOVELPING_ORIGIN = "https://novelping.com";
+const NOVELPING_AJAX = "https://novelping.com/ajax";
+
+function novelPingSlug(url) {
+  const m = String(url || "").match(/\/book\/([^/?#]+)/i);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+/** Search novelping.com's catalogue via the chapter-archive search API. */
+export async function searchNovelPing(query, limit = 10) {
+  const q = String(query || "").trim();
+  if (!q) return [];
+  const doc = parseHtml(
+    await getText(
+      `${NOVELPING_AJAX}/search-novel?keyword=${encodeURIComponent(q)}`
+    )
+  );
+  const out = [];
+  const seen = new Set();
+  for (const a of doc.querySelectorAll("a[href]")) {
+    const href = a.getAttribute("href") || "";
+    const m = href.match(/\/book\/([^/?#]+)(?:[/?#]|$)/i);
+    if (!m || /chapter-\d/i.test(href)) continue;
+    const abs = absoluteUrl(NOVELPING_ORIGIN, href);
+    if (seen.has(abs)) continue;
+    const title =
+      (a.textContent || "").trim() ||
+      (a.getAttribute("title") || "").trim();
+    if (!title) continue;
+    seen.add(abs);
+    out.push({
+      title,
+      url: abs,
+      chapters: 0,
+      author: "",
+      language: "",
+      source: "",
+    });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+async function tocNovelPing(url) {
+  const slug = novelPingSlug(url);
+  if (!slug)
+    throw new Error("NovelPing: could not read the book slug from the URL");
+  // The chapter-archive API is slow to answer (~5 s for a big book), so
+  // allow a longer per-attempt timeout than the 7 s default. NOTE: the
+  // response is an HTML fragment whose chapter links live inside
+  // <template> elements, which linkedom's querySelectorAll does not
+  // traverse — so extract the links with a regex on the raw HTML.
+  const html = await smartGetText(
+    `${NOVELPING_AJAX}/chapter-archive?novelId=${encodeURIComponent(slug)}`,
+    15000,
+    45000
+  );
+  const out = [];
+  const seen = new Set();
+  // Each chapter link is an <a> with a title="Chapter N: ..." attribute
+  // (the visible text is nested in spans, so the title attribute is the
+  // reliable source for the chapter title).
+  const anchorRe = new RegExp(
+    `<a[^>]*href="([^"]*\\/book\\/${slug}\\/chapter-(\\d+)-[^"]*)"[^>]*>`,
+    "gi"
+  );
+  let m;
+  while ((m = anchorRe.exec(html)) !== null) {
+    const abs = absoluteUrl(NOVELPING_ORIGIN, m[1]);
+    if (seen.has(abs)) continue;
+    seen.add(abs);
+    const titleAttr = m[0].match(/title="([^"]*)"/i);
+    out.push({
+      url: abs,
+      title:
+        (titleAttr ? titleAttr[1].trim() : "") || `Chapter ${m[2]}`,
+      _num: parseInt(m[2], 10),
+    });
+  }
+  if (!out.length)
+    throw new Error("NovelPing: no chapters found for this book");
+  out.sort((x, y) => (x._num ?? 0) - (y._num ?? 0));
+  return out;
+}
+
+async function bodyNovelPing(url) {
+  const doc = parseHtml(await getText(url));
+  const content = extractWithSelector(doc, ".chr-c, #chapter");
+  if (!content || content.replace(/<[^>]+>/g, "").trim().length < 30)
+    throw new Error("NovelPing: this chapter has no readable content");
+  return content;
+}
+
+// --- WebNovelFree ---
+// WordPress site. Direct fetches from datacenter IPs get HTTP 403, but the
+// CF Worker and Lovable proxies return the real pages, so the host is in
+// CF_PROTECTED (proxies first). The novel page lists "Num Chapters: N" and
+// a "Read now" link ?Chapter=1-<hash>; each chapter page links to the next
+// chapter as ?Chapter=<n>-<hash> (a per-chapter hash, not derivable), so
+// the TOC is built by following that chain from chapter 1. Chapter prose
+// lives in .entry-content.reader-content. Search is the WordPress ?s= page.
+const WEBNOVELFREE_ORIGIN = "https://webnovelfree.com";
+
+function webNovelFreeSlug(url) {
+  const m = String(url || "").match(/webnovelfree\.com\/([^/?#]+)\/?/i);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+/** Search webnovelfree.com's catalogue via the WordPress ?s= page. */
+export async function searchWebNovelFree(query, limit = 10) {
+  const q = String(query || "").trim();
+  if (!q) return [];
+  const doc = parseHtml(
+    await smartGetText(
+      `${WEBNOVELFREE_ORIGIN}/?s=${encodeURIComponent(q)}`,
+      15000,
+      45000
+    )
+  );
+  const out = [];
+  const seen = new Set();
+  for (const a of doc.querySelectorAll("a[href]")) {
+    // The page may come back through a proxy that rewrites every href
+    // to a proxy URL; unwrap to the real URL before matching.
+    const href = unwrapProxyUrl(a.getAttribute("href") || "");
+    const m = href.match(
+      new RegExp(`^${WEBNOVELFREE_ORIGIN}/([^/?#]+)/?(?:[?#]|$)`, "i")
+    );
+    if (!m) continue;
+    const slug = decodeURIComponent(m[1]);
+    if (
+      /^(all-web-novels|browse-novels|latest-chapters|category|feed|wp-content|wp-json|tag|author|page)$/i.test(
+        slug
+      )
+    )
+      continue;
+    const abs = `${WEBNOVELFREE_ORIGIN}/${slug}/`;
+    if (seen.has(abs)) continue;
+    // The result link often wraps only an <img> (no text); fall back to
+    // the image alt or the link's own title attribute.
+    let title = (a.textContent || "").trim();
+    if (!title) {
+      const img = a.querySelector("img[alt]");
+      title = (img?.getAttribute("alt") || "").trim();
+    }
+    if (!title) title = (a.getAttribute("title") || "").trim();
+    if (!title) continue;
+    seen.add(abs);
+    out.push({
+      title,
+      url: abs,
+      chapters: 0,
+      author: "",
+      language: "",
+      source: "",
+    });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+async function tocWebNovelFree(url) {
+  const slug = webNovelFreeSlug(url);
+  if (!slug)
+    throw new Error(
+      "WebNovelFree: could not read the novel slug from the URL"
+    );
+  const novelUrl = `${WEBNOVELFREE_ORIGIN}/${slug}/`;
+  // The novel page is fetched through a proxy (direct is 403); allow a
+  // longer per-attempt timeout so the first proxy can answer instead of
+  // falling through to slower ones.
+  const doc = parseHtml(
+    await smartGetText(novelUrl, 15000, 45000)
+  );
+  // Total chapters from the info table ("Num Chapters: N").
+  let total = 0;
+  const numEl = doc.querySelector(".num-chapters .value");
+  if (numEl)
+    total = parseInt((numEl.textContent || "").replace(/[^0-9]/g, ""), 10) || 0;
+  // First chapter from the "Read now" link (?Chapter=1-<hash>).
+  // NOTE: when the page comes back through a proxy, every href is
+  // rewritten to a proxy URL (the real URL is URL-encoded in ?url=),
+  // so unwrap each href before matching ?Chapter=.
+  let first = null;
+  for (const a of doc.querySelectorAll("a[href]")) {
+    const href = unwrapProxyUrl(a.getAttribute("href") || "");
+    const m = href.match(/\?Chapter=(\d+)-([0-9a-f]+)/i);
+    if (m) {
+      first = { num: parseInt(m[1], 10), hash: m[2] };
+      break;
+    }
+  }
+  if (!first)
+    throw new Error("WebNovelFree: no chapters found for this novel");
+  const out = [];
+  const seen = new Set();
+  let cur = first;
+  // Follow the next-chapter chain: each chapter page links to the next
+  // chapter as ?Chapter=<n>-<hash>. Sequential by nature (each step needs
+  // the previous page's next link), so long books take a while here.
+  while (cur) {
+    const chapterUrl = `${novelUrl}?Chapter=${cur.num}-${cur.hash}`;
+    if (seen.has(chapterUrl)) break;
+    seen.add(chapterUrl);
+    out.push({
+      url: chapterUrl,
+      title: `Chapter ${cur.num}`,
+      _num: cur.num,
+    });
+    if (total && out.length >= total) break;
+    if (out.length > 10000) break; // safety cap
+    let next = null;
+    try {
+      const chDoc = parseHtml(
+        await smartGetText(chapterUrl, 15000, 45000)
+      );
+      for (const a of chDoc.querySelectorAll("a[href]")) {
+        const href = unwrapProxyUrl(a.getAttribute("href") || "");
+        const m = href.match(/\?Chapter=(\d+)-([0-9a-f]+)/i);
+        if (m && parseInt(m[1], 10) === cur.num + 1) {
+          next = { num: parseInt(m[1], 10), hash: m[2] };
+          break;
+        }
+      }
+    } catch {
+      break;
+    }
+    cur = next;
+  }
+  if (!out.length)
+    throw new Error("WebNovelFree: no chapters found for this novel");
+  out.sort((x, y) => (x._num ?? 0) - (y._num ?? 0));
+  return out;
+}
+
+async function bodyWebNovelFree(url) {
+  const doc = parseHtml(await getText(url));
+  const content = extractWithSelector(doc, ".entry-content.reader-content");
+  if (!content || content.replace(/<[^>]+>/g, "").trim().length < 30)
+    throw new Error("WebNovelFree: this chapter has no readable content");
   return content;
 }
 
@@ -5205,6 +5655,10 @@ export function siteKey(hostname) {
   if (host.includes("lncrawl.bitanon.dev")) return "lncrawl";
   if (host.includes("noveli.to")) return "noveli";
   if (host.includes("lightnovel.to")) return "lightnovelto";
+  if (host.includes("readallnovel.online")) return "readallnovel";
+  if (host.includes("novelroll.com")) return "novelroll";
+  if (host.includes("novelping.com")) return "novelping";
+  if (host.includes("webnovelfree.com")) return "webnovelfree";
 
   for (const [re, key] of MAJOR_SITES) {
     if (re.test(host)) return key;
@@ -5260,6 +5714,14 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         return tocNoveli(tocUrl);
       case "lightnovelto":
         return tocLightNovelTo(tocUrl);
+      case "readallnovel":
+        return tocReadAllNovel(tocUrl);
+      case "novelroll":
+        return tocNovelRoll(tocUrl);
+      case "novelping":
+        return tocNovelPing(tocUrl);
+      case "webnovelfree":
+        return tocWebNovelFree(tocUrl);
       case "crescentmoon":
         return tocCrescentMoon(tocUrl);
       case "novelarrow":
@@ -5530,6 +5992,14 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
         return bodyNoveli(chapterUrl);
       case "lightnovelto":
         return bodyLightNovelTo(chapterUrl);
+      case "readallnovel":
+        return bodyReadAllNovel(chapterUrl);
+      case "novelroll":
+        return bodyNovelRoll(chapterUrl);
+      case "novelping":
+        return bodyNovelPing(chapterUrl);
+      case "webnovelfree":
+        return bodyWebNovelFree(chapterUrl);
       case "crescentmoon":
         return bodyGeneric(chapterUrl, ".entry-content");
       case "novelarrow":

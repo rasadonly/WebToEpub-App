@@ -309,6 +309,51 @@ export async function searchLightNovelToBooks(
   return data?.results || [];
 }
 
+/**
+ * Search novelroll.com's catalogue on the server (parses the
+ * /book?q=... page). Needs the backend to be up; it throws when it
+ * is not.
+ */
+export async function searchNovelRollBooks(
+  query: string,
+  limit = 10
+): Promise<NoveliSearchResult[]> {
+  const data = await api<{ results: NoveliSearchResult[] }>(
+    `/api/novelroll/search?q=${encodeURIComponent(query)}&limit=${limit}`
+  );
+  return data?.results || [];
+}
+
+/**
+ * Search novelping.com's catalogue on the server (GET
+ * /ajax/search-novel?keyword=...). Needs the backend to be up; it
+ * throws when it is not.
+ */
+export async function searchNovelPingBooks(
+  query: string,
+  limit = 10
+): Promise<NoveliSearchResult[]> {
+  const data = await api<{ results: NoveliSearchResult[] }>(
+    `/api/novelping/search?q=${encodeURIComponent(query)}&limit=${limit}`
+  );
+  return data?.results || [];
+}
+
+/**
+ * Search webnovelfree.com's catalogue on the server (parses the
+ * WordPress ?s= page). Needs the backend to be up; it throws when it
+ * is not.
+ */
+export async function searchWebNovelFreeBooks(
+  query: string,
+  limit = 10
+): Promise<NoveliSearchResult[]> {
+  const data = await api<{ results: NoveliSearchResult[] }>(
+    `/api/webnovelfree/search?q=${encodeURIComponent(query)}&limit=${limit}`
+  );
+  return data?.results || [];
+}
+
 async function pingBackend(base: string, timeoutMs = 15_000): Promise<boolean> {
   const ctrl = new AbortController();
   const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);

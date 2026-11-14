@@ -14,7 +14,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { engineSearch, cancelSearch, engineLoadMetadata, EngineSearchResult } from '@/utils/webtoepub/bridge';
 import LibrarySuggestion from './LibrarySuggestion';
 import { normalizeBookSearch } from '@/utils/librarySearch';
-import { backendToc, isBackendEnabled, searchLncrawlBooks, searchNoveliBooks, searchLightNovelToBooks } from '@/utils/backend';
+import { backendToc, isBackendEnabled, searchLncrawlBooks, searchNoveliBooks, searchLightNovelToBooks, searchNovelRollBooks, searchNovelPingBooks, searchWebNovelFreeBooks } from '@/utils/backend';
 import { LiveStats } from '@/components/LiveStats';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 
@@ -215,7 +215,19 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
           host === 'noveli.to' ||
           host.endsWith('.noveli.to') ||
           host === 'lightnovel.to' ||
-          host.endsWith('.lightnovel.to'));
+          host.endsWith('.lightnovel.to') ||
+          host === 'readallnovel.online' ||
+          host.endsWith('.readallnovel.online') ||
+          host === 'novelroll.com' ||
+          host.endsWith('.novelroll.com') ||
+          host === 'novelping.com' ||
+          host.endsWith('.novelping.com'));
+      // NOTE: webnovelfree.com is deliberately NOT here. Its TOC is a
+      // per-chapter hash chain, and the server reaches the site only
+      // through proxies that take 15–45 s per chapter page — far too
+      // slow/unreliable for a server TOC. The browser engine (the
+      // user's own connection, which the site accepts) runs the chain
+      // directly instead; see WebNovelFreeParser.
       if (useServerToc) {
         try {
           const result = await backendToc(url, getSiteConfig(url)?.tocSelector || tocSelector);
@@ -457,6 +469,42 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
       const lightNovelToPromise = isBackendEnabled()
         ? searchLightNovelToBooks(query, 10).then(mergeLightNovelTo).catch(() => {})
         : Promise.resolve();
+      // NovelRoll, NovelPing and WebNovelFree catalogue searches run
+      // alongside too; same guarantee.
+      const makeMerge = (source: string) => (items: { title: string; url: string; chapters: number; author: string; source: string }[]) => {
+        if (!items.length) return;
+        const mapped: EngineSearchResult[] = items.map((n) => ({
+          title: n.title,
+          url: n.url,
+          source,
+          snippet: [
+            n.author,
+            n.chapters ? `${n.chapters} chapters` : '',
+            n.source,
+          ]
+            .filter(Boolean)
+            .join(' · '),
+        }));
+        setSearchResults(prev => {
+          const merged = [...prev];
+          for (const r of mapped) {
+            if (!seen.has(r.url)) {
+              seen.add(r.url);
+              merged.push(r);
+            }
+          }
+          return rankResults(merged, currentQuery);
+        });
+      };
+      const novelRollPromise = isBackendEnabled()
+        ? searchNovelRollBooks(query, 10).then(makeMerge('novelroll.com')).catch(() => {})
+        : Promise.resolve();
+      const novelPingPromise = isBackendEnabled()
+        ? searchNovelPingBooks(query, 10).then(makeMerge('novelping.com')).catch(() => {})
+        : Promise.resolve();
+      const webNovelFreePromise = isBackendEnabled()
+        ? searchWebNovelFreeBooks(query, 10).then(makeMerge('webnovelfree.com')).catch(() => {})
+        : Promise.resolve();
       await Promise.all([
         engineSearch(
           query,
@@ -480,6 +528,9 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
         lncrawlPromise,
         noveliPromise,
         lightNovelToPromise,
+        novelRollPromise,
+        novelPingPromise,
+        webNovelFreePromise,
       ]);
       setSearchStatus('');
     } catch (err) {

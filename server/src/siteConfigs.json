@@ -932,6 +932,29 @@
       "#chapter-content"
     ]
   },
+  "novelping.com": {
+    "parser": "NovelPingParser",
+    "toc": [
+      "a[href*='/book/'][href*='/chapter-']"
+    ],
+    "content": [
+      ".chr-c",
+      "#chapter",
+      "article",
+      "main"
+    ]
+  },
+  "novelroll.com": {
+    "parser": "NovelRollParser",
+    "toc": [
+      "a[href*='/book/'][href*='/chapter-']"
+    ],
+    "content": [
+      "article.prose",
+      "article",
+      "main"
+    ]
+  },
   "novelsquare.blog": {
     "parser": "NovelsquareParser",
     "toc": [
@@ -1117,6 +1140,17 @@
       "div.post-content",
       "ul.wp-block-post-template",
       ".wp-block-cover__inner-container"
+    ]
+  },
+  "readallnovel.online": {
+    "parser": "ReadAllNovelParser",
+    "toc": [
+      "a[href*='/novel/'][href*='/chapter/']"
+    ],
+    "content": [
+      ".reader-content",
+      "article",
+      "main"
     ]
   },
   "readhive.org": {
@@ -1545,6 +1579,17 @@
     ],
     "content": [
       "div.chapter_content"
+    ]
+  },
+  "webnovelfree.com": {
+    "parser": "WebNovelFreeParser",
+    "toc": [
+      "a[href*='?Chapter=']"
+    ],
+    "content": [
+      ".entry-content.reader-content",
+      "article",
+      "main"
     ]
   },
   "wetriedtls.com": {

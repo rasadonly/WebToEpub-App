@@ -22,6 +22,9 @@ import {
   searchLncrawl,
   searchNoveli,
   searchLightNovelTo,
+  searchNovelRoll,
+  searchNovelPing,
+  searchWebNovelFree,
   lncrawlAuthHeader,
 } from "./fetcher.js";
 import { buildEpub, sanitizeFilename, writeChapterFile, countEpubChapters, epubTitle } from "./epub.js";
@@ -332,6 +335,54 @@ app.get("/api/lightnovelto/search", async (req, res) => {
       50
     );
     const results = await searchLightNovelTo(q, limit);
+    res.json({ results });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Search novelroll.com's catalogue (parses the /book?q=... page).
+app.get("/api/novelroll/search", async (req, res) => {
+  try {
+    const q = String(req.query.q || "").trim();
+    if (!q) return res.status(400).json({ error: "q required" });
+    const limit = Math.min(
+      Math.max(parseInt(String(req.query.limit || "10"), 10) || 10, 1),
+      50
+    );
+    const results = await searchNovelRoll(q, limit);
+    res.json({ results });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Search novelping.com's catalogue (GET /ajax/search-novel?keyword=...).
+app.get("/api/novelping/search", async (req, res) => {
+  try {
+    const q = String(req.query.q || "").trim();
+    if (!q) return res.status(400).json({ error: "q required" });
+    const limit = Math.min(
+      Math.max(parseInt(String(req.query.limit || "10"), 10) || 10, 1),
+      50
+    );
+    const results = await searchNovelPing(q, limit);
+    res.json({ results });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Search webnovelfree.com's catalogue (parses the WordPress ?s= page).
+app.get("/api/webnovelfree/search", async (req, res) => {
+  try {
+    const q = String(req.query.q || "").trim();
+    if (!q) return res.status(400).json({ error: "q required" });
+    const limit = Math.min(
+      Math.max(parseInt(String(req.query.limit || "10"), 10) || 10, 1),
+      50
+    );
+    const results = await searchWebNovelFree(q, limit);
     res.json({ results });
   } catch (e) {
     res.status(500).json({ error: e.message });
