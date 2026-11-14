@@ -146,6 +146,12 @@ const CF_PROTECTED = [
   // WebNovelFree 403s direct requests from datacenter IPs; the CF Worker
   // and Lovable proxies return the real pages — proxies first.
   /(^|\.)webnovelfree\.com$/i,
+  // NovelPing's /ajax/ endpoints (chapter-archive, search-novel) do not
+  // answer the Heroku datacenter IP (novel pages load fine direct, but
+  // the AJAX calls come back empty — production TOC + search returned 0
+  // while the same calls work locally). The CF Worker proxy returns the
+  // archive in ~1.4 s — proxies first. (2026-11-14, Heroku v132.)
+  /(^|\.)novelping\.com$/i,
 ];
 
 function isCfProtected(host) {
