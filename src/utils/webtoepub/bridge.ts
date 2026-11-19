@@ -1048,17 +1048,84 @@ export function cleanBookTitle(raw: string): string {
     'novelbin', 'novelhall', 'lightnovel', 'webnovel', 'readlightnovel',
     'novelupdates', 'novelgo', 'novelfire', 'novelcool', 'fanfiction',
     'wattpad', 'archiveofourown', 'ao3', 'novelonline', 'readnovel', 'freenovel',
+    'lightnovelpub',
   ]);
+  // A brand token: the word equals a known brand, or starts with one
+  // (catches suffixed forms like "wuxiaworldeu", "lightnovel.to",
+  // "readnoveleu", "novelcool.com", "ao3saver.com").
+  const isBrandToken = (w: string) => {
+    const c = String(w || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (!c) return false;
+    if (BRANDS.has(c)) return true;
+    for (const b of BRANDS) if (c.length > b.length && c.startsWith(b)) return true;
+    return false;
+  };
   const isBrandWord = (w: string) => /^[A-Z][a-z]+[A-Z]/.test(w) || /^[a-z]+[A-Z]/.test(w);
-  for (let i = 0; i < 3; i++) {
+  // URL-like leading token (for titles that are really a URL).
+  const isUrlToken = (w: string) => {
+    const lw = String(w || '').toLowerCase();
+    return /^(https?|www|m|web|book|works?|story|com|org|net)$/.test(lw) || lw.includes('.');
+  };
+  for (let i = 0; i < 5; i++) {
     const before = t;
+    // A title that is really a URL ("https m.webnovel.com book shadow-slave
+    // <id>"): drop the leading URL tokens, keep the book slug words.
+    if (/^https?\b/i.test(t)) {
+      const words = t.split(/\s+/);
+      let j = 0;
+      while (j < words.length && isUrlToken(words[j])) j++;
+      if (j > 0 && j < words.length) t = words.slice(j).join(' ');
+    }
+    // Leading site-brand word (e.g. "Readallnovel A Court Of Lost Stars").
+    {
+      const words = t.split(/\s+/);
+      if (words.length > 1 && isBrandToken(words[0])) t = words.slice(1).join(' ');
+    }
+    // Leading "404" (an error-page title) and leading "Read " SEO prefix.
+    t = t.replace(/^404\s+/i, '');
     t = t.replace(/^read\s+/i, '');
+    // Trailing "table of contents" (a TOC page title used as the book title).
+    t = t.replace(/\s+table\s+of\s+contents\s*$/i, '');
+    // Trailing "read <word> novels at <brand>" — the WuxiaWorldEU /
+    // ReadNovelEU title format ("... Read Wuxia Novels At Wuxiaworldeu").
+    t = t.replace(/\s+read\s+\w+\s+novels?\s+at\s+\S+\s*$/i, '');
+    // Trailing tag phrases at the very end.
     t = t.replace(/\s+novel\s+online(\s+for)?(\s+free)?\s*$/i, '');
     t = t.replace(/\s+online\s+(for\s+)?free\s*$/i, '');
     t = t.replace(/\s+read\s+online\s*$/i, '');
     t = t.replace(/\s+online\s+read\s*$/i, '');
     t = t.replace(/\s+free\s+online\s*$/i, '');
     t = t.replace(/\s+online\s*$/i, '');
+    // Trailing URL fragment starting at https/http (mid-title URL junk).
+    t = t.replace(/\s+https?\b.*$/i, '');
+    // Trailing chapter-range tag from batch files ("... C1 574").
+    t = t.replace(/\s+c\d+\s+\d+(\s+\d+)?\s*$/i, '');
+    // Trailing "<brand> <long-number>" (a category tag + story id).
+    {
+      const words = t.split(/\s+/);
+      const n = words.length;
+      if (n > 2 && /^\d{5,}$/.test(words[n - 1]) && isBrandToken(words[n - 2])) {
+        t = words.slice(0, -2).join(' ');
+      }
+    }
+    // Trailing long numeric id on its own (a URL/story id artifact).
+    t = t.replace(/\s+\d{5,}\s*$/, '');
+    // Trailing "<brand> official" / "<brand> archive" (site attribution).
+    {
+      const words = t.split(/\s+/);
+      const n = words.length;
+      if (n > 2 && ['official', 'archive'].includes(words[n - 1].toLowerCase()) && isBrandToken(words[n - 2])) {
+        t = words.slice(0, -2).join(' ');
+      }
+    }
+    // Leading long numeric id on its own (a work/story id artifact).
+    {
+      const words = t.split(/\s+/);
+      if (words.length > 1 && /^\d{5,}$/.test(words[0])) t = words.slice(1).join(' ');
+    }
+    // Trailing site-name segment after |, em/en dash, or hyphen — only when
+    // the tail looks like a site/brand (short + site keyword, or a single
+    // CamelCase brand word). A longer descriptive subtitle is kept.
     const m = t.match(/^(.*)[\s]*[|—–\-]\s*([^|—–\-]{1,40})$/);
     if (m) {
       const head = m[1].trim();
@@ -1068,12 +1135,26 @@ export function cleanBookTitle(raw: string): string {
         t = head;
       }
     }
-    const words = t.split(/\s+/);
-    const last = (words[words.length - 1] || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (words.length > 1 && BRANDS.has(last)) {
-      t = words.slice(0, -1).join(' ');
+    // Trailing site-brand word (no separator left — e.g. a filename-derived
+    // title), suffix-tolerant.
+    {
+      const words = t.split(/\s+/);
+      if (words.length > 1 && isBrandToken(words[words.length - 1])) t = words.slice(0, -1).join(' ');
+    }
+    // Lone trailing status/tag words ("Novel", "Complete", "Read", "Free").
+    // "Novel" is not stripped when it follows a/an/the — there it is part
+    // of the title phrase ("... in a novel"), not a tag.
+    {
+      const words = t.split(/\s+/);
+      const last = (words[words.length - 1] || '').toLowerCase();
+      const prev = (words[words.length - 2] || '').toLowerCase();
+      const isNovelAfterArticle = last === 'novel' && ['a', 'an', 'the'].includes(prev);
+      if (words.length > 1 && ['novel', 'complete', 'read', 'free'].includes(last) && !isNovelAfterArticle) {
+        t = words.slice(0, -1).join(' ');
+      }
     }
     t = t.replace(/\s+/g, ' ').trim();
+    if (!t) { t = before; break; }
     if (t === before) break;
   }
   return t;
