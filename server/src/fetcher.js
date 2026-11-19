@@ -6444,7 +6444,7 @@ export async function fetchBookMeta(tocUrl) {
       }
       return "";
     };
-    return {
+    const meta = {
       // NovelFull-family pages have no og:title and their first <h1> is the
       // genre link (e.g. "Action"), while the real title is <h3 class="title">.
       // Clean the picked title: og:title / <title> on many sites carries the
@@ -6456,7 +6456,24 @@ export async function fetchBookMeta(tocUrl) {
       cover: pickSrc(['meta[property="og:image"]', ".book img", ".book-img img", ".novel-cover img", "img.cover"]),
       description: pick(['meta[property="og:description"]', 'meta[name="description"]']),
     };
-  } catch {
+    // A site that has shut down serves the same announcement on every page
+    // (its meta description says so) — lightnovelpub.com: "The Light Novel
+    // World platform has been suspended and permanently shut down." Fail
+    // honestly instead of returning the announcement as the book's title
+    // and producing a 1-chapter EPUB of the shutdown notice.
+    const SHUTDOWN_RE = /permanently shut down|has been suspended|suspended and permanently|platform (has been|is) (shut down|suspended|closed down)/i;
+    if (SHUTDOWN_RE.test(meta.description || "") || SHUTDOWN_RE.test(meta.title || "")) {
+      let host = "";
+      try { host = new URL(tocUrl).hostname.replace(/^www\./, ""); } catch { /* ignore */ }
+      throw new Error(
+        `${host || "This site"} has shut down — it no longer hosts novels, so there is nothing to download.`
+      );
+    }
+    return meta;
+  } catch (e) {
+    // A shutdown error is a real answer, not a fetch failure — let it
+    // through so the caller shows it instead of an empty title.
+    if (e && /has shut down — it no longer hosts novels/.test(e.message)) throw e;
     return { title: "", author: "", cover: "", description: "" };
   }
 }
