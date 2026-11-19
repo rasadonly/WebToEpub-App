@@ -1055,6 +1055,22 @@ function restoreOneJob(job, spec) {
     jobs.set(job.id, job);
     return;
   }
+  // A job that already failed must never be tried again on restart, even
+  // if its saved state is stale (e.g. the error save to the durable store
+  // was lost, so the file still says "running"). A recorded error message,
+  // or a failure rate already past the auto-close line, means it failed.
+  if (
+    (typeof job.error === "string" && job.error.trim()) ||
+    (job.completed >= 20 && job.failed / Math.max(job.completed, 1) > 0.8)
+  ) {
+    job.status = "error";
+    if (typeof job.error !== "string" || !job.error.trim()) {
+      job.error = `Too many chapters failed to download (${job.failed} of ${job.completed} so far) — stopping this job.`;
+    }
+    job.updatedAt = Date.now();
+    jobs.set(job.id, job);
+    return;
+  }
   // Was queued/running (or the packed file is gone) — run it again.
   job.status = "queued";
   job.phase = "Resuming after server restart";
