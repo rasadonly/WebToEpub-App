@@ -1032,14 +1032,63 @@ const HF_COMMUNITY_REPOS = [HF_COMMUNITY_REPO_ID];
 
 interface HFTreeEntry { type: string; path: string; size?: number }
 
+/** Strip the website name and SEO tags that novel sites append to a book
+ * title ("Read <Title> Novel Online For Free", "<Title> | NovelPing").
+ * Mirrors the server's cleanBookTitle (fetcher.js) — only strips segments
+ * that look like site/tag junk; a real subtitle and titles that merely
+ * contain "Online" or "Library" are kept. Applied here so library files
+ * saved from a polluted page title still display the book's own name. */
+export function cleanBookTitle(raw: string): string {
+  let t = String(raw || '').replace(/\s+/g, ' ').trim();
+  if (!t) return t;
+  const SITE_WORDS = /novel|read|online|librar|webnovel|wuxia|fanfic|manga|manhwa|manhua|book|fiction|free|stories|chapter/i;
+  const BRANDS = new Set([
+    'novelping', 'readallnovel', 'novelfull', 'novelbuddy', 'novelroll',
+    'webnovelfree', 'readnovelfree', 'wuxiaworld', 'royalroad', 'scribblehub',
+    'novelbin', 'novelhall', 'lightnovel', 'webnovel', 'readlightnovel',
+    'novelupdates', 'novelgo', 'novelfire', 'novelcool', 'fanfiction',
+    'wattpad', 'archiveofourown', 'ao3', 'novelonline', 'readnovel', 'freenovel',
+  ]);
+  const isBrandWord = (w: string) => /^[A-Z][a-z]+[A-Z]/.test(w) || /^[a-z]+[A-Z]/.test(w);
+  for (let i = 0; i < 3; i++) {
+    const before = t;
+    t = t.replace(/^read\s+/i, '');
+    t = t.replace(/\s+novel\s+online(\s+for)?(\s+free)?\s*$/i, '');
+    t = t.replace(/\s+online\s+(for\s+)?free\s*$/i, '');
+    t = t.replace(/\s+read\s+online\s*$/i, '');
+    t = t.replace(/\s+online\s+read\s*$/i, '');
+    t = t.replace(/\s+free\s+online\s*$/i, '');
+    t = t.replace(/\s+online\s*$/i, '');
+    const m = t.match(/^(.*)[\s]*[|—–\-]\s*([^|—–\-]{1,40})$/);
+    if (m) {
+      const head = m[1].trim();
+      const tail = m[2].trim();
+      const tailWords = tail.split(/\s+/).length;
+      if (head && tail && tailWords <= 4 && (SITE_WORDS.test(tail) || (tailWords === 1 && isBrandWord(tail)))) {
+        t = head;
+      }
+    }
+    const words = t.split(/\s+/);
+    const last = (words[words.length - 1] || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (words.length > 1 && BRANDS.has(last)) {
+      t = words.slice(0, -1).join(' ');
+    }
+    t = t.replace(/\s+/g, ' ').trim();
+    if (t === before) break;
+  }
+  return t;
+}
+
 function prettyTitleFromPath(path: string): string {
   const file = path.split('/').pop() || path;
-  return file
-    .replace(/\.epub(\.txt)?$/i, '')
-    .replace(/-[a-z0-9]{6}$/i, '')
-    .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
+  return cleanBookTitle(
+    file
+      .replace(/\.epub(\.txt)?$/i, '')
+      .replace(/-[a-z0-9]{6}$/i, '')
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  )
     .replace(/\b\w/g, (c) => c.toUpperCase()) || 'Untitled';
 }
 

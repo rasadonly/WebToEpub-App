@@ -12,6 +12,7 @@ import {
   fetchChapterContent,
   fetchWholePage,
   fetchBookMeta,
+  cleanBookTitle,
   mapPool,
   supportedDomains,
   lookupSiteConfig,
@@ -144,14 +145,19 @@ function isEpubBuffer(buf) {
  * silently never fired for them. */
 const libraryTitleKey = (t) => String(t || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 
-/** Title for a stored library file, mirroring prettyTitleFromPath in bridge.ts. */
+/** Title for a stored library file, mirroring prettyTitleFromPath in bridge.ts.
+ * Cleaned of site names / SEO tags (cleanBookTitle) so a file saved from a
+ * polluted page title ("… Novel Online Free", "… | NovelPing") still derives
+ * the book's own name for matching and display. */
 function titleFromLibraryPath(p) {
   const file = String(p || "").split("/").pop() || "";
-  return file
-    .replace(/\.epub(\.txt)?$/i, "")
-    .replace(/-[a-z0-9]{6}$/i, "")
-    .replace(/[_-]+/g, " ")
-    .trim();
+  return cleanBookTitle(
+    file
+      .replace(/\.epub(\.txt)?$/i, "")
+      .replace(/-[a-z0-9]{6}$/i, "")
+      .replace(/[_-]+/g, " ")
+      .trim()
+  );
 }
 
 /** All stored EPUBs whose derived title matches the given book title. */

@@ -6127,6 +6127,64 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
 
 }
 
+/**
+ * Strip the website name and SEO tags that novel sites append to a book
+ * title (in <title> / og:title): "Read <Title> Novel Online For Free",
+ * "<Title> Online — ReadAllNovel", "<Title> | NovelPing", and the like.
+ * Only strips segments that look like site/tag junk — a real subtitle
+ * (e.g. "Re:Zero - Starting Life in Another World") is kept, and a title
+ * that merely contains "Online" or "Library" (e.g. "Online Game: …",
+ * "Library of Heaven's Path") is untouched. Used by fetchBookMeta so the
+ * EPUB title and the Library name are clean, and by the library title
+ * derivation so already-stored polluted names display cleanly.
+ */
+export function cleanBookTitle(raw) {
+  let t = String(raw || "").replace(/\s+/g, " ").trim();
+  if (!t) return t;
+  const SITE_WORDS = /novel|read|online|librar|webnovel|wuxia|fanfic|manga|manhwa|manhua|book|fiction|free|stories|chapter/i;
+  const BRANDS = new Set([
+    "novelping", "readallnovel", "novelfull", "novelbuddy", "novelroll",
+    "webnovelfree", "readnovelfree", "wuxiaworld", "royalroad", "scribblehub",
+    "novelbin", "novelhall", "lightnovel", "webnovel", "readlightnovel",
+    "novelupdates", "novelgo", "novelfire", "novelcool", "fanfiction",
+    "wattpad", "archiveofourown", "ao3", "novelonline", "readnovel", "freenovel",
+  ]);
+  const isBrandWord = (w) => /^[A-Z][a-z]+[A-Z]/.test(w) || /^[a-z]+[A-Z]/.test(w);
+  for (let i = 0; i < 3; i++) {
+    const before = t;
+    // Leading "Read " SEO prefix.
+    t = t.replace(/^read\s+/i, "");
+    // Trailing tag phrases at the very end.
+    t = t.replace(/\s+novel\s+online(\s+for)?(\s+free)?\s*$/i, "");
+    t = t.replace(/\s+online\s+(for\s+)?free\s*$/i, "");
+    t = t.replace(/\s+read\s+online\s*$/i, "");
+    t = t.replace(/\s+online\s+read\s*$/i, "");
+    t = t.replace(/\s+free\s+online\s*$/i, "");
+    t = t.replace(/\s+online\s*$/i, "");
+    // Trailing site-name segment after |, em/en dash, or hyphen — only when
+    // the tail looks like a site/brand (short + site keyword, or a single
+    // CamelCase brand word). A longer descriptive subtitle is kept.
+    const m = t.match(/^(.*)[\s]*[|—–\-]\s*([^|—–\-]{1,40})$/);
+    if (m) {
+      const head = m[1].trim();
+      const tail = m[2].trim();
+      const tailWords = tail.split(/\s+/).length;
+      if (head && tail && tailWords <= 4 && (SITE_WORDS.test(tail) || (tailWords === 1 && isBrandWord(tail)))) {
+        t = head;
+      }
+    }
+    // Trailing site-brand word (no separator left — e.g. a filename-derived title).
+    const words = t.split(/\s+/);
+    const last = (words[words.length - 1] || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (words.length > 1 && BRANDS.has(last)) {
+      t = words.slice(0, -1).join(" ");
+    }
+    t = t.replace(/\s+/g, " ").trim();
+    if (t === before) break;
+  }
+  return t;
+}
+
 /** Fetch metadata (title / author / cover) from a TOC page, best-effort. */
 export async function fetchBookMeta(tocUrl) {
   // Ridibooks series pages render the book header (title / author / cover)
@@ -6314,7 +6372,11 @@ export async function fetchBookMeta(tocUrl) {
     return {
       // NovelFull-family pages have no og:title and their first <h1> is the
       // genre link (e.g. "Action"), while the real title is <h3 class="title">.
-      title: pick(['meta[property="og:title"]', 'meta[name="twitter:title"]', ".desc h3.title", "h3.title", "h1", "title"]),
+      // Clean the picked title: og:title / <title> on many sites carries the
+      // site name and SEO tags ("Read <Title> Novel Online For Free",
+      // "<Title> | NovelPing") — strip those so the EPUB title and the
+      // Library name are the book's name only (cleanBookTitle).
+      title: cleanBookTitle(pick(['meta[property="og:title"]', 'meta[name="twitter:title"]', ".desc h3.title", "h3.title", "h1", "title"])),
       author: pick(['meta[property="og:novel:author"]', '[itemprop="author"]', ".author a", 'a[href*="/author/"]', 'a[href*="author"]', ".author"]),
       cover: pickSrc(['meta[property="og:image"]', ".book img", ".book-img img", ".novel-cover img", "img.cover"]),
       description: pick(['meta[property="og:description"]', 'meta[name="description"]']),
