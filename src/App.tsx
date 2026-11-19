@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HashRouter, Routes, Route, Link, useLocation, useNavigate } from "react-router-dom";
 import { lazy, Suspense } from "react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Globe, BookOpenCheck, Settings, Library as LibraryIcon, BookMarked, MessagesSquare, MoreVertical, Languages } from "lucide-react";
+import { Globe, BookOpenCheck, Settings, Library as LibraryIcon, BookMarked, MessagesSquare, MoreVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LiveStats } from "@/components/LiveStats";
 import { GlobalModals } from "@/components/GlobalModals";
@@ -20,8 +20,6 @@ const SitesPage = lazy(() => import("./pages/SitesPage"));
 const GuidePage = lazy(() => import("./pages/GuidePage"));
 const PrivacyPage = lazy(() => import("./pages/PrivacyPage"));
 const ConverterPage = lazy(() => import("./pages/ConverterPage"));
-const RawPage = lazy(() => import("./pages/RawPage"));
-const RawJobsPage = lazy(() => import("./pages/RawJobsPage"));
 const WebToEpubPage = lazy(() => import("./pages/WebToEpubPage"));
 const AlternativesPage = lazy(() => import("./pages/AlternativesPage"));
 
@@ -49,18 +47,13 @@ function NavBar() {
         <nav className="hidden sm:flex items-center gap-5">
           <Link to="/" className={linkClass("/")}>Home</Link>
           <Link to="/sites" className={linkClass("/sites")}>Sites</Link>
-          <Link to="/raw" className={linkClass("/raw")}>Raw</Link>
           <button type="button" onClick={() => openModal("library")} className={linkClass("/library")}>Library</button>
           <button type="button" onClick={() => openModal("forum")} className={linkClass("/forum")}>Forum</button>
           <Link to="/guide" className={linkClass("/guide")}>Guide</Link>
         </nav>
 
-        {/* Mobile quick nav — Raw must be here too: the desktop
-            nav above is hidden on mobile, so without this the
-            /raw section was unreachable from the upper bar on
-            phones (reported 2026-11-01). */}
+        {/* Mobile quick nav */}
         <nav className="flex sm:hidden items-center gap-2">
-          <Link to="/raw" className="text-xs px-2.5 py-1 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors font-medium">Raw</Link>
           <button type="button" onClick={() => openModal("library")} className="text-xs px-2.5 py-1 bg-secondary rounded-md text-secondary-foreground hover:bg-secondary/80 transition-colors font-medium">Library</button>
           <button type="button" onClick={() => openModal("forum")} className="text-xs px-2.5 py-1 bg-secondary rounded-md text-secondary-foreground hover:bg-secondary/80 transition-colors font-medium">Forum</button>
         </nav>
@@ -84,9 +77,6 @@ function NavBar() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" sideOffset={8} className="w-52">
-              <DropdownMenuItem onSelect={() => navigate("/raw")}>
-                <Languages className="w-4 h-4 mr-2" /> Raw Translation
-              </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => openModal("supported-sites")}>
                 <Globe className="w-4 h-4 mr-2" /> Supported Sites
               </DropdownMenuItem>
@@ -133,8 +123,6 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/converter" element={<ConverterPage />} />
-            <Route path="/raw" element={<RawPage />} />
-            <Route path="/raw/jobs" element={<RawJobsPage />} />
             <Route path="/web-to-epub" element={<WebToEpubPage />} />
             <Route path="/alternatives" element={<AlternativesPage />} />
             <Route path="/sites" element={<SitesPage />} />
