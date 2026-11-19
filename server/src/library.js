@@ -170,3 +170,71 @@ export async function deleteFromLibrary(path) {
     throw new Error(`HF delete failed (${res.status}): ${text.slice(0, 200)}`);
   }
 }
+
+// ── Durable job state (survives Heroku restarts) ─────────────
+// Heroku's dyno filesystem is ephemeral: the local STATE_DIR (under
+// os.tmpdir()) is wiped on every deploy/restart, so a running job's
+// persisted {job, spec} vanished with it and restoreJobs() had nothing to
+// resume. Job state is therefore ALSO kept in this dataset under
+// job-state/<job-id>.json, so a restart can re-queue the job and it
+// finishes instead of being lost. Small JSON files go through the same
+// commit API as deleteFromLibrary (no LFS). All three helpers are
+// best-effort: they throw when HF is unavailable, and callers must never
+// let a state save/delete fail a conversion.
+
+const JOB_STATE_PREFIX = "job-state/";
+
+/** Save one job's {job, spec} to the dataset (overwrites the previous state). */
+export async function saveJobState(job, spec) {
+  if (!libraryEnabled()) throw new Error("HUGGINGFACE_TOKEN not configured");
+  const path = `${JOB_STATE_PREFIX}${job.id}.json`;
+  const content = Buffer.from(JSON.stringify({ job, spec }), "utf8").toString("base64");
+  const lines = [
+    JSON.stringify({ key: "header", value: { summary: `Save job state ${job.id}`, description: job.title || "" } }),
+    // The commit API's file operation carries base64 content plus an
+    // explicit encoding flag (see the HF commit NDJSON shape:
+    // {"key": "file", "value": {"path", "content", "encoding": "base64"}}).
+    JSON.stringify({ key: "file", value: { path, content, encoding: "base64" } }),
+  ].join("\n");
+  const res = await fetch(`https://huggingface.co/api/datasets/${REPO}/commit/main`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token()}`,
+      "Content-Type": "application/x-ndjson",
+    },
+    body: lines,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`HF job-state save failed (${res.status}): ${text.slice(0, 200)}`);
+  }
+  return { path };
+}
+
+/** Remove one job's durable state file. */
+export async function deleteJobState(id) {
+  if (!libraryEnabled()) throw new Error("HUGGINGFACE_TOKEN not configured");
+  return deleteFromLibrary(`${JOB_STATE_PREFIX}${id}.json`);
+}
+
+/** List and download every durable job-state file. Returns [{job, spec}]. */
+export async function listJobStates() {
+  const res = await fetch(
+    `https://huggingface.co/api/datasets/${REPO}/tree/main/${JOB_STATE_PREFIX}?recursive=true&limit=1000`,
+    { headers: token() ? { Authorization: `Bearer ${token()}` } : {}, signal: AbortSignal.timeout(30_000) }
+  );
+  if (!res.ok) throw new Error(`HF job-state list failed (${res.status})`);
+  const entries = await res.json();
+  const out = [];
+  for (const e of Array.isArray(entries) ? entries : []) {
+    if (e?.type !== "file" || !/\.json$/i.test(e.path || "")) continue;
+    try {
+      const buf = await downloadFromLibrary(e.path);
+      const parsed = JSON.parse(buf.toString("utf8"));
+      if (parsed?.job?.id) out.push(parsed);
+    } catch {
+      /* skip a corrupt/unreadable state file */
+    }
+  }
+  return out;
+}

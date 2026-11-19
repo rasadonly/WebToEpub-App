@@ -30,7 +30,7 @@ import {
 } from "./fetcher.js";
 import { buildEpub, sanitizeFilename, writeChapterFile, countEpubChapters, epubTitle } from "./epub.js";
 import { createWorkPool, DEFAULT_MAX_ACTIVE_JOBS } from "./workPool.js";
-import { uploadToLibrary, libraryEnabled, deleteFromLibrary, downloadFromLibrary } from "./library.js";
+import { uploadToLibrary, libraryEnabled, deleteFromLibrary, downloadFromLibrary, saveJobState, deleteJobState, listJobStates } from "./library.js";
 import { sendEpub } from "./download.js";
 import { getLibraryIndex, startLibraryIndex, refreshLibraryIndex } from "./libraryIndex.js";
 
@@ -81,6 +81,15 @@ function persistJob(job, force = false) {
   fs.promises
     .writeFile(path.join(STATE_DIR, `${job.id}.json`), JSON.stringify({ job, spec }))
     .catch(() => {});
+  // Durable copy (2026-11-19): the local STATE_DIR lives under os.tmpdir(),
+  // which Heroku wipes on every deploy/restart — so a running job's state
+  // vanished and restoreJobs() had nothing to resume. Also keep the state
+  // in the HF dataset, where it survives a restart. Only on forced persists
+  // (creation / error / completion) so a running job does not spam the HF
+  // API. Fire-and-forget: a failed remote save must never break a job.
+  if (force && libraryEnabled()) {
+    saveJobState(job, spec).catch(() => {});
+  }
 }
 
 function forgetJob(id) {
@@ -88,6 +97,8 @@ function forgetJob(id) {
   jobSpecs.delete(id);
   lastPersist.delete(id);
   fs.promises.unlink(path.join(STATE_DIR, `${id}.json`)).catch(() => {});
+  // Drop the durable copy too (fire-and-forget).
+  if (libraryEnabled()) deleteJobState(id).catch(() => {});
 }
 
 function publicJob(job) {
@@ -831,6 +842,47 @@ async function convertJob(job, { tocUrl, providedChapters, metadata, options, se
   job.phase = `Downloading ${list.length} chapters`;
   touch();
 
+  // Anti-bot fail-fast (2026-11-19): if 10 chapters in a row come back
+  // with no readable text, the site is almost certainly blocking the
+  // server (anti-bot / Cloudflare) — stop the job at once instead of
+  // grinding through every chapter and failing each one. The user gets a
+  // clear message instead of a silent 100%-failed job. A real book never
+  // has 10 blank chapters in a row, so this cannot fire on a healthy job.
+  const EMPTY_STREAK_LIMIT = 10;
+  let emptyStreak = 0;
+  let antiBotBlocked = false;
+  const textOf = (html) =>
+    String(html || "")
+      .replace(/<[^>]*>/g, " ")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  const noteEmpty = () => {
+    emptyStreak++;
+    if (emptyStreak >= EMPTY_STREAK_LIMIT) antiBotBlocked = true;
+  };
+  const noteContent = () => {
+    emptyStreak = 0;
+  };
+
+  // Failure-rate auto-close (2026-11-19): a job that fails most of its
+  // chapters is doomed — stop it early instead of grinding through the
+  // whole book. The anti-bot streak above only fires when chapters come
+  // back empty or throw; this catches the rest (chapters that "succeed"
+  // with garbage, or fail in a way that resets the streak). Once 20
+  // chapters have been attempted and more than 80% failed, the book is
+  // not going to convert. A healthy job (low failure rate) never trips
+  // this, and a job with a few early failures that then recovers stays
+  // under the threshold.
+  const FAIL_RATE_MIN_CHAPTERS = 20;
+  const FAIL_RATE_LIMIT = 0.8;
+  let tooManyFailures = false;
+  const checkFailureRate = () => {
+    if (job.completed >= FAIL_RATE_MIN_CHAPTERS && job.failed / job.completed > FAIL_RATE_LIMIT) {
+      tooManyFailures = true;
+    }
+  };
+
   // snowytranslations.com throttles the server IP after a burst of its heavy
   // ~250 KB chapter pages: at full concurrency every fetch fell into the
   // multi-proxy retry cascade and the job appeared stuck (observed frozen at
@@ -840,7 +892,7 @@ async function convertJob(job, { tocUrl, providedChapters, metadata, options, se
 
   const results = await mapPool(list, poolSize, async (c, i) => {
 
-    if (stopped()) return null;
+    if (stopped() || antiBotBlocked || tooManyFailures) return null;
     try {
       const file = path.join(chapterDir, `${i}.xhtml`);
       // A previous run of this same job (e.g. resumed after a restart) may
@@ -848,30 +900,64 @@ async function convertJob(job, { tocUrl, providedChapters, metadata, options, se
       // instead of downloading it again.
       if (await spoolIsComplete(file)) {
         job.completed++;
+        noteContent();
         touch();
+        checkFailureRate();
         return { title: c.title || `Chapter ${i + 1}`, file };
       }
       const saved = await chapterPool.run(async () => {
-        if (stopped()) return false;
+        if (stopped() || antiBotBlocked || tooManyFailures) return false;
         const content = isMainUrl(c.url)
           ? await fetchWholePage(c.url)
           : await fetchChapterContent(c.url, selector || detectedSelector);
-        if (stopped()) return false;
+        if (stopped() || antiBotBlocked || tooManyFailures) return false;
+        if (!textOf(content)) {
+          // No readable text — the site returned an empty/blocked page.
+          noteEmpty();
+          return false;
+        }
+        noteContent();
         await writeChapterFile(file, { title: c.title || `Chapter ${i + 1}`, content });
         return true;
       });
-      if (!saved || stopped()) return null;
+      if (!saved || stopped() || antiBotBlocked || tooManyFailures) {
+        // An empty chapter produced no text — count it as failed. (A
+        // stop/cancel is not a failure, so it is not counted.)
+        if (!saved && !stopped()) {
+          job.failed++;
+          job.completed++;
+          touch();
+          checkFailureRate();
+        }
+        return null;
+      }
       job.completed++;
       touch();
+      checkFailureRate();
       return { title: c.title || `Chapter ${i + 1}`, file };
     } catch {
       if (stopped()) return null;
+      noteEmpty();
       job.failed++;
       job.completed++;
       touch();
+      checkFailureRate();
       return null;
     }
   });
+
+  // The site blocked the server: 10 chapters in a row with no readable
+  // text. Fail the job at once with a clear message instead of letting it
+  // grind through the rest of the book and fail every chapter.
+  if (antiBotBlocked) {
+    throw new Error("This site is protected by anti-bot protection — its chapters could not be downloaded from the server.");
+  }
+
+  // Too many chapters failed: the book is not going to convert. Stop the
+  // job early instead of grinding through the rest of the chapters.
+  if (tooManyFailures) {
+    throw new Error(`Too many chapters failed to download (${job.failed} of ${job.completed} so far) — stopping this job.`);
+  }
 
   if (stopped()) return job.cancelled ? finishCancelled(job) : undefined;
 
@@ -944,6 +1030,47 @@ function finishCancelled(job) {
  * downloadable (when the file survived); anything that was mid-flight is
  * started again from the saved request, so no conversion is lost.
  */
+/** Restore a single persisted job (local file or durable HF copy): a
+ * finished job stays as-is so its download survives; a cancelled/error
+ * job stays as-is; anything else that was queued/running is re-queued
+ * and runs again from scratch (the spooled chapters live on the
+ * ephemeral dyno disk, so a restart always re-downloads them). */
+function restoreOneJob(job, spec) {
+  if (!job?.id) return;
+  const ttl = job.kind === "raw" ? RAW_JOB_TTL_MS : JOB_TTL_MS;
+  if (Date.now() - (job.updatedAt || 0) > ttl) {
+    forgetJob(job.id);
+    return;
+  }
+  // A finished job (including a raw done_with_errors job, whose
+  // EPUB exists) stays as-is across restarts so its download
+  // survives for the full retention window. Anything else that
+  // was queued/running resumes below.
+  if ((job.status === "done" || job.status === "done_with_errors") && job.file && fs.existsSync(job.file)) {
+    jobs.set(job.id, job);
+    if (spec) jobSpecs.set(job.id, spec);
+    return;
+  }
+  if (job.status === "cancelled" || job.status === "error" || !spec) {
+    jobs.set(job.id, job);
+    return;
+  }
+  // Was queued/running (or the packed file is gone) — run it again.
+  job.status = "queued";
+  job.phase = "Resuming after server restart";
+  job.completed = 0;
+  job.failed = 0;
+  job.file = null;
+  job.cancelled = false;
+  job.stopped = false;
+  job.error = null;
+  job.updatedAt = Date.now();
+  jobs.set(job.id, job);
+  jobSpecs.set(job.id, spec);
+  startJob(job, spec);
+  console.log(`[jobs] resumed ${job.id} (${job.title})`);
+}
+
 function restoreJobs() {
   let files = [];
   try {
@@ -954,41 +1081,32 @@ function restoreJobs() {
   for (const f of files) {
     try {
       const { job, spec } = JSON.parse(fs.readFileSync(path.join(STATE_DIR, f), "utf8"));
-      if (!job?.id) continue;
-      const ttl = job.kind === "raw" ? RAW_JOB_TTL_MS : JOB_TTL_MS;
-      if (Date.now() - (job.updatedAt || 0) > ttl) {
-        forgetJob(job.id);
-        continue;
-      }
-      // A finished job (including a raw done_with_errors job, whose
-      // EPUB exists) stays as-is across restarts so its download
-      // survives for the full retention window. Anything else that
-      // was queued/running resumes below.
-      if ((job.status === "done" || job.status === "done_with_errors") && job.file && fs.existsSync(job.file)) {
-        jobs.set(job.id, job);
-        if (spec) jobSpecs.set(job.id, spec);
-        continue;
-      }
-      if (job.status === "cancelled" || job.status === "error" || !spec) {
-        jobs.set(job.id, job);
-        continue;
-      }
-      // Was queued/running (or the packed file is gone) — run it again.
-      job.status = "queued";
-      job.phase = "Resuming after server restart";
-      job.completed = 0;
-      job.failed = 0;
-      job.file = null;
-      job.cancelled = false;
-      job.stopped = false;
-      job.error = null;
-      job.updatedAt = Date.now();
-      jobs.set(job.id, job);
-      jobSpecs.set(job.id, spec);
-      startJob(job, spec);
-      console.log(`[jobs] resumed ${job.id} (${job.title})`);
+      restoreOneJob(job, spec);
     } catch {
       /* skip corrupt state file */
+    }
+  }
+}
+
+/** Restore jobs whose state survived only in the HF dataset (the local
+ * STATE_DIR is wiped on a Heroku restart). Runs after the local restore;
+ * skips jobs the local restore already picked up. Fire-and-forget at
+ * startup — a slow or unavailable HF must never delay the server. */
+async function restoreRemoteJobs() {
+  if (!libraryEnabled()) return;
+  let states = [];
+  try {
+    states = await listJobStates();
+  } catch (e) {
+    console.log(`[jobs] remote restore skipped: ${e.message}`);
+    return;
+  }
+  for (const { job, spec } of states) {
+    try {
+      if (!job?.id || jobs.has(job.id)) continue;
+      restoreOneJob(job, spec);
+    } catch {
+      /* skip a bad remote state entry */
     }
   }
 }
@@ -1196,6 +1314,10 @@ app.post("/api/raw/track", (req, res) => {
 });
 
 restoreJobs();
+// Durable restore: pick up jobs whose state survived only in the HF
+// dataset (local state is wiped on a Heroku restart). Async and
+// fire-and-forget — the server starts listening regardless.
+restoreRemoteJobs().catch(() => {});
 
 app.listen(PORT, () => console.log(`link-to-epub server listening on ${PORT}`));
 startLibraryIndex();
