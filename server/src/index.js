@@ -1042,11 +1042,14 @@ function restoreOneJob(job, spec) {
     forgetJob(job.id);
     return;
   }
-  // A finished job (including a raw done_with_errors job, whose
-  // EPUB exists) stays as-is across restarts so its download
-  // survives for the full retention window. Anything else that
-  // was queued/running resumes below.
-  if ((job.status === "done" || job.status === "done_with_errors") && job.file && fs.existsSync(job.file)) {
+  // A finished job (including a raw done_with_errors job) stays finished
+  // across restarts and is NEVER converted again. Its EPUB lives under
+  // os.tmpdir(), which the host wipes on every restart/deploy, so
+  // requiring the file to still exist re-queued every completed job and
+  // spiked active jobs after each restart. The download simply becomes
+  // unavailable once the file is gone; the user can re-submit the book
+  // if they want a fresh copy.
+  if (job.status === "done" || job.status === "done_with_errors") {
     jobs.set(job.id, job);
     if (spec) jobSpecs.set(job.id, spec);
     return;
