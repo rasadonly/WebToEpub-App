@@ -45,17 +45,27 @@ async function paged(url) {
 async function build() {
   const base = `https://huggingface.co/api/datasets/${REPO}/tree/main/`;
   const top = await paged(`${base}books?limit=1000`);
-  const dirs = top.filter((e) => e.type === "directory").map((e) => e.path);
-  const files = top.filter((e) => e.type === "file");
+  // Keep only [path, size] pairs, never the full HF entry objects: holding
+  // all ~49k entries as objects plus the mapped pairs plus the JSON string
+  // blew the 380 MB heap at startup (OOM crash loop, 20 Nov 2026). Raw
+  // entries are processed per page and discarded.
+  const f = [];
+  const dirs = [];
+  for (const e of top) {
+    if (e?.type === "directory") dirs.push(e.path);
+    else if (e?.type === "file") f.push([e.path, e.size ?? null]);
+  }
   const queue = [...dirs];
   const worker = async () => {
     while (queue.length) {
       const d = queue.shift();
-      files.push(...(await paged(`${base}${d.split("/").map(encodeURIComponent).join("/")}?recursive=true&limit=1000`)));
+      const entries = await paged(`${base}${d.split("/").map(encodeURIComponent).join("/")}?recursive=true&limit=1000`);
+      for (const e of entries) {
+        if (e?.type === "file") f.push([e.path, e.size ?? null]);
+      }
     }
   };
   await Promise.all(Array.from({ length: Math.min(4, dirs.length) }, worker));
-  const f = files.filter((e) => e.type === "file").map((e) => [e.path, e.size ?? null]);
   if (!f.length) throw new Error("empty listing");
   // A drastically shorter list is probably a partial crawl; keep the fuller
   // one. 50% rather than 90%: a deliberate library cleanup can legitimately
