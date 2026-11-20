@@ -1444,6 +1444,141 @@ async function bodyNoveli(url) {
     .join("");
 }
 
+// --- ReadNovelEU (readnovel.eu): a Next.js app whose novel and chapter
+// pages carry their data in __NEXT_DATA__. The generic parser misreads
+// the TOC pagination links (/novel/<slug>?page=N#chapters) as chapters
+// (it returned 102 "chapters" that were pagination links, not chapters),
+// so a dedicated parser is needed.
+//   Novel page: /novel/<slug> — pageProps.novel (title, author,
+//     chapterCount) and pageProps.toc.items (100 chapters/page:
+//     {number, title}). TOC paginates as /novel/<slug>?page=N.
+//   Chapter URL: /chapter/<slug>-<number>.
+//   Chapter page: pageProps.data.chapter.paragraphs (plain strings = prose).
+// Verified live on Renegade Immortal (2090 chapters): TOC 100/page,
+// chapter 1 has 100 paragraphs, 3467 words, all clean prose.
+const READNOVELEU_ORIGIN = "https://readnovel.eu";
+
+function readnovelEuNovelSlug(url) {
+  const m = String(url || "").match(/\/novel\/([^/?#]+)/i);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+/** Extract and parse the __NEXT_DATA__ JSON blob from a Next.js page. */
+function readnovelEuNextData(html) {
+  const m = String(html || "").match(
+    /<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i
+  );
+  if (!m) return null;
+  try {
+    return JSON.parse(m[1]);
+  } catch {
+    return null;
+  }
+}
+
+function readnovelEuPageProps(html) {
+  const data = readnovelEuNextData(html);
+  return data?.props?.pageProps || null;
+}
+
+async function tocReadNovelEu(tocUrl) {
+  const slug = readnovelEuNovelSlug(tocUrl);
+  if (!slug)
+    throw new Error("ReadNovelEU: could not read the novel slug from the URL");
+  const base = `${READNOVELEU_ORIGIN}/novel/${encodeURIComponent(slug)}`;
+  const firstHtml = await smartGetText(base, 15000, 45000);
+  const firstProps = readnovelEuPageProps(firstHtml);
+  const firstToc = firstProps?.toc;
+  if (!firstToc?.items?.length)
+    throw new Error("ReadNovelEU: no chapters found for this novel");
+  // The TOC paginates 100/page; read the page list from toc.ranges
+  // (fallback: derive it from the novel's chapterCount).
+  const ranges = Array.isArray(firstToc.ranges) ? firstToc.ranges : [];
+  let maxPage = 1;
+  for (const r of ranges)
+    if (typeof r?.page === "number") maxPage = Math.max(maxPage, r.page);
+  const count = firstProps?.novel?.chapterCount;
+  if (typeof count === "number" && count > 0)
+    maxPage = Math.max(maxPage, Math.ceil(count / 100));
+  const byNumber = new Map();
+  const collect = (props) => {
+    for (const item of props?.toc?.items || []) {
+      const n = item?.number;
+      if (typeof n !== "number" || byNumber.has(n)) continue;
+      byNumber.set(n, {
+        url: `${READNOVELEU_ORIGIN}/chapter/${encodeURIComponent(slug)}-${n}`,
+        title: item.title || `Chapter ${n}`,
+        _num: n,
+      });
+    }
+  };
+  collect(firstProps);
+  if (maxPage > 1) {
+    const pageUrls = [];
+    for (let p = 2; p <= maxPage; p++) pageUrls.push(`${base}?page=${p}`);
+    const htmls = await mapPool(pageUrls, 4, async (u) => {
+      try {
+        return await smartGetText(u, 15000, 45000);
+      } catch {
+        return "";
+      }
+    });
+    for (const html of htmls) {
+      if (!html) continue;
+      collect(readnovelEuPageProps(html));
+    }
+  }
+  const out = [...byNumber.values()].sort((a, b) => a._num - b._num);
+  if (!out.length)
+    throw new Error("ReadNovelEU: no chapters found for this novel");
+  return out;
+}
+
+async function bodyReadNovelEu(chapterUrl) {
+  const html = await smartGetText(chapterUrl, 15000, 45000);
+  const props = readnovelEuPageProps(html);
+  const paras = props?.data?.chapter?.paragraphs || [];
+  const texts = paras
+    .map((p) => (typeof p === "string" ? p : p?.text || ""))
+    .map((t) => t.replace(/[ ‌‍﻿]/g, "").trim())
+    .filter(Boolean);
+  if (!texts.length)
+    throw new Error("ReadNovelEU: this chapter has no readable content");
+  return texts
+    .map(
+      (t) =>
+        `<p>${t
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")}</p>`
+    )
+    .join("");
+}
+
+/** Novel meta (title/author/description/cover) from the novel page's __NEXT_DATA__. */
+async function readnovelEuMeta(tocUrl) {
+  const slug = readnovelEuNovelSlug(tocUrl);
+  if (!slug) return null;
+  const html = await smartGetText(
+    `${READNOVELEU_ORIGIN}/novel/${encodeURIComponent(slug)}`,
+    15000,
+    45000
+  );
+  const novel = readnovelEuPageProps(html)?.novel;
+  if (!novel?.title) return null;
+  return {
+    title: novel.title || "",
+    author: novel.author?.name || "",
+    cover: novel.coverKey
+      ? `https://cdn.wuxiaworld.eu/${novel.coverKey}-480.webp`
+      : "",
+    description: String(novel.description || "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim(),
+  };
+}
+
 // --- LightNovel.to (lightnovel.to): a Next.js site with an open chapters
 // API. The novel page only renders 16 chapters (first 4 + last 12); the
 // full list comes from GET /api/novel-chapters?slug=<slug>, which the
@@ -5473,6 +5608,7 @@ const MAJOR_DOMAINS = [
   "akknovel.com",
   "gravitytales.com",
   "lunoxscans.com",
+  "readnovel.eu",
 ];
 
 /** Chapter-body selectors for the dedicated sites, tried in order. */
@@ -5676,6 +5812,7 @@ export function siteKey(hostname) {
   if (host.includes("novelroll.com")) return "novelroll";
   if (host.includes("novelping.com")) return "novelping";
   if (host.includes("webnovelfree.com")) return "webnovelfree";
+  if (host.includes("readnovel.eu")) return "readnoveleu";
 
   for (const [re, key] of MAJOR_SITES) {
     if (re.test(host)) return key;
@@ -5739,6 +5876,8 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         return tocNovelPing(tocUrl);
       case "webnovelfree":
         return tocWebNovelFree(tocUrl);
+      case "readnoveleu":
+        return tocReadNovelEu(tocUrl);
       case "crescentmoon":
         return tocCrescentMoon(tocUrl);
       case "novelarrow":
@@ -6017,6 +6156,8 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
         return bodyNovelPing(chapterUrl);
       case "webnovelfree":
         return bodyWebNovelFree(chapterUrl);
+      case "readnoveleu":
+        return bodyReadNovelEu(chapterUrl);
       case "crescentmoon":
         return bodyGeneric(chapterUrl, ".entry-content");
       case "novelarrow":
@@ -6292,6 +6433,16 @@ export async function fetchBookMeta(tocUrl) {
             .trim(),
         };
       }
+    }
+  } catch {
+    /* fall through to HTML scraping */
+  }
+  // ReadNovelEU pages carry the book meta in __NEXT_DATA__; take it
+  // from there so the title is clean (no "Read Wuxia Novels" suffix).
+  try {
+    if (new URL(tocUrl).hostname.includes("readnovel.eu")) {
+      const meta = await readnovelEuMeta(tocUrl);
+      if (meta?.title) return meta;
     }
   } catch {
     /* fall through to HTML scraping */
