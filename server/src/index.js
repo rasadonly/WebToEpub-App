@@ -1074,6 +1074,18 @@ function restoreOneJob(job, spec) {
     jobs.set(job.id, job);
     return;
   }
+  // Some sites block chapter content from datacenter IPs entirely (AO3 and
+  // Royal Road: TOC loads, but every chapter fetch is blocked). Resuming
+  // such a job on restart re-downloads the blocked pages and blew the heap
+  // (OOM crash loop, 20 Nov 2026). Fail it honestly instead of retrying.
+  const u = String(spec?.tocUrl || spec?.url || "");
+  if (/archiveofourown\.org|royalroad\.com/i.test(u)) {
+    job.status = "error";
+    job.error = "This site blocks chapter downloads from the server — its chapters could not be downloaded from the server.";
+    job.updatedAt = Date.now();
+    jobs.set(job.id, job);
+    return;
+  }
   // Was queued/running (or the packed file is gone) — run it again.
   job.status = "queued";
   job.phase = "Resuming after server restart";
