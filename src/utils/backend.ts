@@ -354,6 +354,21 @@ export async function searchWebNovelFreeBooks(
   return data?.results || [];
 }
 
+/**
+ * Search readnovel.eu's catalogue on the server (GET /search?q=...;
+ * results in __NEXT_DATA__ pageProps.result.items). Needs the backend
+ * to be up; it throws when it is not.
+ */
+export async function searchReadNovelEuBooks(
+  query: string,
+  limit = 10
+): Promise<NoveliSearchResult[]> {
+  const data = await api<{ results: NoveliSearchResult[] }>(
+    `/api/readnoveleu/search?q=${encodeURIComponent(query)}&limit=${limit}`
+  );
+  return data?.results || [];
+}
+
 async function pingBackend(base: string, timeoutMs = 15_000): Promise<boolean> {
   const ctrl = new AbortController();
   const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);

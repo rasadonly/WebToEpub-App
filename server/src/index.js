@@ -26,6 +26,7 @@ import {
   searchNovelRoll,
   searchNovelPing,
   searchWebNovelFree,
+  searchReadNovelEu,
   lncrawlAuthHeader,
 } from "./fetcher.js";
 import { buildEpub, sanitizeFilename, writeChapterFile, countEpubChapters, epubTitle } from "./epub.js";
@@ -400,6 +401,23 @@ app.get("/api/webnovelfree/search", async (req, res) => {
       50
     );
     const results = await searchWebNovelFree(q, limit);
+    res.json({ results });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Search readnovel.eu's catalogue (GET /search?q=...; results in
+// __NEXT_DATA__ pageProps.result.items).
+app.get("/api/readnoveleu/search", async (req, res) => {
+  try {
+    const q = String(req.query.q || "").trim();
+    if (!q) return res.status(400).json({ error: "q required" });
+    const limit = Math.min(
+      Math.max(parseInt(String(req.query.limit || "10"), 10) || 10, 1),
+      50
+    );
+    const results = await searchReadNovelEu(q, limit);
     res.json({ results });
   } catch (e) {
     res.status(500).json({ error: e.message });

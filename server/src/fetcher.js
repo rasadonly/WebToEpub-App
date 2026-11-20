@@ -1579,6 +1579,33 @@ async function readnovelEuMeta(tocUrl) {
   };
 }
 
+/** Search readnovel.eu's catalogue: GET /search?q=... (the site's own
+ * search form posts there; /browse?q= ignores the query and returns the
+ * default listing). Results live in __NEXT_DATA__ pageProps.result.items
+ * ({slug, title, chapterCount, authorName}). */
+export async function searchReadNovelEu(query, limit = 10) {
+  const q = String(query || "").trim();
+  if (!q) return [];
+  const html = await smartGetText(
+    `${READNOVELEU_ORIGIN}/search?q=${encodeURIComponent(q)}`,
+    15000,
+    45000
+  );
+  const items = readnovelEuPageProps(html)?.result?.items || [];
+  return items
+    .filter((n) => n?.slug)
+    .slice(0, limit)
+    .map((n) => ({
+      title: n?.title || "",
+      url: `${READNOVELEU_ORIGIN}/novel/${n.slug}`,
+      chapters:
+        typeof n?.chapterCount === "number" ? n.chapterCount : 0,
+      author: n?.authorName || "",
+      language: n?.originalLanguage || "",
+      source: n?.status || "",
+    }));
+}
+
 // --- LightNovel.to (lightnovel.to): a Next.js site with an open chapters
 // API. The novel page only renders 16 chapters (first 4 + last 12); the
 // full list comes from GET /api/novel-chapters?slug=<slug>, which the
