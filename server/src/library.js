@@ -273,10 +273,56 @@ export async function saveJobState(job, spec) {
   return { path };
 }
 
-/** Remove one job's durable state file. */
-export async function deleteJobState(id) {
-  if (!libraryEnabled()) throw new Error("HUGGINGFACE_TOKEN not configured");
-  return deleteFromLibrary(`${JOB_STATE_PREFIX}${id}.json`);
+/** Remove one job's durable state file. Deletes are batched: forgetting a
+ * job used to cost one commit each (~36/hour, a third of the 128/hour
+ * cap) on pure cleanup. Paths are queued and committed together every
+ * few minutes (or when enough pile up), so cleanup costs ~1 commit per
+ * batch. A failed batch stays queued and retries on the next flush.
+ * Best-effort: callers must never let a cleanup failure break a job. */
+const DELETE_BATCH_MAX = 20;
+const DELETE_FLUSH_MS = 5 * 60 * 1000;
+const deleteQueue = new Set();
+let deleteFlushTimer = null;
+
+function scheduleDeleteFlush() {
+  if (deleteFlushTimer) return;
+  deleteFlushTimer = setTimeout(() => {
+    deleteFlushTimer = null;
+    flushDeleteQueue().catch(() => {});
+  }, DELETE_FLUSH_MS);
+  // Don't keep the process alive just for a pending cleanup flush.
+  deleteFlushTimer.unref?.();
+}
+
+export async function flushDeleteQueue() {
+  if (!deleteQueue.size || !libraryEnabled()) return;
+  const paths = [...deleteQueue];
+  deleteQueue.clear();
+  const lines = [
+    JSON.stringify({
+      key: "header",
+      value: { summary: `Remove ${paths.length} job-state file(s)`, description: "Expired/cancelled job cleanup" },
+    }),
+    ...paths.map((p) => JSON.stringify({ key: "deletedFile", value: { path: p } })),
+  ].join("\n");
+  try {
+    await hfCommit(lines, `Remove ${paths.length} job-state file(s)`, { retry: false });
+  } catch {
+    // Keep them queued for the next flush.
+    for (const p of paths) deleteQueue.add(p);
+    throw new Error("HF delete batch failed");
+  }
+}
+
+export function deleteJobState(id) {
+  if (!libraryEnabled()) return Promise.resolve();
+  deleteQueue.add(`${JOB_STATE_PREFIX}${id}.json`);
+  if (deleteQueue.size >= DELETE_BATCH_MAX) {
+    flushDeleteQueue().catch(() => {});
+  } else {
+    scheduleDeleteFlush();
+  }
+  return Promise.resolve();
 }
 
 /** List and download every durable job-state file. Returns [{job, spec}]. */
