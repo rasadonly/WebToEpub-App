@@ -412,6 +412,22 @@ export async function searchReadNovelBooks(
   return data?.results || [];
 }
 
+/**
+ * Search the NovelBuddy catalogue on the server (GET
+ * /titles/search?q=...; shared by novelbuddy.com/me and
+ * webnovelonline.com). Needs the backend to be up; it throws when it
+ * is not.
+ */
+export async function searchNovelBuddyBooks(
+  query: string,
+  limit = 10
+): Promise<NoveliSearchResult[]> {
+  const data = await api<{ results: NoveliSearchResult[] }>(
+    `/api/novelbuddy/search?q=${encodeURIComponent(query)}&limit=${limit}`
+  );
+  return data?.results || [];
+}
+
 async function pingBackend(base: string, timeoutMs = 15_000): Promise<boolean> {
   const ctrl = new AbortController();
   const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);

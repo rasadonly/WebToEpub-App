@@ -1048,6 +1048,40 @@ async function tocNovelBuddy(url) {
     }));
 }
 
+/** Search the NovelBuddy catalogue (shared by novelbuddy.com/me and
+ * webnovelonline.com): GET /titles/search?q=... — JSON
+ * {data:{items:[{id,url,name,slug,cover,status,rating,summary,
+ * stats:{chapters_count}}], pagination:{total,...}}}. Results link to
+ * webnovelonline.com novel pages (same API, same slugs). */
+export async function searchNovelBuddy(query, limit = 10) {
+  const q = String(query || "").trim();
+  if (!q) return [];
+  const data = await getJson(
+    `https://api.novelbuddy.me/titles/search?q=${encodeURIComponent(q)}&page=1&limit=${Math.min(
+      Math.max(limit, 1),
+      24
+    )}`
+  );
+  const items = data?.data?.items || [];
+  return items
+    .filter((n) => n?.slug)
+    .slice(0, limit)
+    .map((n) => ({
+      title: n?.name || "",
+      url: `https://webnovelonline.com/novel/${n.slug}`,
+      chapters:
+        typeof n?.stats?.chapters_count === "number"
+          ? n.stats.chapters_count
+          : 0,
+      author: (n?.authors || [])
+        .map((a) => a?.name)
+        .filter(Boolean)
+        .join(", "),
+      language: "",
+      source: n?.status || "",
+    }));
+}
+
 // --- Lightnovel Crawler (lncrawl.bitanon.dev): existing catalogue only.
 // The instance is a hosted Lightnovel Crawler (FastAPI + React SPA), so
 // TOC/chapters come from its REST API, not from HTML — the pages are
@@ -3426,6 +3460,7 @@ export function supportedDomains() {
     "novgo.me",
     "novelbuddy.com",
     "novelbuddy.me",
+    "webnovelonline.com",
     "crescentmoon.blog",
     "novelarrow.com",
     "novelfull.com",
@@ -5295,6 +5330,225 @@ async function tocWuxiaClick(startUrl) {
   return [...byNum.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
 }
 
+// --- RealmRead (realmread.com): a Next.js App Router site (Supabase
+// backend) hosting ~2,300 progression-fantasy / cultivation novels.
+// Free, no login; CF-fronted but not blocking server fetches.
+//   Novel page: /novel/<slug> — the HTML lists only chapters 1–25 +
+//     the last chapter, but chapter URLs are sequential
+//     (/novel/<slug>/chapter/<N>) and the total is in the page JSON
+//     (chapter_count), so the TOC is constructed as chapters 1..N.
+//   Chapter URL: /novel/<slug>/chapter/<N>.
+//   Chapter prose: <div class="group relative transition-all
+//     duration-300 rounded-lg opacity-100"> inside the single
+//     <article> — one div per paragraph; each also holds a
+//     "Comment on paragraph" button (SVG only) to strip.
+//   Search is client-side only (no working server-side API), so no
+//     dedicated search is wired — the generic engine search covers it.
+// Verified live on A Will Eternal (1,314 chapters).
+const REALMREAD_ORIGIN = "https://www.realmread.com";
+
+function realmreadNovelSlug(url) {
+  const m = String(url || "").match(/\/novel\/([^/?#]+)/i);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+async function tocRealmRead(tocUrl) {
+  const slug = realmreadNovelSlug(tocUrl);
+  if (!slug)
+    throw new Error("RealmRead: could not read the novel slug from the URL");
+  const base = `${REALMREAD_ORIGIN}/novel/${encodeURIComponent(slug)}`;
+  const html = await smartGetText(base, 15000, 45000);
+  // Total chapter count: the page JSON carries "chapter_count":N for the
+  // main novel first (later matches are "similar novels"). Cross-check
+  // against the largest chapter number linked on the page (the novel
+  // page lists chapters 1–25 plus the last chapter).
+  let total = 0;
+  const cm = html.match(/chapter_count\\?":(\d+)/);
+  if (cm) total = parseInt(cm[1], 10);
+  let maxLink = 0;
+  for (const m of html.matchAll(/\/novel\/[^/"?#]+\/chapter\/(\d+)/g)) {
+    maxLink = Math.max(maxLink, parseInt(m[1], 10));
+  }
+  total = Math.max(total, maxLink);
+  if (!total)
+    throw new Error("RealmRead: no chapters found for this novel");
+  const out = [];
+  for (let n = 1; n <= total; n++) {
+    out.push({
+      url: `${base}/chapter/${n}`,
+      title: `Chapter ${n}`,
+      _num: n,
+    });
+  }
+  return out;
+}
+
+async function bodyRealmRead(chapterUrl) {
+  const doc = parseHtml(await smartGetText(chapterUrl, 15000, 45000));
+  const texts = [];
+  const article = doc.querySelector("article");
+  const paras = article
+    ? article.querySelectorAll(
+        "div.group.relative.transition-all.duration-300.rounded-lg.opacity-100"
+      )
+    : [];
+  for (const p of paras) {
+    // The prose lives in the inner <div class="relative"><div>…</div></div>;
+    // the sibling button container holds only SVG icons.
+    const inner = p.querySelector("div.relative > div");
+    const t = ((inner || p).textContent || "")
+      .replace(/[\u200B\u200C\u200D\uFEFF]/g, "")
+      .trim();
+    if (t) texts.push(t);
+  }
+  if (!texts.length)
+    throw new Error("RealmRead: this chapter has no readable content");
+  return texts
+    .map(
+      (t) =>
+        `<p>${t
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")}</p>`
+    )
+    .join("");
+}
+
+async function realmreadMeta(tocUrl) {
+  const slug = realmreadNovelSlug(tocUrl);
+  if (!slug) return null;
+  const html = await smartGetText(
+    `${REALMREAD_ORIGIN}/novel/${encodeURIComponent(slug)}`,
+    15000,
+    45000
+  );
+  const doc = parseHtml(html);
+  const ogTitle =
+    doc.querySelector('meta[property="og:title"]')?.getAttribute("content") ||
+    "";
+  // og:title is "<Title> by <Author> — Read Free | RealmRead".
+  const title = ogTitle.split(" by ")[0].trim();
+  if (!title) return null;
+  const ogImage =
+    doc.querySelector('meta[property="og:image"]')?.getAttribute("content") ||
+    "";
+  const ogDesc =
+    doc.querySelector('meta[property="og:description"]')?.getAttribute("content") ||
+    "";
+  const authorMatch = ogTitle.match(/ by (.+?) — /);
+  return {
+    title,
+    author: authorMatch ? authorMatch[1].trim() : "",
+    cover: ogImage,
+    description: String(ogDesc || "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim(),
+  };
+}
+
+// --- NovelArchive (novelarchive.st): a custom JS app. The HTML pages
+// are server-rendered and work from a datacenter IP, but the JSON API
+// (/api/*) is Cloudflare-challenged, and search is API-only — so no
+// dedicated search is wired (the generic engine search covers it).
+//   Novel page: /novel?id=<24-hex-id> — the HTML lists only ch 1
+//     ("Start Reading") and ch N ("Read Latest"), but the total is in
+//     <span id="novel-total-chapters">N</span>, and chapter URLs are
+//     sequential (/reader?novel=<id>&chapter=<N>), so the TOC is
+//     constructed as chapters 1..N.
+//   Chapter URL: /reader?novel=<id>&chapter=<N>.
+//   Chapter prose: <article id="reader-article" class="reading-content">
+//     holds the prose as <p> tags.
+// Verified live on "MTL-What are you looking at? You're the female
+// lead too!" (123 chapters).
+const NOVELARCHIVE_ORIGIN = "https://novelarchive.st";
+
+function novelArchiveNovelId(url) {
+  try {
+    const u = new URL(url);
+    return u.searchParams.get("novel") || u.searchParams.get("id") || null;
+  } catch {
+    return null;
+  }
+}
+
+async function tocNovelArchive(tocUrl) {
+  const id = novelArchiveNovelId(tocUrl);
+  if (!id)
+    throw new Error("NovelArchive: could not read the novel id from the URL");
+  const html = await smartGetText(
+    `${NOVELARCHIVE_ORIGIN}/novel?id=${encodeURIComponent(id)}`,
+    15000,
+    45000
+  );
+  let total = 0;
+  const m = html.match(
+    /id=["']novel-total-chapters["'][^>]*>\s*(\d+)\s*</i
+  );
+  if (m) total = parseInt(m[1], 10);
+  // Cross-check against the largest chapter number linked on the page.
+  let maxLink = 0;
+  for (const mm of html.matchAll(/chapter=(\d+)/g)) {
+    maxLink = Math.max(maxLink, parseInt(mm[1], 10));
+  }
+  total = Math.max(total, maxLink);
+  if (!total)
+    throw new Error("NovelArchive: no chapters found for this novel");
+  const out = [];
+  for (let n = 1; n <= total; n++) {
+    out.push({
+      url: `${NOVELARCHIVE_ORIGIN}/reader?novel=${encodeURIComponent(id)}&chapter=${n}`,
+      title: `Chapter ${n}`,
+      _num: n,
+    });
+  }
+  return out;
+}
+
+async function bodyNovelArchive(chapterUrl) {
+  const doc = parseHtml(await smartGetText(chapterUrl, 15000, 45000));
+  const article = doc.querySelector("article#reader-article");
+  const texts = [];
+  if (article) {
+    for (const p of article.querySelectorAll("p")) {
+      const t = (p.textContent || "").replace(/[\u200B\u200C\u200D\uFEFF]/g, "").trim();
+      if (t) texts.push(t);
+    }
+  }
+  if (!texts.length)
+    throw new Error("NovelArchive: this chapter has no readable content");
+  return texts
+    .map(
+      (t) =>
+        `<p>${t
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")}</p>`
+    )
+    .join("");
+}
+
+async function novelarchiveMeta(tocUrl) {
+  const id = novelArchiveNovelId(tocUrl);
+  if (!id) return null;
+  const html = await smartGetText(
+    `${NOVELARCHIVE_ORIGIN}/novel?id=${encodeURIComponent(id)}`,
+    15000,
+    45000
+  );
+  const doc = parseHtml(html);
+  const rawTitle = doc.querySelector("title")?.textContent || "";
+  // <title> is "<Title> | Novel Archive".
+  const title = rawTitle.split(" | ")[0].trim();
+  if (!title) return null;
+  return {
+    title,
+    author: "",
+    cover: "",
+    description: "",
+  };
+}
+
 
 // --- Piaotia (piaotia.com / ptwxz.com): chapter prose has no container at
 // all — paragraphs are direct <body> children between div.toplink and
@@ -6324,6 +6578,8 @@ const MAJOR_DOMAINS = [
   "wuxiadreams.com",
   "mubooks.com",
   "read-novel.com",
+  "realmread.com",
+  "novelarchive.st",
 ];
 
 /** Chapter-body selectors for the dedicated sites, tried in order. */
@@ -6491,6 +6747,7 @@ export function siteKey(hostname) {
   if (host.includes("hako.vn") || host.includes("docln.")) return "hako";
   if (host.includes("tianyabooks.com")) return "tianya";
   if (host.includes("novelbuddy.")) return "novelbuddy";
+  if (host.includes("webnovelonline.com")) return "novelbuddy";
   if (host.includes("crescentmoon.blog") || host.includes("ikigainovels.wordpress.com")) return "crescentmoon";
   if (host.includes("novelarrow.com")) return "novelarrow";
   if (host.includes("readnovelfull.")) return "readnovelfull";
@@ -6532,6 +6789,8 @@ export function siteKey(hostname) {
   if (host.includes("wuxiadreams.com")) return "wuxiadreams";
   if (host.includes("mubooks.com")) return "mubooks";
   if (host.includes("read-novel.com")) return "readnovel";
+  if (host.includes("realmread.com")) return "realmread";
+  if (host.includes("novelarchive.st")) return "novelarchive";
 
   for (const [re, key] of MAJOR_SITES) {
     if (re.test(host)) return key;
@@ -6605,6 +6864,10 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         return tocMubooks(tocUrl);
       case "readnovel":
         return tocReadNovel(tocUrl);
+      case "realmread":
+        return tocRealmRead(tocUrl);
+      case "novelarchive":
+        return tocNovelArchive(tocUrl);
       case "crescentmoon":
         return tocCrescentMoon(tocUrl);
       case "novelarrow":
@@ -6893,6 +7156,10 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
         return bodyMubooks(chapterUrl);
       case "readnovel":
         return bodyReadNovel(chapterUrl);
+      case "realmread":
+        return bodyRealmRead(chapterUrl);
+      case "novelarchive":
+        return bodyNovelArchive(chapterUrl);
       case "crescentmoon":
         return bodyGeneric(chapterUrl, ".entry-content");
       case "novelarrow":
@@ -7182,6 +7449,25 @@ export async function fetchBookMeta(tocUrl) {
   } catch {
     /* fall through to HTML scraping */
   }
+  // RealmRead pages title themselves "<Title> by <Author> — Read Free |
+  // RealmRead"; take the title from the part before " by ".
+  try {
+    if (new URL(tocUrl).hostname.includes("realmread.com")) {
+      const meta = await realmreadMeta(tocUrl);
+      if (meta?.title) return meta;
+    }
+  } catch {
+    /* fall through to HTML scraping */
+  }
+  // NovelArchive pages title themselves "<Title> | Novel Archive".
+  try {
+    if (new URL(tocUrl).hostname.includes("novelarchive.st")) {
+      const meta = await novelarchiveMeta(tocUrl);
+      if (meta?.title) return meta;
+    }
+  } catch {
+    /* fall through to HTML scraping */
+  }
   // Google Sites pages title themselves "<site-name> - <novel-title>"
   // (e.g. "loveeattea - An Unbreakable Marriage"), and the site name is not
   // a known brand, so the generic cleaner would leave it in. Take the
@@ -7248,7 +7534,7 @@ export async function fetchBookMeta(tocUrl) {
   // take the meta from the same API the TOC parser uses.
   try {
     const host = new URL(tocUrl).hostname;
-    if (host.includes("novelbuddy.")) {
+    if (host.includes("novelbuddy.") || host.includes("webnovelonline.com")) {
       const id = await novelBuddyTitleId(tocUrl);
       const titleJson = await getJson(`https://api.novelbuddy.me/titles/${id}`);
       const t = titleJson?.data?.title || {};

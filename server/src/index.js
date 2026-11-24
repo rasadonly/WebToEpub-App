@@ -30,6 +30,7 @@ import {
   searchWuxiadreams,
   searchMubooks,
   searchReadNovel,
+  searchNovelBuddy,
   lncrawlAuthHeader,
 } from "./fetcher.js";
 import { buildEpub, sanitizeFilename, writeChapterFile, countEpubChapters, epubTitle } from "./epub.js";
@@ -475,6 +476,23 @@ app.get("/api/readnovel/search", async (req, res) => {
       50
     );
     const results = await searchReadNovel(q, limit);
+    res.json({ results });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Search the NovelBuddy catalogue (GET /titles/search?q=...; shared by
+// novelbuddy.com/me and webnovelonline.com).
+app.get("/api/novelbuddy/search", async (req, res) => {
+  try {
+    const q = String(req.query.q || "").trim();
+    if (!q) return res.status(400).json({ error: "q required" });
+    const limit = Math.min(
+      Math.max(parseInt(String(req.query.limit || "10"), 10) || 10, 1),
+      50
+    );
+    const results = await searchNovelBuddy(q, limit);
     res.json({ results });
   } catch (e) {
     res.status(500).json({ error: e.message });

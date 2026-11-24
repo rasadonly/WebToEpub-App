@@ -14,7 +14,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { engineSearch, cancelSearch, engineLoadMetadata, EngineSearchResult } from '@/utils/webtoepub/bridge';
 import LibrarySuggestion from './LibrarySuggestion';
 import { normalizeBookSearch } from '@/utils/librarySearch';
-import { backendToc, isBackendEnabled, searchLncrawlBooks, searchNoveliBooks, searchLightNovelToBooks, searchNovelRollBooks, searchNovelPingBooks, searchWebNovelFreeBooks, searchReadNovelEuBooks, searchWuxiadreamsBooks, searchMubooksBooks, searchReadNovelBooks } from '@/utils/backend';
+import { backendToc, isBackendEnabled, searchLncrawlBooks, searchNoveliBooks, searchLightNovelToBooks, searchNovelRollBooks, searchNovelPingBooks, searchWebNovelFreeBooks, searchReadNovelEuBooks, searchWuxiadreamsBooks, searchMubooksBooks, searchReadNovelBooks, searchNovelBuddyBooks } from '@/utils/backend';
 import { LiveStats } from '@/components/LiveStats';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 
@@ -517,6 +517,9 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
       const readNovelPromise = isBackendEnabled()
         ? searchReadNovelBooks(query, 10).then(makeMerge('read-novel.com')).catch(() => {})
         : Promise.resolve();
+      const novelBuddyPromise = isBackendEnabled()
+        ? searchNovelBuddyBooks(query, 10).then(makeMerge('webnovelonline.com')).catch(() => {})
+        : Promise.resolve();
       await Promise.all([
         engineSearch(
           query,
@@ -547,6 +550,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
         wuxiadreamsPromise,
         mubooksPromise,
         readNovelPromise,
+        novelBuddyPromise,
       ]);
       setSearchStatus('');
     } catch (err) {
