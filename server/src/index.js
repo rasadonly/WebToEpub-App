@@ -1005,55 +1005,54 @@ async function convertJob(job, { tocUrl, providedChapters, metadata, options, se
   job.file = file;
   job.size = (await fs.promises.stat(file)).size;
 
+  if (stopped()) {
+    await fs.promises.unlink(file).catch(() => {});
+    return job.cancelled ? finishCancelled(job) : undefined;
+  }
+
+  // Mark done immediately so the user gets their download without waiting
+  // on the library copy (which can stall on the HF 128/hour commit cap).
+  job.status = "done";
+  job.phase = "Ready to download";
+  job.updatedAt = Date.now();
+  writeLocalJobState(job);
+  const doneJob = { ...job };
+
   // Best-effort copy to the shared Hugging Face library (never fails the job).
   // One HF commit carries BOTH the EPUB and the finished job state, instead
   // of two separate commits (uploadToLibrary + saveJobState) — a finished
   // book used to cost ~3 commits (create state, EPUB, done state), now ~2,
   // which is what keeps the 128/hour cap from tripping during a burst,
-  // while the library stays instant (no batching delay). Done before
-  // flipping to "done" so the client's poll sees the link together with
-  // the done status. The state saved in this commit is the finished one
-  // (status done), even though the live job flips to done just after.
+  // while the library stays instant (no batching delay). Runs in the
+  // background: the LFS upload uses the upload pool, but the commit (and
+  // its 429 retry wait) does NOT hold the pool, so a slow retry never
+  // blocks other books or this job's download. The link is attached to
+  // the (already done) job a few seconds after done in the common case.
   if (libraryEnabled()) {
-    job.phase = "Saving a copy to the library";
     job.libraryStatus = "uploading";
-    touch();
-    try {
-      const up = await uploadPool.run(async () => {
-        if (stopped()) return null;
-        touch();
-        const buffer = await fs.promises.readFile(file);
+    fs.promises
+      .readFile(file)
+      .then((buffer) => {
         const spec = jobSpecs.get(job.id) || null;
-        const doneJob = { ...job, status: "done", phase: "Ready to download", updatedAt: Date.now() };
-        return uploadToLibraryWithJobState(buffer, job.filename, {
-          title: metadata.title,
-          author: metadata.author,
-          source: tocUrl,
-        }, doneJob, spec);
+        return uploadToLibraryWithJobState(
+          buffer,
+          job.filename,
+          { title: metadata.title, author: metadata.author, source: tocUrl },
+          doneJob,
+          spec,
+          uploadPool.run
+        );
+      })
+      .then((up) => {
+        job.libraryUrl = up.url;
+        job.libraryPageUrl = up.pageUrl;
+        job.libraryStatus = "saved";
+      })
+      .catch((e) => {
+        console.error("Library upload failed:", e);
+        job.libraryStatus = "failed";
+        job.libraryError = e.message;
       });
-      if (!up || stopped()) return job.cancelled ? finishCancelled(job) : undefined;
-      job.libraryUrl = up.url;
-      job.libraryPageUrl = up.pageUrl;
-      job.libraryStatus = "saved";
-    } catch (e) {
-      console.error("Library upload failed:", e);
-      job.libraryStatus = "failed";
-      job.libraryError = e.message;
-    }
-  }
-
-  if (stopped()) return job.cancelled ? finishCancelled(job) : undefined;
-  job.status = "done";
-  job.phase = "Ready to download";
-  job.updatedAt = Date.now();
-  // The combined commit already saved the finished state to HF when the
-  // library upload succeeded — only the local file still needs writing.
-  // When the upload failed (or the library is off), fall back to the
-  // separate (best-effort) save.
-  if (job.libraryStatus === "saved") {
-    writeLocalJobState(job);
-  } else {
-    persistJob(job, true);
   }
 
 }

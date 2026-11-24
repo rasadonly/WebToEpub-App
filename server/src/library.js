@@ -47,9 +47,10 @@ function slug(name) {
 // a failed commit must never break a conversion — callers catch it.
 const HF_COMMIT_RETRY_DELAYS_MS = [60_000, 300_000, 900_000];
 
-async function hfCommit(lines, summary = "commit") {
+async function hfCommit(lines, summary = "commit", { retry = true } = {}) {
+  const delays = retry ? HF_COMMIT_RETRY_DELAYS_MS : [];
   let lastErr = null;
-  for (let attempt = 0; attempt <= HF_COMMIT_RETRY_DELAYS_MS.length; attempt++) {
+  for (let attempt = 0; attempt <= delays.length; attempt++) {
     const res = await fetch(`https://huggingface.co/api/datasets/${REPO}/commit/main`, {
       method: "POST",
       headers: {
@@ -61,10 +62,10 @@ async function hfCommit(lines, summary = "commit") {
     if (res.ok) return res;
     const text = await res.text().catch(() => "");
     lastErr = new Error(`HF commit failed (${res.status}): ${text.slice(0, 200)}`);
-    if (res.status === 429 && attempt < HF_COMMIT_RETRY_DELAYS_MS.length) {
-      const delay = HF_COMMIT_RETRY_DELAYS_MS[attempt];
+    if (res.status === 429 && attempt < delays.length) {
+      const delay = delays[attempt];
       console.warn(
-        `HF commit 429 (${summary}) — retrying in ${Math.round(delay / 1000)}s (attempt ${attempt + 1}/${HF_COMMIT_RETRY_DELAYS_MS.length})`
+        `HF commit 429 (${summary}) — retrying in ${Math.round(delay / 1000)}s (attempt ${attempt + 1}/${delays.length})`
       );
       await new Promise((r) => setTimeout(r, delay));
       continue;
@@ -186,15 +187,18 @@ export async function uploadToLibrary(buffer, filename, meta = {}) {
  * this cuts it to ~2, which is what keeps the 128/hour cap from tripping
  * during a burst, while the library stays instant (no batching delay).
  * The `job` passed in must already carry the final done state.
+ * `runInPool` (the upload pool's run) wraps ONLY the LFS upload — the
+ * commit (and its 429 retry wait) runs outside the pool, so a slow retry
+ * never holds the single upload slot and never blocks other books.
  * @returns {Promise<{path:string,url:string,pageUrl:string}>}
  */
-export async function uploadToLibraryWithJobState(buffer, filename, meta, job, spec) {
+export async function uploadToLibraryWithJobState(buffer, filename, meta, job, spec, runInPool) {
   if (!libraryEnabled()) throw new Error("HUGGINGFACE_TOKEN not configured");
   if (buffer.length < 100 * 1024) throw new Error("file too small for community library (min 100 KB)");
   if (buffer.length > MAX_BYTES) throw new Error("file too large for the library");
 
   const { path, base } = libraryEpubPath(filename);
-  const { oid, size } = await lfsUploadEpub(buffer, path);
+  const { oid, size } = await runInPool(() => lfsUploadEpub(buffer, path));
 
   const statePath = `${JOB_STATE_PREFIX}${job.id}.json`;
   const stateContent = Buffer.from(JSON.stringify({ job, spec }), "utf8").toString("base64");
@@ -227,7 +231,9 @@ export async function downloadFromLibrary(path) {
   return Buffer.from(await res.arrayBuffer());
 }
 
-/** Removes one file from the dataset repo (single-file commit). */
+/** Removes one file from the dataset repo (single-file commit). Deletes are
+ * cleanup, not content — a 429 on one is not retried, so a burst of
+ * expiries cannot burn the commit budget on removals. */
 export async function deleteFromLibrary(path) {
   if (!libraryEnabled()) throw new Error("HUGGINGFACE_TOKEN not configured");
   const lines = [
@@ -237,7 +243,7 @@ export async function deleteFromLibrary(path) {
     }),
     JSON.stringify({ key: "deletedFile", value: { path } }),
   ].join("\n");
-  await hfCommit(lines, `Remove ${path}`);
+  await hfCommit(lines, `Remove ${path}`, { retry: false });
 }
 
 // ── Durable job state (survives Heroku restarts) ─────────────
