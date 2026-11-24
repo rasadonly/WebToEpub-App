@@ -1195,6 +1195,26 @@ function restoreOneJob(job, spec) {
     jobs.set(job.id, job);
     return;
   }
+  // A queued/running job that never processed a chapter and whose saved
+  // state is old is stale — its creation-time save was never followed by
+  // a progress save (e.g. the save was lost to the HF commit rate
+  // limit), so the durable copy still says "queued" with 0 completed
+  // even though the book is long done or abandoned. Resuming it
+  // re-converts from chapter 0, and resuming many such jobs at once blew
+  // the heap (OOM crash loop, 24 Nov 2026). Fail it honestly instead of
+  // retrying. A genuinely fresh queued job (created minutes before the
+  // restart) still resumes.
+  if (
+    (job.status === "queued" || job.status === "running") &&
+    !job.completed &&
+    Date.now() - (job.updatedAt || 0) > 60 * 60 * 1000
+  ) {
+    job.status = "error";
+    job.error = "This job was interrupted before it made progress and its saved state is stale — please submit the book again.";
+    job.updatedAt = Date.now();
+    jobs.set(job.id, job);
+    return;
+  }
   // Was queued/running (or the packed file is gone) — run it again.
   job.status = "queued";
   job.phase = "Resuming after server restart";
