@@ -64,15 +64,18 @@ export function LiveStats() {
   if (!stats) return null;
 
   return (
-    <div className="flex items-center gap-3 rounded-full border border-border/60 bg-card/80 px-3 py-1.5 text-xs text-muted-foreground backdrop-blur">
-      <span className="flex items-center gap-1.5" title="Conversions running right now">
+    <div className="flex items-center gap-2 rounded-full border border-border/60 bg-card/80 px-2 py-1 text-xs text-muted-foreground backdrop-blur md:gap-3 md:px-3 md:py-1.5">
+      {/* Conversions running — desktop/tablet only; the header is too crowded for it on phones. */}
+      <span className="hidden items-center gap-1.5 md:flex" title="Conversions running right now">
         <Activity className="h-3.5 w-3.5 text-primary" />
         <span className="font-medium text-foreground">{stats.activeJobs}</span> active
       </span>
-      <span className="h-3 w-px bg-border" />
+      <span className="hidden h-3 w-px bg-border md:block" />
+      {/* People online — always visible; on phones just the icon + number, no "online" word. */}
       <span className="flex items-center gap-1.5" title="People using the app right now">
         <Users className="h-3.5 w-3.5 text-primary" />
-        <span className="font-medium text-foreground">{stats.activeUsers}</span> online
+        <span className="font-medium text-foreground">{stats.activeUsers}</span>
+        <span className="hidden md:inline"> online</span>
       </span>
     </div>
   );

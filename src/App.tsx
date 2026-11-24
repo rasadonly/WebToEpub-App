@@ -60,9 +60,7 @@ function NavBar() {
 
         {/* Right side: live stats + action menu */}
         <div className="flex items-center gap-2 ml-auto">
-          <div className="hidden md:block">
-            <LiveStats />
-          </div>
+          <LiveStats />
 
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
