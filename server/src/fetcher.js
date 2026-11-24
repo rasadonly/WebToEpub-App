@@ -152,6 +152,12 @@ const CF_PROTECTED = [
   // while the same calls work locally). The CF Worker proxy returns the
   // archive in ~1.4 s — proxies first. (2026-11-14, Heroku v132.)
   /(^|\.)novelping\.com$/i,
+  // WuxiaDreams is CF-fronted and does not block the VM's IP, but the
+  // Heroku datacenter IP gets a CF challenge page (no chapter links) —
+  // production TOC returned 0 chapters from the dedicated parser and
+  // fell back to the generic parser (100 chapters, page 1 only), while
+  // the same calls work locally. Proxies first. (2026-11-24, Heroku v149.)
+  /(^|\.)wuxiadreams\.com$/i,
 ];
 
 function isCfProtected(host) {
