@@ -1555,6 +1555,107 @@ async function bodyReadNovelEu(chapterUrl) {
     .join("");
 }
 
+// ---- Google Sites (sites.google.com/view/<site>/<novel>) -------------------
+// A Google Sites novel site: the novel page is /view/<site>/<novel-slug> and
+// its chapters are /view/<site>/<novel-slug>/<chapter-slug> (e.g. aum-1).
+// Google hosts it (server ESF), so there is no Cloudflare wall and no login;
+// the pages are plain server-rendered HTML. Chapter prose lives in
+// <p class="zfr3Q CDt4Ke"> elements (69 paragraphs, ~14k chars on ch. 1).
+// The sidebar lists every novel on the site, so the TOC must filter to links
+// under this novel's own path only.
+
+function googleSitesNovelPath(tocUrl) {
+  try {
+    const u = new URL(tocUrl);
+    const parts = u.pathname.split("/").filter(Boolean);
+    // /view/<site>/<novel-slug>[/...]
+    if (parts.length >= 3 && parts[0] === "view") {
+      return { origin: u.origin, site: parts[1], novel: parts[2] };
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+async function tocGoogleSites(tocUrl) {
+  const np = googleSitesNovelPath(tocUrl);
+  if (!np)
+    throw new Error("GoogleSites: could not read the novel path from the URL");
+  const base = `${np.origin}/view/${np.site}/${np.novel}`;
+  const prefix = `/view/${np.site}/${np.novel}/`;
+  const doc = parseHtml(await smartGetText(base, 15000, 45000));
+  const byNumber = new Map();
+  for (const a of doc.querySelectorAll("a[href]")) {
+    const href = a.getAttribute("href") || "";
+    const abs = absoluteUrl(np.origin, href);
+    let path = "";
+    try {
+      path = new URL(abs).pathname;
+    } catch {
+      continue;
+    }
+    if (!path.startsWith(prefix)) continue;
+    const slug = path.slice(prefix.length).split("/")[0];
+    if (!slug) continue;
+    const m = slug.match(/(\d+)$/);
+    if (!m) continue;
+    const n = parseInt(m[1], 10);
+    if (byNumber.has(n)) continue;
+    byNumber.set(n, {
+      url: abs,
+      title: (a.textContent || "").trim() || `Chapter ${n}`,
+      _num: n,
+    });
+  }
+  const out = [...byNumber.values()].sort((a, b) => a._num - b._num);
+  if (!out.length)
+    throw new Error("GoogleSites: no chapters found for this novel");
+  return out;
+}
+
+async function bodyGoogleSites(chapterUrl) {
+  const doc = parseHtml(await smartGetText(chapterUrl, 15000, 45000));
+  const texts = [];
+  for (const p of doc.querySelectorAll("p.zfr3Q.CDt4Ke")) {
+    const t = (p.textContent || "").replace(/[ ‌‍﻿]/g, "").trim();
+    if (t) texts.push(t);
+  }
+  if (!texts.length)
+    throw new Error("GoogleSites: this chapter has no readable content");
+  return texts
+    .map(
+      (t) =>
+        `<p>${t
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")}</p>`
+    )
+    .join("");
+}
+
+/** Novel meta for Google Sites. The page <title> is "<site-name> - <novel-title>"
+ * (e.g. "loveeattea - An Unbreakable Marriage"), and the site name is not a
+ * known brand, so cleanBookTitle would leave it in. Take the part after the
+ * last " - " as the novel title. */
+async function googleSitesMeta(tocUrl) {
+  const html = await smartGetText(tocUrl, 15000, 45000);
+  const ogTitle = (html.match(/property="og:title" content="([^"]*)"/) || [])[1] || "";
+  const titleTag = (html.match(/<title>([^<]*)<\/title>/i) || [])[1] || "";
+  const raw = (ogTitle || titleTag).replace(/\s+/g, " ").trim();
+  if (!raw) return null;
+  const parts = raw.split(" - ").map((s) => s.trim()).filter(Boolean);
+  const title = parts.length > 1 ? parts[parts.length - 1] : raw;
+  const cover = (html.match(/property="og:image" content="([^"]*)"/) || [])[1] || "";
+  const description = (html.match(/property="og:description" content="([^"]*)"/) || [])[1] || "";
+  return {
+    title,
+    author: "",
+    cover,
+    description: description.replace(/&amp;/g, "&").replace(/&quot;/g, '"').trim(),
+  };
+}
+
 /** Novel meta (title/author/description/cover) from the novel page's __NEXT_DATA__. */
 async function readnovelEuMeta(tocUrl) {
   const slug = readnovelEuNovelSlug(tocUrl);
@@ -5636,6 +5737,7 @@ const MAJOR_DOMAINS = [
   "gravitytales.com",
   "lunoxscans.com",
   "readnovel.eu",
+  "sites.google.com",
 ];
 
 /** Chapter-body selectors for the dedicated sites, tried in order. */
@@ -5840,6 +5942,7 @@ export function siteKey(hostname) {
   if (host.includes("novelping.com")) return "novelping";
   if (host.includes("webnovelfree.com")) return "webnovelfree";
   if (host.includes("readnovel.eu")) return "readnoveleu";
+  if (host.includes("sites.google.com")) return "googlesites";
 
   for (const [re, key] of MAJOR_SITES) {
     if (re.test(host)) return key;
@@ -5905,6 +6008,8 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         return tocWebNovelFree(tocUrl);
       case "readnoveleu":
         return tocReadNovelEu(tocUrl);
+      case "googlesites":
+        return tocGoogleSites(tocUrl);
       case "crescentmoon":
         return tocCrescentMoon(tocUrl);
       case "novelarrow":
@@ -6185,6 +6290,8 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
         return bodyWebNovelFree(chapterUrl);
       case "readnoveleu":
         return bodyReadNovelEu(chapterUrl);
+      case "googlesites":
+        return bodyGoogleSites(chapterUrl);
       case "crescentmoon":
         return bodyGeneric(chapterUrl, ".entry-content");
       case "novelarrow":
@@ -6469,6 +6576,18 @@ export async function fetchBookMeta(tocUrl) {
   try {
     if (new URL(tocUrl).hostname.includes("readnovel.eu")) {
       const meta = await readnovelEuMeta(tocUrl);
+      if (meta?.title) return meta;
+    }
+  } catch {
+    /* fall through to HTML scraping */
+  }
+  // Google Sites pages title themselves "<site-name> - <novel-title>"
+  // (e.g. "loveeattea - An Unbreakable Marriage"), and the site name is not
+  // a known brand, so the generic cleaner would leave it in. Take the
+  // title from the part after the last " - ".
+  try {
+    if (new URL(tocUrl).hostname.includes("sites.google.com")) {
+      const meta = await googleSitesMeta(tocUrl);
       if (meta?.title) return meta;
     }
   } catch {
