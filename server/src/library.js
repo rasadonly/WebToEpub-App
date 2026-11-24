@@ -10,6 +10,7 @@ import { createHash } from "node:crypto";
 
 const REPO = process.env.HF_LIBRARY_REPO || "prasaduser/webtoepub-library";
 const MAX_BYTES = Number(process.env.HF_LIBRARY_MAX_BYTES || 40 * 1024 * 1024);
+const JOB_STATE_PREFIX = "job-state/";
 
 function token() {
   return (process.env.HF_LIBRARY_TOKEN || process.env.HUGGINGFACE_TOKEN || process.env.HF_TOKEN || "").trim();
@@ -36,20 +37,47 @@ function slug(name) {
   );
 }
 
-/**
- * Commits one EPUB to the dataset repo.
- * @returns {Promise<{path:string,url:string,pageUrl:string}>}
- */
-export async function uploadToLibrary(buffer, filename, meta = {}) {
-  if (!libraryEnabled()) throw new Error("HUGGINGFACE_TOKEN not configured");
-  if (buffer.length < 100 * 1024) throw new Error("file too small for community library (min 100 KB)");
-  if (buffer.length > MAX_BYTES) throw new Error("file too large for the library");
+// ── HF commit helper (rate-limit resilient) ─────────────────────
+// Hugging Face caps dataset commits at 128/hour. A burst of finished
+// books trips it (429 "You have exceeded the rate limit for repository
+// commit creation"). The cap is a ROLLING hourly window, so slots free
+// up continuously as older commits age out — a retry after a few minutes
+// usually succeeds. Retry a 429 after 1m, 5m, then 15m; anything else
+// (or an exhausted retry) throws. The library upload is best-effort, so
+// a failed commit must never break a conversion — callers catch it.
+const HF_COMMIT_RETRY_DELAYS_MS = [60_000, 300_000, 900_000];
 
-  const base = slug(filename.replace(/\.epub$/i, ""));
-  const stamp = new Date().toISOString().slice(0, 10);
-  const rand = Math.random().toString(36).slice(2, 8);
-  const path = `books/${stamp}/${base}-${rand}.epub`;
+async function hfCommit(lines, summary = "commit") {
+  let lastErr = null;
+  for (let attempt = 0; attempt <= HF_COMMIT_RETRY_DELAYS_MS.length; attempt++) {
+    const res = await fetch(`https://huggingface.co/api/datasets/${REPO}/commit/main`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token()}`,
+        "Content-Type": "application/x-ndjson",
+      },
+      body: lines,
+    });
+    if (res.ok) return res;
+    const text = await res.text().catch(() => "");
+    lastErr = new Error(`HF commit failed (${res.status}): ${text.slice(0, 200)}`);
+    if (res.status === 429 && attempt < HF_COMMIT_RETRY_DELAYS_MS.length) {
+      const delay = HF_COMMIT_RETRY_DELAYS_MS[attempt];
+      console.warn(
+        `HF commit 429 (${summary}) — retrying in ${Math.round(delay / 1000)}s (attempt ${attempt + 1}/${HF_COMMIT_RETRY_DELAYS_MS.length})`
+      );
+      await new Promise((r) => setTimeout(r, delay));
+      continue;
+    }
+    throw lastErr;
+  }
+  throw lastErr;
+}
 
+// LFS upload for one EPUB (preupload + batch + PUT + verify). Returns
+// {oid, size}. This does NOT commit — the caller commits the lfsFile
+// pointer (alone, or together with other files in one commit).
+async function lfsUploadEpub(buffer, path) {
   const oid = createHash("sha256").update(buffer).digest("hex");
   const size = buffer.length;
 
@@ -103,6 +131,36 @@ export async function uploadToLibrary(buffer, filename, meta = {}) {
     }
   }
 
+  return { oid, size };
+}
+
+function libraryEpubPath(filename) {
+  const base = slug(filename.replace(/\.epub$/i, ""));
+  const stamp = new Date().toISOString().slice(0, 10);
+  const rand = Math.random().toString(36).slice(2, 8);
+  return { path: `books/${stamp}/${base}-${rand}.epub`, base };
+}
+
+function libraryEpubUrls(path) {
+  return {
+    path,
+    url: `https://huggingface.co/datasets/${REPO}/resolve/main/${path}?download=true`,
+    pageUrl: `https://huggingface.co/datasets/${REPO}/blob/main/${path}`,
+  };
+}
+
+/**
+ * Commits one EPUB to the dataset repo.
+ * @returns {Promise<{path:string,url:string,pageUrl:string}>}
+ */
+export async function uploadToLibrary(buffer, filename, meta = {}) {
+  if (!libraryEnabled()) throw new Error("HUGGINGFACE_TOKEN not configured");
+  if (buffer.length < 100 * 1024) throw new Error("file too small for community library (min 100 KB)");
+  if (buffer.length > MAX_BYTES) throw new Error("file too large for the library");
+
+  const { path, base } = libraryEpubPath(filename);
+  const { oid, size } = await lfsUploadEpub(buffer, path);
+
   const lines = [
     JSON.stringify({
       key: "header",
@@ -116,25 +174,47 @@ export async function uploadToLibrary(buffer, filename, meta = {}) {
     JSON.stringify({ key: "lfsFile", value: { path, algo: "sha256", oid, size } }),
   ].join("\n");
 
-  const res = await fetch(`https://huggingface.co/api/datasets/${REPO}/commit/main`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token()}`,
-      "Content-Type": "application/x-ndjson",
-    },
-    body: lines,
-  });
+  await hfCommit(lines, `Add ${meta.title || base}`);
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`HF commit failed (${res.status}): ${text.slice(0, 200)}`);
-  }
+  return libraryEpubUrls(path);
+}
 
-  return {
-    path,
-    url: `https://huggingface.co/datasets/${REPO}/resolve/main/${path}?download=true`,
-    pageUrl: `https://huggingface.co/datasets/${REPO}/blob/main/${path}`,
-  };
+/**
+ * One HF commit carrying BOTH the finished EPUB and the finished job
+ * state — instead of two separate commits (uploadToLibrary + saveJobState).
+ * A finished book used to cost ~3 commits (create state, EPUB, done state);
+ * this cuts it to ~2, which is what keeps the 128/hour cap from tripping
+ * during a burst, while the library stays instant (no batching delay).
+ * The `job` passed in must already carry the final done state.
+ * @returns {Promise<{path:string,url:string,pageUrl:string}>}
+ */
+export async function uploadToLibraryWithJobState(buffer, filename, meta, job, spec) {
+  if (!libraryEnabled()) throw new Error("HUGGINGFACE_TOKEN not configured");
+  if (buffer.length < 100 * 1024) throw new Error("file too small for community library (min 100 KB)");
+  if (buffer.length > MAX_BYTES) throw new Error("file too large for the library");
+
+  const { path, base } = libraryEpubPath(filename);
+  const { oid, size } = await lfsUploadEpub(buffer, path);
+
+  const statePath = `${JOB_STATE_PREFIX}${job.id}.json`;
+  const stateContent = Buffer.from(JSON.stringify({ job, spec }), "utf8").toString("base64");
+  const lines = [
+    JSON.stringify({
+      key: "header",
+      value: {
+        summary: `Add ${meta.title || base} (+ job state)`,
+        description: [meta.author && `Author: ${meta.author}`, meta.source && `Source: ${meta.source}`]
+          .filter(Boolean)
+          .join("\n"),
+      },
+    }),
+    JSON.stringify({ key: "lfsFile", value: { path, algo: "sha256", oid, size } }),
+    JSON.stringify({ key: "file", value: { path: statePath, content: stateContent, encoding: "base64" } }),
+  ].join("\n");
+
+  await hfCommit(lines, `Add ${meta.title || base} + job state`);
+
+  return libraryEpubUrls(path);
 }
 
 /** Downloads one library file (used to inspect the copy already stored). */
@@ -157,18 +237,7 @@ export async function deleteFromLibrary(path) {
     }),
     JSON.stringify({ key: "deletedFile", value: { path } }),
   ].join("\n");
-  const res = await fetch(`https://huggingface.co/api/datasets/${REPO}/commit/main`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token()}`,
-      "Content-Type": "application/x-ndjson",
-    },
-    body: lines,
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`HF delete failed (${res.status}): ${text.slice(0, 200)}`);
-  }
+  await hfCommit(lines, `Remove ${path}`);
 }
 
 // ── Durable job state (survives Heroku restarts) ─────────────
@@ -182,8 +251,6 @@ export async function deleteFromLibrary(path) {
 // best-effort: they throw when HF is unavailable, and callers must never
 // let a state save/delete fail a conversion.
 
-const JOB_STATE_PREFIX = "job-state/";
-
 /** Save one job's {job, spec} to the dataset (overwrites the previous state). */
 export async function saveJobState(job, spec) {
   if (!libraryEnabled()) throw new Error("HUGGINGFACE_TOKEN not configured");
@@ -196,18 +263,7 @@ export async function saveJobState(job, spec) {
     // {"key": "file", "value": {"path", "content", "encoding": "base64"}}).
     JSON.stringify({ key: "file", value: { path, content, encoding: "base64" } }),
   ].join("\n");
-  const res = await fetch(`https://huggingface.co/api/datasets/${REPO}/commit/main`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token()}`,
-      "Content-Type": "application/x-ndjson",
-    },
-    body: lines,
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`HF job-state save failed (${res.status}): ${text.slice(0, 200)}`);
-  }
+  await hfCommit(lines, `Save job state ${job.id}`);
   return { path };
 }
 

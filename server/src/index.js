@@ -31,7 +31,7 @@ import {
 } from "./fetcher.js";
 import { buildEpub, sanitizeFilename, writeChapterFile, countEpubChapters, epubTitle } from "./epub.js";
 import { createWorkPool, DEFAULT_MAX_ACTIVE_JOBS } from "./workPool.js";
-import { uploadToLibrary, libraryEnabled, deleteFromLibrary, downloadFromLibrary, saveJobState, deleteJobState, listJobStates } from "./library.js";
+import { uploadToLibrary, uploadToLibraryWithJobState, libraryEnabled, deleteFromLibrary, downloadFromLibrary, saveJobState, deleteJobState, listJobStates } from "./library.js";
 import { sendEpub } from "./download.js";
 import { getLibraryIndex, startLibraryIndex, refreshLibraryIndex } from "./libraryIndex.js";
 
@@ -74,14 +74,20 @@ fs.mkdirSync(STATE_DIR, { recursive: true });
 
 const lastPersist = new Map();
 
-function persistJob(job, force = false) {
-  const now = Date.now();
-  if (!force && now - (lastPersist.get(job.id) || 0) < 3000) return;
-  lastPersist.set(job.id, now);
+/** Write only the local state file (no HF save). Used at completion when
+ * the combined EPUB + job-state commit already saved the state to HF. */
+function writeLocalJobState(job) {
+  lastPersist.set(job.id, Date.now());
   const spec = jobSpecs.get(job.id) || null;
   fs.promises
     .writeFile(path.join(STATE_DIR, `${job.id}.json`), JSON.stringify({ job, spec }))
     .catch(() => {});
+}
+
+function persistJob(job, force = false) {
+  const now = Date.now();
+  if (!force && now - (lastPersist.get(job.id) || 0) < 3000) return;
+  writeLocalJobState(job);
   // Durable copy (2026-11-19): the local STATE_DIR lives under os.tmpdir(),
   // which Heroku wipes on every deploy/restart — so a running job's state
   // vanished and restoreJobs() had nothing to resume. Also keep the state
@@ -89,7 +95,7 @@ function persistJob(job, force = false) {
   // (creation / error / completion) so a running job does not spam the HF
   // API. Fire-and-forget: a failed remote save must never break a job.
   if (force && libraryEnabled()) {
-    saveJobState(job, spec).catch(() => {});
+    saveJobState(job, jobSpecs.get(job.id) || null).catch(() => {});
   }
 }
 
@@ -1000,7 +1006,14 @@ async function convertJob(job, { tocUrl, providedChapters, metadata, options, se
   job.size = (await fs.promises.stat(file)).size;
 
   // Best-effort copy to the shared Hugging Face library (never fails the job).
-  // Done before flipping to "done" so the client's poll sees the link.
+  // One HF commit carries BOTH the EPUB and the finished job state, instead
+  // of two separate commits (uploadToLibrary + saveJobState) — a finished
+  // book used to cost ~3 commits (create state, EPUB, done state), now ~2,
+  // which is what keeps the 128/hour cap from tripping during a burst,
+  // while the library stays instant (no batching delay). Done before
+  // flipping to "done" so the client's poll sees the link together with
+  // the done status. The state saved in this commit is the finished one
+  // (status done), even though the live job flips to done just after.
   if (libraryEnabled()) {
     job.phase = "Saving a copy to the library";
     job.libraryStatus = "uploading";
@@ -1010,11 +1023,13 @@ async function convertJob(job, { tocUrl, providedChapters, metadata, options, se
         if (stopped()) return null;
         touch();
         const buffer = await fs.promises.readFile(file);
-        return uploadToLibrary(buffer, job.filename, {
+        const spec = jobSpecs.get(job.id) || null;
+        const doneJob = { ...job, status: "done", phase: "Ready to download", updatedAt: Date.now() };
+        return uploadToLibraryWithJobState(buffer, job.filename, {
           title: metadata.title,
           author: metadata.author,
           source: tocUrl,
-        });
+        }, doneJob, spec);
       });
       if (!up || stopped()) return job.cancelled ? finishCancelled(job) : undefined;
       job.libraryUrl = up.url;
@@ -1031,7 +1046,15 @@ async function convertJob(job, { tocUrl, providedChapters, metadata, options, se
   job.status = "done";
   job.phase = "Ready to download";
   job.updatedAt = Date.now();
-  persistJob(job, true);
+  // The combined commit already saved the finished state to HF when the
+  // library upload succeeded — only the local file still needs writing.
+  // When the upload failed (or the library is off), fall back to the
+  // separate (best-effort) save.
+  if (job.libraryStatus === "saved") {
+    writeLocalJobState(job);
+  } else {
+    persistJob(job, true);
+  }
 
 }
 
