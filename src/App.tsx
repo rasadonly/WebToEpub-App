@@ -54,8 +54,8 @@ function NavBar() {
 
         {/* Mobile quick nav */}
         <nav className="flex sm:hidden items-center gap-2">
-          <button type="button" onClick={() => openModal("library")} className="text-xs px-2.5 py-1 bg-secondary rounded-md text-secondary-foreground hover:bg-secondary/80 transition-colors font-medium">Library</button>
-          <button type="button" onClick={() => openModal("forum")} className="text-xs px-2.5 py-1 bg-secondary rounded-md text-secondary-foreground hover:bg-secondary/80 transition-colors font-medium">Forum</button>
+          <button type="button" onClick={() => openModal("library")} className="text-xs px-2 py-1 bg-secondary rounded-md text-secondary-foreground hover:bg-secondary/80 transition-colors font-medium">Library</button>
+          <button type="button" onClick={() => openModal("forum")} className="text-xs px-2 py-1 bg-secondary rounded-md text-secondary-foreground hover:bg-secondary/80 transition-colors font-medium">Forum</button>
         </nav>
 
         {/* Right side: live stats + action menu */}
