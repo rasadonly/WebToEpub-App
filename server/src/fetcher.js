@@ -1656,6 +1656,583 @@ async function googleSitesMeta(tocUrl) {
   };
 }
 
+// --- WuxiaDreams (wuxiadreams.com): an Astro site (CF-fronted but not
+// blocking; free, no login).
+//   Novel page: /novel/<slug> — "Chapters" list, 100/page, paginated as
+//     /novel/<slug>?page=N. Chapter links href="/novel/<slug>/chapter-<N>".
+//   Chapter URL: /novel/<slug>/chapter-<N>.
+//   Chapter prose: <p class="whitespace-pre-wrap"> (91 paragraphs,
+//     10,906 chars on ch. 1).
+//   Search: GET /novels?q=<query> (/search 404s).
+//   Title: "<Title> (novel)" — strip the " (novel)" suffix.
+// Verified live on Shadow Slave (2720 chapters / 28 pages).
+const WUXIADREAMS_ORIGIN = "https://wuxiadreams.com";
+
+function wuxiadreamsNovelSlug(url) {
+  const m = String(url || "").match(/\/novel\/([^/?#]+)/i);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+async function tocWuxiadreams(tocUrl) {
+  const slug = wuxiadreamsNovelSlug(tocUrl);
+  if (!slug)
+    throw new Error("WuxiaDreams: could not read the novel slug from the URL");
+  const base = `${WUXIADREAMS_ORIGIN}/novel/${encodeURIComponent(slug)}`;
+  const collect = (doc) => {
+    const out = [];
+    for (const a of doc.querySelectorAll("a[href]")) {
+      const href = a.getAttribute("href") || "";
+      const m = href.match(
+        new RegExp(`/novel/${slug}/chapter-(\\d+)(?:[/?#]|$)`, "i")
+      );
+      if (!m) continue;
+      const n = parseInt(m[1], 10);
+      // The link holds the title in a <span> plus a date/word-count row;
+      // take the title span so the chapter title is clean.
+      const title = (
+        a.querySelector("span")?.textContent ||
+        a.textContent ||
+        ""
+      )
+        .replace(/\s+/g, " ")
+        .trim();
+      out.push({
+        url: absoluteUrl(WUXIADREAMS_ORIGIN, href),
+        title: title || `Chapter ${n}`,
+        _num: n,
+      });
+    }
+    return out;
+  };
+  const firstHtml = await smartGetText(base, 15000, 45000);
+  // Max page from pagination links (?page=N).
+  let maxPage = 1;
+  for (const m of firstHtml.matchAll(/[?&]page=(\d+)/g)) {
+    maxPage = Math.max(maxPage, parseInt(m[1], 10));
+  }
+  const byNumber = new Map();
+  for (const c of collect(parseHtml(firstHtml))) {
+    if (!byNumber.has(c._num)) byNumber.set(c._num, c);
+  }
+  if (maxPage > 1) {
+    const pageUrls = [];
+    for (let p = 2; p <= maxPage; p++) pageUrls.push(`${base}?page=${p}`);
+    const htmls = await mapPool(pageUrls, 4, async (u) => {
+      try {
+        return await smartGetText(u, 15000, 45000);
+      } catch {
+        return "";
+      }
+    });
+    for (const html of htmls) {
+      if (!html) continue;
+      for (const c of collect(parseHtml(html))) {
+        if (!byNumber.has(c._num)) byNumber.set(c._num, c);
+      }
+    }
+  }
+  const out = [...byNumber.values()].sort((a, b) => a._num - b._num);
+  if (!out.length)
+    throw new Error("WuxiaDreams: no chapters found for this novel");
+  return out;
+}
+
+async function bodyWuxiadreams(chapterUrl) {
+  const doc = parseHtml(await smartGetText(chapterUrl, 15000, 45000));
+  const texts = [];
+  for (const p of doc.querySelectorAll("p.whitespace-pre-wrap")) {
+    const t = (p.textContent || "").replace(/[ ‌‍﻿]/g, "").trim();
+    if (t) texts.push(t);
+  }
+  if (!texts.length)
+    throw new Error("WuxiaDreams: this chapter has no readable content");
+  return texts
+    .map(
+      (t) =>
+        `<p>${t
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")}</p>`
+    )
+    .join("");
+}
+
+/** Search wuxiadreams.com's catalogue: GET /novels?q=<query> (/search 404s). */
+export async function searchWuxiadreams(query, limit = 10) {
+  const q = String(query || "").trim();
+  if (!q) return [];
+  const html = await smartGetText(
+    `${WUXIADREAMS_ORIGIN}/novels?q=${encodeURIComponent(q)}`,
+    15000,
+    45000
+  );
+  const doc = parseHtml(html);
+  const out = [];
+  const seen = new Set();
+  for (const a of doc.querySelectorAll("a[href]")) {
+    const href = a.getAttribute("href") || "";
+    const m = href.match(/^\/novel\/([^/?#]+)\/?$/i);
+    if (!m) continue;
+    const slug = decodeURIComponent(m[1]);
+    if (seen.has(slug)) continue;
+    const title = (
+      a.querySelector("h2, h3")?.textContent ||
+      a.textContent ||
+      ""
+    )
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!title) continue;
+    seen.add(slug);
+    out.push({
+      title,
+      url: `${WUXIADREAMS_ORIGIN}/novel/${slug}`,
+      chapters: 0,
+      author: "",
+      language: "",
+      source: "",
+    });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/** Novel meta for WuxiaDreams. The page <title>/og:title is
+ * "<Title> (novel)" — strip the " (novel)" suffix. */
+async function wuxiadreamsMeta(tocUrl) {
+  const html = await smartGetText(tocUrl, 15000, 45000);
+  const ogTitle =
+    (html.match(/property="og:title" content="([^"]*)"/) || [])[1] || "";
+  const titleTag = (html.match(/<title>([^<]*)<\/title>/i) || [])[1] || "";
+  const raw = (ogTitle || titleTag).replace(/\s+/g, " ").trim();
+  if (!raw) return null;
+  const title = raw.replace(/\s*\(novel\)\s*$/i, "").trim() || raw;
+  const cover =
+    (html.match(/property="og:image" content="([^"]*)"/) || [])[1] || "";
+  const description =
+    (html.match(/property="og:description" content="([^"]*)"/) || [])[1] || "";
+  const doc = parseHtml(html);
+  // The author is a link to /author/<slug> next to an "Author:" label.
+  // It holds the display name in a <span> plus the username in parens in
+  // a second <span>; take the first span only.
+  const authorLink = doc.querySelector('a[href^="/author/"]');
+  const author = (
+    authorLink?.querySelector("span")?.textContent ||
+    authorLink?.textContent ||
+    ""
+  )
+    .replace(/\s+/g, " ")
+    .trim();
+  return {
+    title,
+    author,
+    cover,
+    description: description.replace(/&amp;/g, "&").replace(/&quot;/g, '"').trim(),
+  };
+}
+
+// --- MuBooks (mubooks.com): a Next.js App Router site (CF present but not
+// blocking; free, no login).
+//   Novel page: /novel/<slug> — the chapter list is plain
+//     <a href="/novel/<slug>/<N>"> links on the novel page itself.
+//   Chapter URL: /novel/<slug>/<number>.
+//   Chapter prose: DEDICATED RSC parsing is required — the static HTML
+//     <article> holds only paragraph 1; the rest streams in Next.js RSC
+//     <script> payloads (self.__next_f.push([1,"..."])). Each payload is a
+//     JSON string; JSON-decode it, then extract the
+//     ["$","p",<key>,{"children":"<text>"}] paragraph children.
+//     (Verified: ch. 1 yields ~105 paragraphs / ~26,700 chars.)
+//   Search: GET /browse?q=<query> (/search 404s). Matches by title.
+//   Title: "<Title> - Free Ongoing Web Novel | MuBooks" /
+//     og:title "<Title> — MuBooks" — strip the suffix.
+//   Author: embedded in og:description ("<Author>'s ongoing ... novel").
+// Verified live on Qin Di (15 chapters).
+const MUBOOKS_ORIGIN = "https://mubooks.com";
+
+function mubooksNovelSlug(url) {
+  const m = String(url || "").match(/\/novel\/([^/?#]+)/i);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+async function tocMubooks(tocUrl) {
+  const slug = mubooksNovelSlug(tocUrl);
+  if (!slug)
+    throw new Error("MuBooks: could not read the novel slug from the URL");
+  const base = `${MUBOOKS_ORIGIN}/novel/${encodeURIComponent(slug)}`;
+  const doc = parseHtml(await smartGetText(base, 15000, 45000));
+  const byNumber = new Map();
+  for (const a of doc.querySelectorAll("a[href]")) {
+    const href = a.getAttribute("href") || "";
+    const m = href.match(
+      new RegExp(`/novel/${slug}/(\\d+)(?:[/?#]|$)`, "i")
+    );
+    if (!m) continue;
+    const n = parseInt(m[1], 10);
+    if (byNumber.has(n)) continue;
+    // The first link's text is a generic "Start reading" button; use
+    // "Chapter N" for generic labels.
+    const rawTitle = (a.textContent || "").replace(/\s+/g, " ").trim();
+    const title =
+      rawTitle && !/^(start reading|read now|read)$/i.test(rawTitle)
+        ? rawTitle
+        : `Chapter ${n}`;
+    byNumber.set(n, {
+      url: absoluteUrl(MUBOOKS_ORIGIN, href),
+      title,
+      _num: n,
+    });
+  }
+  const out = [...byNumber.values()].sort((a, b) => a._num - b._num);
+  if (!out.length)
+    throw new Error("MuBooks: no chapters found for this novel");
+  return out;
+}
+
+/** Extract chapter prose from a Next.js App Router (RSC) chapter page.
+ * The static <article> holds only paragraph 1; the rest streams in
+ * self.__next_f.push([1,"..."]) payloads. Each payload is a JSON string;
+ * decode it, then pull the ["$","p",key,{"children":"..."}] paragraphs. */
+function mubooksRscParagraphs(html) {
+  const texts = [];
+  const seen = new Set();
+  for (const m of String(html || "").matchAll(
+    /self\.__next_f\.push\(\[1,"((?:[^"\\]|\\.)*)"\]\)/g
+  )) {
+    let decoded = "";
+    try {
+      decoded = JSON.parse(`"${m[1]}"`);
+    } catch {
+      continue;
+    }
+    for (const pm of decoded.matchAll(
+      /\["\$","p",[^,]+,\{"children":"((?:[^"\\]|\\.)*)"\}\]/g
+    )) {
+      let t = "";
+      try {
+        t = JSON.parse(`"${pm[1]}"`);
+      } catch {
+        t = pm[1];
+      }
+      t = String(t || "")
+        .replace(/[ ‌‍﻿]/g, "")
+        .trim();
+      if (!t || seen.has(t)) continue;
+      seen.add(t);
+      texts.push(t);
+    }
+  }
+  return texts;
+}
+
+async function bodyMubooks(chapterUrl) {
+  const html = await smartGetText(chapterUrl, 15000, 45000);
+  let texts = mubooksRscParagraphs(html);
+  if (!texts.length) {
+    // Fallback: the static <article> (usually just paragraph 1).
+    const doc = parseHtml(html);
+    for (const p of doc.querySelectorAll("article p")) {
+      const t = (p.textContent || "").replace(/[ ‌‍﻿]/g, "").trim();
+      if (t) texts.push(t);
+    }
+  }
+  if (!texts.length)
+    throw new Error("MuBooks: this chapter has no readable content");
+  return texts
+    .map(
+      (t) =>
+        `<p>${t
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")}</p>`
+    )
+    .join("");
+}
+
+/** Search mubooks.com's catalogue: GET /browse?q=<query> (/search 404s).
+ * Matches by title. */
+export async function searchMubooks(query, limit = 10) {
+  const q = String(query || "").trim();
+  if (!q) return [];
+  const html = await smartGetText(
+    `${MUBOOKS_ORIGIN}/browse?q=${encodeURIComponent(q)}`,
+    15000,
+    45000
+  );
+  const doc = parseHtml(html);
+  const out = [];
+  const seen = new Set();
+  for (const a of doc.querySelectorAll("a[href]")) {
+    const href = a.getAttribute("href") || "";
+    const m = href.match(/^\/novel\/([^/?#]+)\/?$/i);
+    if (!m) continue;
+    const slug = decodeURIComponent(m[1]);
+    if (seen.has(slug)) continue;
+    const title = (
+      a.querySelector("h2, h3")?.textContent ||
+      a.textContent ||
+      ""
+    )
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!title) continue;
+    seen.add(slug);
+    out.push({
+      title,
+      url: `${MUBOOKS_ORIGIN}/novel/${slug}`,
+      chapters: 0,
+      author: "",
+      language: "",
+      source: "",
+    });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/** Novel meta for MuBooks. The <title> is
+ * "<Title> - Free Ongoing Web Novel | MuBooks" and og:title is
+ * "<Title> — MuBooks" — strip the suffix. The author is embedded in
+ * og:description ("<Author>'s ongoing ... web novel"). */
+async function mubooksMeta(tocUrl) {
+  const html = await smartGetText(tocUrl, 15000, 45000);
+  const ogTitle =
+    (html.match(/property="og:title" content="([^"]*)"/) || [])[1] || "";
+  const titleTag = (html.match(/<title>([^<]*)<\/title>/i) || [])[1] || "";
+  const raw = (ogTitle || titleTag).replace(/\s+/g, " ").trim();
+  if (!raw) return null;
+  const title = raw
+    .replace(/\s*[—-]\s*(MuBooks|Free Ongoing Web Novel.*)$/i, "")
+    .trim() || raw;
+  const cover =
+    (html.match(/property="og:image" content="([^"]*)"/) || [])[1] || "";
+  const ogDesc =
+    (html.match(/property="og:description" content="([^"]*)"/) || [])[1] || "";
+  const description = ogDesc
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;/g, "'")
+    .trim();
+  let author = "";
+  const am = description.match(/^(.+?)'s ongoing\b/);
+  if (am) author = am[1].trim();
+  return { title, author, cover, description };
+}
+
+// --- Read-Novel (read-novel.com): an EmpireCMS site (CF-fronted but not
+// blocking; free, no login).
+//   Novel page: /novel<novelId>-<slug>.html
+//   Chapter URL: /novel<novelId>-<slug>/chapter<chapterId>-chapter-<N>-<title-slug>.html
+//   Chapter prose: <div class="chapter-content"> (exactly one per page).
+//   Search: POST /e/search/index.php (keyboard, show, searchget) — it
+//     302-redirects to /e/search/result/?searchid=<id>.
+//   Title: "<Title> - Read Novel" — strip the suffix. No og: tags.
+//     Cover is /files/novel/<slug>.jpg. Author is a[itemprop="author"].
+//   TOC LIMITATION: the novel page only lists the FIRST 50 and LAST 6
+//     chapters (56 total for a 6118-chapter novel). There is no pagination,
+//     no bulk chapter-list endpoint, no RSS/sitemap, and the admin-ajax
+//     list_chap endpoint 404s. The only way to get the full list is walking
+//     the a#next_chap "Read next chapter" link on each chapter page.
+//     Chapter URLs CANNOT be constructed from the number alone (chapterId
+//     is a database ID that does not reliably equal N-1), so the TOC uses
+//     the actual hrefs from the page / chain. The chain walk is sequential
+//     and slow for very large novels, so it is capped at 2000 chain fetches
+//     AND an 18 s wall-clock budget (the /api/toc preview answers within
+//     24 s, so the walk must return before that or the preview errors);
+//     it returns whatever was collected, deduped and sorted.
+//     For novels with <=56 chapters the novel page alone is complete.
+// Verified live on Martial Peak (6118 chapters).
+const READNOVEL_ORIGIN = "https://read-novel.com";
+const READNOVEL_CHAIN_MAX_FETCHES = 2000;
+const READNOVEL_CHAIN_MAX_MS = 18_000;
+
+function readnovelNovelPrefix(url) {
+  try {
+    const u = new URL(url);
+    const m = u.pathname.match(/^(\/novel\d+-[^/?#]+?)(?:\.html)?$/i);
+    if (!m) return null;
+    return { origin: u.origin, prefix: m[1] };
+  } catch {
+    return null;
+  }
+}
+
+function readnovelChapterNumber(chapterUrl) {
+  const m = String(chapterUrl || "").match(/\/chapter\d+-chapter-(\d+)-/i);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+async function tocReadNovel(tocUrl) {
+  const np = readnovelNovelPrefix(tocUrl);
+  if (!np)
+    throw new Error("ReadNovel: could not read the novel path from the URL");
+  const novelPageUrl = `${np.origin}${np.prefix}.html`;
+  const byNumber = new Map();
+  const addChapter = (url, title) => {
+    const n = readnovelChapterNumber(url);
+    if (typeof n !== "number" || byNumber.has(n)) return;
+    byNumber.set(n, {
+      url: absoluteUrl(np.origin, url),
+      title: (title || "").trim() || `Chapter ${n}`,
+      _num: n,
+    });
+  };
+  const firstHtml = await smartGetText(novelPageUrl, 15000, 45000);
+  const firstDoc = parseHtml(firstHtml);
+  for (const a of firstDoc.querySelectorAll("a[href]")) {
+    const href = a.getAttribute("href") || "";
+    if (!href.startsWith(np.prefix + "/chapter")) continue;
+    addChapter(href, a.textContent);
+  }
+  // Walk the #next_chap chain from chapter 1 to fill in the middle.
+  const ch1 = byNumber.get(1);
+  if (ch1) {
+    const startedAt = Date.now();
+    let fetches = 0;
+    let nextUrl = ch1.url;
+    const seenUrls = new Set([nextUrl]);
+    while (nextUrl && fetches < READNOVEL_CHAIN_MAX_FETCHES) {
+      if (Date.now() - startedAt > READNOVEL_CHAIN_MAX_MS) break;
+      let html = "";
+      try {
+        html = await smartGetText(nextUrl, 15000, 45000);
+      } catch {
+        break;
+      }
+      fetches++;
+      const doc = parseHtml(html);
+      const next = doc.querySelector("a#next_chap");
+      const href = next?.getAttribute("href") || "";
+      if (!href) break;
+      const abs = absoluteUrl(np.origin, href);
+      if (seenUrls.has(abs)) break;
+      seenUrls.add(abs);
+      addChapter(abs, "");
+      nextUrl = abs;
+    }
+  }
+  const out = [...byNumber.values()].sort((a, b) => a._num - b._num);
+  if (!out.length)
+    throw new Error("ReadNovel: no chapters found for this novel");
+  return out;
+}
+
+async function bodyReadNovel(chapterUrl) {
+  const doc = parseHtml(await smartGetText(chapterUrl, 15000, 45000));
+  const container = doc.querySelector("div.chapter-content");
+  if (!container)
+    throw new Error("ReadNovel: this chapter has no readable content");
+  const texts = [];
+  for (const p of container.querySelectorAll("p")) {
+    const t = (p.textContent || "").replace(/[ ‌‍﻿]/g, "").trim();
+    if (t) texts.push(t);
+  }
+  // Fall back to the container's raw text if it has no <p> children.
+  if (!texts.length) {
+    const t = (container.textContent || "").replace(/[ ‌‍﻿]/g, "").trim();
+    if (t) texts.push(t);
+  }
+  if (!texts.length)
+    throw new Error("ReadNovel: this chapter has no readable content");
+  return texts
+    .map(
+      (t) =>
+        `<p>${t
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")}</p>`
+    )
+    .join("");
+}
+
+/** Search read-novel.com's catalogue: POST /e/search/index.php with
+ * keyboard=<query>, show=title,writer,byr, searchget=1. It 302-redirects
+ * to /e/search/result/?searchid=<id>; follow the redirect and parse the
+ * novel links from the results HTML. (Bare ?keyboard=X without the hidden
+ * params returns no results, so the hidden params are required.)
+ * The POST needs browser Referer/Origin headers — without them the server
+ * closes the connection with no response. */
+export async function searchReadNovel(query, limit = 10) {
+  const q = String(query || "").trim();
+  if (!q) return [];
+  const body = new URLSearchParams({
+    keyboard: q,
+    show: "title,writer,byr",
+    searchget: "1",
+  }).toString();
+  const res = await fetch(`${READNOVEL_ORIGIN}/e/search/index.php`, {
+    method: "POST",
+    headers: {
+      ...DEFAULT_HEADERS,
+      "Content-Type": "application/x-www-form-urlencoded",
+      Referer: `${READNOVEL_ORIGIN}/`,
+      Origin: READNOVEL_ORIGIN,
+    },
+    body,
+    redirect: "follow",
+    signal: AbortSignal.timeout(45000),
+  });
+  if (!res.ok) throw new Error(`ReadNovel search failed: HTTP ${res.status}`);
+  const html = await res.text();
+  const doc = parseHtml(html);
+  const out = [];
+  const seen = new Set();
+  for (const a of doc.querySelectorAll("a[href]")) {
+    const href = a.getAttribute("href") || "";
+    const m = href.match(/^\/novel\d+-([^/?#]+)\.html$/i);
+    if (!m) continue;
+    const slug = m[1];
+    if (seen.has(slug)) continue;
+    // The card holds a "New" badge span and the title in the cover <img>
+    // alt (e.g. alt="Martial Peak"); the link text alone is just "New".
+    // Prefer the img alt, else the link text with a leading "New" stripped.
+    const imgAlt = (a.querySelector("img")?.getAttribute("alt") || "").trim();
+    let title = imgAlt;
+    if (!title) {
+      title = (a.textContent || "").replace(/\s+/g, " ").trim();
+      title = title.replace(/^New\s+/i, "").trim();
+    }
+    if (!title) continue;
+    seen.add(slug);
+    out.push({
+      title,
+      url: `${READNOVEL_ORIGIN}/novel${href.match(/^\/novel(\d+)-/i)?.[1] || ""}-${slug}.html`,
+      chapters: 0,
+      author: "",
+      language: "",
+      source: "",
+    });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/** Novel meta for Read-Novel. The <title> is "<Title> - Read Novel" —
+ * strip the suffix. No og: tags. Cover is /files/novel/<slug>.jpg.
+ * Author is a[itemprop="author"]. */
+async function readnovelMeta(tocUrl) {
+  const np = readnovelNovelPrefix(tocUrl);
+  if (!np) return null;
+  const html = await smartGetText(`${np.origin}${np.prefix}.html`, 15000, 45000);
+  const titleTag = (html.match(/<title>([^<]*)<\/title>/i) || [])[1] || "";
+  const raw = titleTag.replace(/\s+/g, " ").trim();
+  if (!raw) return null;
+  const title = raw.replace(/\s*-\s*Read Novel\s*$/i, "").trim() || raw;
+  const slug = np.prefix.replace(/^\/novel\d+-/i, "");
+  const cover = `${np.origin}/files/novel/${slug}.jpg`;
+  const doc = parseHtml(html);
+  const author = (
+    doc.querySelector('a[itemprop="author"]')?.textContent || ""
+  ).trim();
+  const description =
+    (html.match(/name="description" content="([^"]*)"/i) || [])[1] || "";
+  return {
+    title,
+    author,
+    cover,
+    description: description.replace(/&amp;/g, "&").replace(/&quot;/g, '"').trim(),
+  };
+}
+
 /** Novel meta (title/author/description/cover) from the novel page's __NEXT_DATA__. */
 async function readnovelEuMeta(tocUrl) {
   const slug = readnovelEuNovelSlug(tocUrl);
@@ -5738,6 +6315,9 @@ const MAJOR_DOMAINS = [
   "lunoxscans.com",
   "readnovel.eu",
   "sites.google.com",
+  "wuxiadreams.com",
+  "mubooks.com",
+  "read-novel.com",
 ];
 
 /** Chapter-body selectors for the dedicated sites, tried in order. */
@@ -5943,6 +6523,9 @@ export function siteKey(hostname) {
   if (host.includes("webnovelfree.com")) return "webnovelfree";
   if (host.includes("readnovel.eu")) return "readnoveleu";
   if (host.includes("sites.google.com")) return "googlesites";
+  if (host.includes("wuxiadreams.com")) return "wuxiadreams";
+  if (host.includes("mubooks.com")) return "mubooks";
+  if (host.includes("read-novel.com")) return "readnovel";
 
   for (const [re, key] of MAJOR_SITES) {
     if (re.test(host)) return key;
@@ -6010,6 +6593,12 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         return tocReadNovelEu(tocUrl);
       case "googlesites":
         return tocGoogleSites(tocUrl);
+      case "wuxiadreams":
+        return tocWuxiadreams(tocUrl);
+      case "mubooks":
+        return tocMubooks(tocUrl);
+      case "readnovel":
+        return tocReadNovel(tocUrl);
       case "crescentmoon":
         return tocCrescentMoon(tocUrl);
       case "novelarrow":
@@ -6292,6 +6881,12 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
         return bodyReadNovelEu(chapterUrl);
       case "googlesites":
         return bodyGoogleSites(chapterUrl);
+      case "wuxiadreams":
+        return bodyWuxiadreams(chapterUrl);
+      case "mubooks":
+        return bodyMubooks(chapterUrl);
+      case "readnovel":
+        return bodyReadNovel(chapterUrl);
       case "crescentmoon":
         return bodyGeneric(chapterUrl, ".entry-content");
       case "novelarrow":
@@ -6588,6 +7183,35 @@ export async function fetchBookMeta(tocUrl) {
   try {
     if (new URL(tocUrl).hostname.includes("sites.google.com")) {
       const meta = await googleSitesMeta(tocUrl);
+      if (meta?.title) return meta;
+    }
+  } catch {
+    /* fall through to HTML scraping */
+  }
+  // WuxiaDreams pages title themselves "<Title> (novel)".
+  try {
+    if (new URL(tocUrl).hostname.includes("wuxiadreams.com")) {
+      const meta = await wuxiadreamsMeta(tocUrl);
+      if (meta?.title) return meta;
+    }
+  } catch {
+    /* fall through to HTML scraping */
+  }
+  // MuBooks pages title themselves "<Title> - Free Ongoing Web Novel |
+  // MuBooks" (og:title "<Title> — MuBooks").
+  try {
+    if (new URL(tocUrl).hostname.includes("mubooks.com")) {
+      const meta = await mubooksMeta(tocUrl);
+      if (meta?.title) return meta;
+    }
+  } catch {
+    /* fall through to HTML scraping */
+  }
+  // Read-Novel pages title themselves "<Title> - Read Novel" and carry
+  // no og: tags.
+  try {
+    if (new URL(tocUrl).hostname.includes("read-novel.com")) {
+      const meta = await readnovelMeta(tocUrl);
       if (meta?.title) return meta;
     }
   } catch {

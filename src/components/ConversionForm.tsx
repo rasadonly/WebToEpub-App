@@ -14,7 +14,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { engineSearch, cancelSearch, engineLoadMetadata, EngineSearchResult } from '@/utils/webtoepub/bridge';
 import LibrarySuggestion from './LibrarySuggestion';
 import { normalizeBookSearch } from '@/utils/librarySearch';
-import { backendToc, isBackendEnabled, searchLncrawlBooks, searchNoveliBooks, searchLightNovelToBooks, searchNovelRollBooks, searchNovelPingBooks, searchWebNovelFreeBooks, searchReadNovelEuBooks } from '@/utils/backend';
+import { backendToc, isBackendEnabled, searchLncrawlBooks, searchNoveliBooks, searchLightNovelToBooks, searchNovelRollBooks, searchNovelPingBooks, searchWebNovelFreeBooks, searchReadNovelEuBooks, searchWuxiadreamsBooks, searchMubooksBooks, searchReadNovelBooks } from '@/utils/backend';
 import { LiveStats } from '@/components/LiveStats';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 
@@ -508,6 +508,15 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
       const readNovelEuPromise = isBackendEnabled()
         ? searchReadNovelEuBooks(query, 10).then(makeMerge('readnovel.eu')).catch(() => {})
         : Promise.resolve();
+      const wuxiadreamsPromise = isBackendEnabled()
+        ? searchWuxiadreamsBooks(query, 10).then(makeMerge('wuxiadreams.com')).catch(() => {})
+        : Promise.resolve();
+      const mubooksPromise = isBackendEnabled()
+        ? searchMubooksBooks(query, 10).then(makeMerge('mubooks.com')).catch(() => {})
+        : Promise.resolve();
+      const readNovelPromise = isBackendEnabled()
+        ? searchReadNovelBooks(query, 10).then(makeMerge('read-novel.com')).catch(() => {})
+        : Promise.resolve();
       await Promise.all([
         engineSearch(
           query,
@@ -535,6 +544,9 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
         novelPingPromise,
         webNovelFreePromise,
         readNovelEuPromise,
+        wuxiadreamsPromise,
+        mubooksPromise,
+        readNovelPromise,
       ]);
       setSearchStatus('');
     } catch (err) {

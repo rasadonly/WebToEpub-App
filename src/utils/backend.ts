@@ -369,6 +369,49 @@ export async function searchReadNovelEuBooks(
   return data?.results || [];
 }
 
+/**
+ * Search wuxiadreams.com's catalogue on the server (GET /novels?q=...).
+ * Needs the backend to be up; it throws when it is not.
+ */
+export async function searchWuxiadreamsBooks(
+  query: string,
+  limit = 10
+): Promise<NoveliSearchResult[]> {
+  const data = await api<{ results: NoveliSearchResult[] }>(
+    `/api/wuxiadreams/search?q=${encodeURIComponent(query)}&limit=${limit}`
+  );
+  return data?.results || [];
+}
+
+/**
+ * Search mubooks.com's catalogue on the server (GET /browse?q=...).
+ * Needs the backend to be up; it throws when it is not.
+ */
+export async function searchMubooksBooks(
+  query: string,
+  limit = 10
+): Promise<NoveliSearchResult[]> {
+  const data = await api<{ results: NoveliSearchResult[] }>(
+    `/api/mubooks/search?q=${encodeURIComponent(query)}&limit=${limit}`
+  );
+  return data?.results || [];
+}
+
+/**
+ * Search read-novel.com's catalogue on the server
+ * (POST /e/search/index.php). Needs the backend to be up; it throws
+ * when it is not.
+ */
+export async function searchReadNovelBooks(
+  query: string,
+  limit = 10
+): Promise<NoveliSearchResult[]> {
+  const data = await api<{ results: NoveliSearchResult[] }>(
+    `/api/readnovel/search?q=${encodeURIComponent(query)}&limit=${limit}`
+  );
+  return data?.results || [];
+}
+
 async function pingBackend(base: string, timeoutMs = 15_000): Promise<boolean> {
   const ctrl = new AbortController();
   const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
