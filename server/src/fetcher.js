@@ -445,8 +445,8 @@ export async function smartGetText(url, timeoutMs = 7000, deadlineMs = 17000) {
   } finally { clearTimeout(t); }
 }
 
-async function getJson(url) {
-  return (await httpGet(url, { Accept: "application/json" })).json();
+async function getJson(url, timeoutMs) {
+  return (await httpGet(url, { Accept: "application/json" }, timeoutMs)).json();
 }
 
 function parseHtml(html) {
@@ -1006,9 +1006,33 @@ async function novelBuddyTitleId(url) {
   const parts = u.pathname.split("/").filter(Boolean);
   if (parts[0] === "titles" && parts[1]) return parts[1].split("-")[0];
   const slug = parts.includes("novel") ? parts[parts.indexOf("novel") + 1] : parts[parts.length - 1];
-  const lookup = await getJson(`https://api.novelbuddy.me/titles/by-slug/${slug}`);
-  const newUrl = lookup?.data?.new_url || "";
-  const id = newUrl.split("/titles/")[1]?.split("-")[0];
+  // Primary: by-slug lookup. It 500s for some novels (e.g. god-of-tricksters,
+  // verified 2026-11-25) and the fetcher's retry/proxy chain makes a failing
+  // lookup take 80s+, far past the 24s TOC timeout — so race it against an
+  // 8s cap and fall back to the search API on slowness or failure. The
+  // search returns the exact-slug match's id in ~1s.
+  let id = null;
+  try {
+    const bySlug = getJson(`https://api.novelbuddy.me/titles/by-slug/${slug}`).catch(() => null);
+    const cap = new Promise((r) => setTimeout(() => r(null), 5000));
+    const lookup = await Promise.race([bySlug, cap]);
+    const newUrl = lookup?.data?.new_url || "";
+    id = newUrl.split("/titles/")[1]?.split("-")[0] || null;
+  } catch {
+    /* fall through to the search fallback */
+  }
+  if (!id) {
+    try {
+      const res = await getJson(
+        `https://api.novelbuddy.me/titles/search?q=${encodeURIComponent(slug)}&page=1&limit=5`
+      );
+      const items = res?.data?.items || [];
+      const hit = items.find((n) => n?.slug === slug);
+      if (hit?.id) id = hit.id;
+    } catch {
+      /* fall through to the error below */
+    }
+  }
   if (!id) throw new Error("NovelBuddy: title id not found for slug " + slug);
   return id;
 }
@@ -1037,7 +1061,10 @@ async function tocNovelBuddy(url) {
   }
   if (!mangaId) throw new Error("NovelBuddy: title id not found");
   const base = apiUrl.replace(/\/$/, "");
-  const listJson = await getJson(`${base}/titles/${mangaId}/chapters`);
+  // The chapters payload is large (god-of-tricksters: 511 KB / 2,132 ch,
+  // ~11.5s) — the default 7s httpGet timeout aborts the direct fetch and
+  // the proxies then fail with 401, so the TOC returns 0 chapters.
+  const listJson = await getJson(`${base}/titles/${mangaId}/chapters`, 20000);
   const chaps = listJson?.data?.chapters || [];
   return chaps
     .slice()
@@ -1045,40 +1072,6 @@ async function tocNovelBuddy(url) {
     .map((c, i) => ({
       url: `${base}/titles/${mangaId}/chapters/${c.id || c._id}`,
       title: c.name || c.title || `Chapter ${i + 1}`,
-    }));
-}
-
-/** Search the NovelBuddy catalogue (shared by novelbuddy.com/me and
- * webnovelonline.com): GET /titles/search?q=... — JSON
- * {data:{items:[{id,url,name,slug,cover,status,rating,summary,
- * stats:{chapters_count}}], pagination:{total,...}}}. Results link to
- * webnovelonline.com novel pages (same API, same slugs). */
-export async function searchNovelBuddy(query, limit = 10) {
-  const q = String(query || "").trim();
-  if (!q) return [];
-  const data = await getJson(
-    `https://api.novelbuddy.me/titles/search?q=${encodeURIComponent(q)}&page=1&limit=${Math.min(
-      Math.max(limit, 1),
-      24
-    )}`
-  );
-  const items = data?.data?.items || [];
-  return items
-    .filter((n) => n?.slug)
-    .slice(0, limit)
-    .map((n) => ({
-      title: n?.name || "",
-      url: `https://webnovelonline.com/novel/${n.slug}`,
-      chapters:
-        typeof n?.stats?.chapters_count === "number"
-          ? n.stats.chapters_count
-          : 0,
-      author: (n?.authors || [])
-        .map((a) => a?.name)
-        .filter(Boolean)
-        .join(", "),
-      language: "",
-      source: n?.status || "",
     }));
 }
 
