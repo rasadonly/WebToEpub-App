@@ -292,6 +292,10 @@ app.get("/api/stats", (req, res) => {
   res.json({
     activeJobs,
     activeUsers: globalUsers,
+    // Visitor ids (random per-browser tokens, not personal data) so the
+    // frontend can UNION the sets from several backends: one visitor
+    // polls every backend, so summing the counts would count them twice.
+    visitors: [...visitors.keys()].slice(0, 5000),
     totalJobs: jobs.size
   });
 });

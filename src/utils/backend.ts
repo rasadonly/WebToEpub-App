@@ -188,6 +188,127 @@ export function setBackendUrl(url: string) {
   localStorage.setItem(URL_KEY, url.trim().replace(/\/$/, ''));
 }
 
+/** Removes the pinned backend so jobs load-balance across the whole pool. */
+export function clearBackendUrl() {
+  localStorage.removeItem(URL_KEY);
+}
+
+/**
+ * The admin-pinned backend URL, if one is stored. Null means no pin:
+ * jobs load-balance across every backend in BACKEND_URLS.
+ */
+export function getPinnedBackendUrl(): string | null {
+  const stored = localStorage.getItem(URL_KEY);
+  if (!stored) return null;
+  const cleaned = stored.trim().replace(/\/$/, '');
+  if (cleaned.includes('hf.space') || cleaned.includes('huggingface.co')) {
+    localStorage.removeItem(URL_KEY);
+    return null;
+  }
+  return cleaned;
+}
+
+/** Display name for a backend URL (Heroku / Northflank / hostname). */
+export function backendName(url: string): string {
+  const clean = String(url || '').replace(/\/$/, '');
+  if (clean === HEROKU_BACKEND_URL) return 'Heroku';
+  if (clean === NORTHFLANK_BACKEND_URL) return 'Northflank';
+  try {
+    return new URL(clean).hostname;
+  } catch {
+    return clean;
+  }
+}
+
+export interface BackendStatus {
+  url: string;
+  name: string;
+  up: boolean;
+  jobs: number;
+  runningJobs: number;
+  queuedJobs: number;
+}
+
+/** Live /health status for every backend in the pool (admin panel). */
+export async function backendStatuses(): Promise<BackendStatus[]> {
+  const results = await Promise.all(
+    BACKEND_URLS.map(async (url) => {
+      const ctrl = new AbortController();
+      const timer = window.setTimeout(() => ctrl.abort(), 12_000);
+      try {
+        const r = await fetch(`${url.replace(/\/$/, '')}/health`, { signal: ctrl.signal });
+        if (!r.ok) throw new Error('health failed');
+        const data = await r.json().catch(() => ({}));
+        return {
+          url,
+          name: backendName(url),
+          up: true,
+          jobs: typeof data.jobs === 'number' ? data.jobs : 0,
+          runningJobs: typeof data.runningJobs === 'number' ? data.runningJobs : 0,
+          queuedJobs: typeof data.queuedJobs === 'number' ? data.queuedJobs : 0,
+        };
+      } catch {
+        return { url, name: backendName(url), up: false, jobs: 0, runningJobs: 0, queuedJobs: 0 };
+      } finally {
+        window.clearTimeout(timer);
+      }
+    })
+  );
+  return results;
+}
+
+export interface CombinedStats {
+  activeJobs: number;
+  activeUsers: number;
+  backendsUp: number;
+}
+
+/**
+ * Combined live stats across the backends actually in use. Jobs run on
+ * exactly one backend, so activeJobs is a plain sum. Visitors are counted
+ * per backend, but one visitor polls every backend, so the same visitor id
+ * appears on each — activeUsers is the UNION of the visitor-id sets, not
+ * the sum, so nobody is counted twice.
+ */
+export async function fetchCombinedStats(uid: string, origin: string): Promise<CombinedStats | null> {
+  const pinned = getPinnedBackendUrl();
+  const targets = pinned ? [pinned] : [...BACKEND_URLS];
+  const results = await Promise.all(
+    targets.map(async (base) => {
+      const ctrl = new AbortController();
+      const timer = window.setTimeout(() => ctrl.abort(), 12_000);
+      try {
+        const res = await fetch(
+          `${base.replace(/\/$/, '')}/api/stats?uid=${encodeURIComponent(uid)}&origin=${encodeURIComponent(origin)}`,
+          { signal: ctrl.signal }
+        );
+        if (!res.ok) throw new Error('stats failed');
+        return await res.json();
+      } catch {
+        return null;
+      } finally {
+        window.clearTimeout(timer);
+      }
+    })
+  );
+  const up = results.filter((r): r is Record<string, unknown> => r !== null);
+  if (!up.length) return null;
+  let activeJobs = 0;
+  const seenUsers = new Set<string>();
+  for (const r of up) {
+    activeJobs += typeof r.activeJobs === 'number' ? r.activeJobs : 0;
+    const visitors = Array.isArray(r.visitors) ? r.visitors : [];
+    for (const id of visitors) if (typeof id === 'string') seenUsers.add(id);
+  }
+  // Fall back to the per-backend counts when a backend predates the
+  // visitors list (e.g. mid-deploy): at worst the same visitor is
+  // counted once per backend instead of once overall.
+  const activeUsers = seenUsers.size > 0
+    ? seenUsers.size
+    : Math.max(...up.map((r) => (typeof r.activeUsers === 'number' ? r.activeUsers : 0)));
+  return { activeJobs, activeUsers, backendsUp: up.length };
+}
+
 export function isBackendEnabled(): boolean {
   const raw = localStorage.getItem(ENABLED_KEY);
   // Default: on (server-side conversion is faster and survives tab close).

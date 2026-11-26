@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Activity, Users } from 'lucide-react';
-import { getBackendUrl, isBackendEnabled } from '@/utils/backend';
+import { fetchCombinedStats, isBackendEnabled } from '@/utils/backend';
 
 interface Stats {
   activeJobs: number;
@@ -29,17 +29,18 @@ export function LiveStats() {
         return;
       }
       try {
-        const base = getBackendUrl().replace(/\/$/, '');
-        const currentOrigin = window.location.origin;
-        const res = await fetch(`${base}/api/stats?uid=${encodeURIComponent(visitorId())}&origin=${encodeURIComponent(currentOrigin)}`);
-        if (!res.ok) throw new Error('stats failed');
-        const data = await res.json();
+        // Summed across every backend in use: jobs add up exactly, and
+        // users are unioned by visitor id so one person polling both
+        // backends is counted once. Null when no backend answers, so the
+        // pill hides instead of showing stale numbers.
+        const combined = await fetchCombinedStats(visitorId(), window.location.origin);
+        if (!combined) throw new Error('stats failed');
         if (!cancelled) {
           // In development/preview, we show combined global stats (matching production).
           // On the production domain, we show exactly what the server says.
           setStats({
-            activeJobs: Math.max(data.activeJobs ?? 0, 0),
-            activeUsers: Math.max(data.activeUsers ?? 0, 1)
+            activeJobs: Math.max(combined.activeJobs ?? 0, 0),
+            activeUsers: Math.max(combined.activeUsers ?? 0, 1)
           });
         }
       } catch {

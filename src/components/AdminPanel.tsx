@@ -19,6 +19,11 @@ import {
   backendHealthy,
   DEFAULT_BACKEND_URL,
   HEROKU_BACKEND_URL,
+  NORTHFLANK_BACKEND_URL,
+  getPinnedBackendUrl,
+  clearBackendUrl,
+  backendStatuses,
+  BackendStatus,
 } from '@/utils/backend';
 
 export function AdminPanel({ open, onOpenChange, hideTrigger }: { open?: boolean; onOpenChange?: (o: boolean) => void; hideTrigger?: boolean } = {}) {
@@ -30,11 +35,20 @@ export function AdminPanel({ open, onOpenChange, hideTrigger }: { open?: boolean
   const [serverOn, setServerOn] = useState(true);
   const [serverUrl, setServerUrl] = useState(DEFAULT_BACKEND_URL);
   const [serverStatus, setServerStatus] = useState<'unknown' | 'checking' | 'up' | 'down'>('unknown');
+  const [pinnedUrl, setPinnedUrl] = useState<string | null>(null);
+  const [backendList, setBackendList] = useState<BackendStatus[]>([]);
   const { toast } = useToast();
+
+  const refreshBackends = async () => {
+    const list = await backendStatuses();
+    setBackendList(list);
+  };
 
   useEffect(() => {
     setServerOn(isBackendEnabled());
     setServerUrl(getBackendUrl());
+    setPinnedUrl(getPinnedBackendUrl());
+    refreshBackends();
   }, []);
 
 
@@ -254,12 +268,39 @@ export function AdminPanel({ open, onOpenChange, hideTrigger }: { open?: boolean
                   <Button
                     type="button"
                     size="sm"
-                    variant={serverUrl === HEROKU_BACKEND_URL ? 'default' : 'outline'}
+                    variant={pinnedUrl === null ? 'default' : 'outline'}
+                    onClick={() => {
+                      clearBackendUrl();
+                      setPinnedUrl(null);
+                      setServerUrl(getBackendUrl());
+                      refreshBackends();
+                      toast({ title: 'Load balancing on — jobs spread across both backends' });
+                    }}
+                  >
+                    Auto (both)
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={pinnedUrl === HEROKU_BACKEND_URL ? 'default' : 'outline'}
                     onClick={() => setServerUrl(HEROKU_BACKEND_URL)}
                   >
                     Heroku
                   </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={pinnedUrl === NORTHFLANK_BACKEND_URL ? 'default' : 'outline'}
+                    onClick={() => setServerUrl(NORTHFLANK_BACKEND_URL)}
+                  >
+                    Northflank
+                  </Button>
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  {pinnedUrl === null
+                    ? 'No pin — new jobs go to the least-loaded backend.'
+                    : 'Pinned to one backend — jobs will not spread until Auto is picked.'}
+                </p>
                 <div className="flex gap-2">
                   <Input
                     id="backendUrl"
@@ -271,9 +312,11 @@ export function AdminPanel({ open, onOpenChange, hideTrigger }: { open?: boolean
                     variant="outline"
                     onClick={async () => {
                       setBackendUrl(serverUrl);
+                      setPinnedUrl(getPinnedBackendUrl());
                       setServerStatus('checking');
                       const ok = await backendHealthy();
                       setServerStatus(ok ? 'up' : 'down');
+                      refreshBackends();
                       toast({
                         title: ok ? 'Backend reachable' : 'Backend unreachable',
                         variant: ok ? undefined : 'destructive',
@@ -293,6 +336,30 @@ export function AdminPanel({ open, onOpenChange, hideTrigger }: { open?: boolean
                         : 'offline (app falls back to browser mode)'}
                   </p>
                 )}
+                <div className="space-y-1 pt-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium">Backends</span>
+                    <Button type="button" size="sm" variant="ghost" onClick={refreshBackends}>
+                      Refresh
+                    </Button>
+                  </div>
+                  {backendList.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">checking…</p>
+                  ) : (
+                    backendList.map((b) => (
+                      <div key={b.url} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="flex items-center gap-1.5 min-w-0">
+                          <span className={`h-2 w-2 shrink-0 rounded-full ${b.up ? 'bg-green-500' : 'bg-red-500'}`} />
+                          <span className="font-medium">{b.name}</span>
+                          <span className="text-muted-foreground truncate">{b.url.replace(/^https?:\/\//, '')}</span>
+                        </span>
+                        <span className="whitespace-nowrap text-muted-foreground">
+                          {b.up ? `${b.runningJobs} running · ${b.queuedJobs} queued` : 'unreachable'}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>
