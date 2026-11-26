@@ -25,7 +25,6 @@ import {
   searchLightNovelTo,
   searchNovelRoll,
   searchNovelPing,
-  searchWebNovelFree,
   searchReadNovelEu,
   searchWuxiadreams,
   searchMubooks,
@@ -394,22 +393,6 @@ app.get("/api/novelping/search", async (req, res) => {
       50
     );
     const results = await searchNovelPing(q, limit);
-    res.json({ results });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// Search webnovelfree.com's catalogue (parses the WordPress ?s= page).
-app.get("/api/webnovelfree/search", async (req, res) => {
-  try {
-    const q = String(req.query.q || "").trim();
-    if (!q) return res.status(400).json({ error: "q required" });
-    const limit = Math.min(
-      Math.max(parseInt(String(req.query.limit || "10"), 10) || 10, 1),
-      50
-    );
-    const results = await searchWebNovelFree(q, limit);
     res.json({ results });
   } catch (e) {
     res.status(500).json({ error: e.message });

@@ -1581,17 +1581,6 @@
       "div.chapter_content"
     ]
   },
-  "webnovelfree.com": {
-    "parser": "WebNovelFreeParser",
-    "toc": [
-      "a[href*='?Chapter=']"
-    ],
-    "content": [
-      ".entry-content.reader-content",
-      "article",
-      "main"
-    ]
-  },
   "wetriedtls.com": {
     "parser": "MadaraParser",
     "toc": [

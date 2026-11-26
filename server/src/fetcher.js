@@ -143,9 +143,6 @@ const CF_PROTECTED = [
   // Ridi 403s / Cloudflare-challenges direct requests from datacenter IPs
   // on every host (series pages, GraphQL API, viewer) — proxies first.
   /(^|\.)ridibooks\.com$/i,
-  // WebNovelFree 403s direct requests from datacenter IPs; the CF Worker
-  // and Lovable proxies return the real pages — proxies first.
-  /(^|\.)webnovelfree\.com$/i,
   // NovelPing's /ajax/ endpoints (chapter-archive, search-novel) do not
   // answer the Heroku datacenter IP (novel pages load fine direct, but
   // the AJAX calls come back empty — production TOC + search returned 0
@@ -2710,156 +2707,6 @@ async function bodyNovelPing(url) {
   const content = extractWithSelector(doc, ".chr-c, #chapter");
   if (!content || content.replace(/<[^>]+>/g, "").trim().length < 30)
     throw new Error("NovelPing: this chapter has no readable content");
-  return content;
-}
-
-// --- WebNovelFree ---
-// WordPress site. Direct fetches from datacenter IPs get HTTP 403, but the
-// CF Worker and Lovable proxies return the real pages, so the host is in
-// CF_PROTECTED (proxies first). The novel page lists "Num Chapters: N" and
-// a "Read now" link ?Chapter=1-<hash>; each chapter page links to the next
-// chapter as ?Chapter=<n>-<hash> (a per-chapter hash, not derivable), so
-// the TOC is built by following that chain from chapter 1. Chapter prose
-// lives in .entry-content.reader-content. Search is the WordPress ?s= page.
-const WEBNOVELFREE_ORIGIN = "https://webnovelfree.com";
-
-function webNovelFreeSlug(url) {
-  const m = String(url || "").match(/webnovelfree\.com\/([^/?#]+)\/?/i);
-  return m ? decodeURIComponent(m[1]) : null;
-}
-
-/** Search webnovelfree.com's catalogue via the WordPress ?s= page. */
-export async function searchWebNovelFree(query, limit = 10) {
-  const q = String(query || "").trim();
-  if (!q) return [];
-  const doc = parseHtml(
-    await smartGetText(
-      `${WEBNOVELFREE_ORIGIN}/?s=${encodeURIComponent(q)}`,
-      15000,
-      45000
-    )
-  );
-  const out = [];
-  const seen = new Set();
-  for (const a of doc.querySelectorAll("a[href]")) {
-    // The page may come back through a proxy that rewrites every href
-    // to a proxy URL; unwrap to the real URL before matching.
-    const href = unwrapProxyUrl(a.getAttribute("href") || "");
-    const m = href.match(
-      new RegExp(`^${WEBNOVELFREE_ORIGIN}/([^/?#]+)/?(?:[?#]|$)`, "i")
-    );
-    if (!m) continue;
-    const slug = decodeURIComponent(m[1]);
-    if (
-      /^(all-web-novels|browse-novels|latest-chapters|category|feed|wp-content|wp-json|tag|author|page)$/i.test(
-        slug
-      )
-    )
-      continue;
-    const abs = `${WEBNOVELFREE_ORIGIN}/${slug}/`;
-    if (seen.has(abs)) continue;
-    // The result link often wraps only an <img> (no text); fall back to
-    // the image alt or the link's own title attribute.
-    let title = (a.textContent || "").trim();
-    if (!title) {
-      const img = a.querySelector("img[alt]");
-      title = (img?.getAttribute("alt") || "").trim();
-    }
-    if (!title) title = (a.getAttribute("title") || "").trim();
-    if (!title) continue;
-    seen.add(abs);
-    out.push({
-      title,
-      url: abs,
-      chapters: 0,
-      author: "",
-      language: "",
-      source: "",
-    });
-    if (out.length >= limit) break;
-  }
-  return out;
-}
-
-async function tocWebNovelFree(url) {
-  const slug = webNovelFreeSlug(url);
-  if (!slug)
-    throw new Error(
-      "WebNovelFree: could not read the novel slug from the URL"
-    );
-  const novelUrl = `${WEBNOVELFREE_ORIGIN}/${slug}/`;
-  // The novel page is fetched through a proxy (direct is 403); allow a
-  // longer per-attempt timeout so the first proxy can answer instead of
-  // falling through to slower ones.
-  const doc = parseHtml(
-    await smartGetText(novelUrl, 15000, 45000)
-  );
-  // Total chapters from the info table ("Num Chapters: N").
-  let total = 0;
-  const numEl = doc.querySelector(".num-chapters .value");
-  if (numEl)
-    total = parseInt((numEl.textContent || "").replace(/[^0-9]/g, ""), 10) || 0;
-  // First chapter from the "Read now" link (?Chapter=1-<hash>).
-  // NOTE: when the page comes back through a proxy, every href is
-  // rewritten to a proxy URL (the real URL is URL-encoded in ?url=),
-  // so unwrap each href before matching ?Chapter=.
-  let first = null;
-  for (const a of doc.querySelectorAll("a[href]")) {
-    const href = unwrapProxyUrl(a.getAttribute("href") || "");
-    const m = href.match(/\?Chapter=(\d+)-([0-9a-f]+)/i);
-    if (m) {
-      first = { num: parseInt(m[1], 10), hash: m[2] };
-      break;
-    }
-  }
-  if (!first)
-    throw new Error("WebNovelFree: no chapters found for this novel");
-  const out = [];
-  const seen = new Set();
-  let cur = first;
-  // Follow the next-chapter chain: each chapter page links to the next
-  // chapter as ?Chapter=<n>-<hash>. Sequential by nature (each step needs
-  // the previous page's next link), so long books take a while here.
-  while (cur) {
-    const chapterUrl = `${novelUrl}?Chapter=${cur.num}-${cur.hash}`;
-    if (seen.has(chapterUrl)) break;
-    seen.add(chapterUrl);
-    out.push({
-      url: chapterUrl,
-      title: `Chapter ${cur.num}`,
-      _num: cur.num,
-    });
-    if (total && out.length >= total) break;
-    if (out.length > 10000) break; // safety cap
-    let next = null;
-    try {
-      const chDoc = parseHtml(
-        await smartGetText(chapterUrl, 15000, 45000)
-      );
-      for (const a of chDoc.querySelectorAll("a[href]")) {
-        const href = unwrapProxyUrl(a.getAttribute("href") || "");
-        const m = href.match(/\?Chapter=(\d+)-([0-9a-f]+)/i);
-        if (m && parseInt(m[1], 10) === cur.num + 1) {
-          next = { num: parseInt(m[1], 10), hash: m[2] };
-          break;
-        }
-      }
-    } catch {
-      break;
-    }
-    cur = next;
-  }
-  if (!out.length)
-    throw new Error("WebNovelFree: no chapters found for this novel");
-  out.sort((x, y) => (x._num ?? 0) - (y._num ?? 0));
-  return out;
-}
-
-async function bodyWebNovelFree(url) {
-  const doc = parseHtml(await getText(url));
-  const content = extractWithSelector(doc, ".entry-content.reader-content");
-  if (!content || content.replace(/<[^>]+>/g, "").trim().length < 30)
-    throw new Error("WebNovelFree: this chapter has no readable content");
   return content;
 }
 
@@ -6776,7 +6623,6 @@ export function siteKey(hostname) {
   if (host.includes("readallnovel.online")) return "readallnovel";
   if (host.includes("novelroll.com")) return "novelroll";
   if (host.includes("novelping.com")) return "novelping";
-  if (host.includes("webnovelfree.com")) return "webnovelfree";
   if (host.includes("readnovel.eu")) return "readnoveleu";
   if (host.includes("sites.google.com")) return "googlesites";
   if (host.includes("wuxiadreams.com")) return "wuxiadreams";
@@ -6845,8 +6691,6 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         return tocNovelRoll(tocUrl);
       case "novelping":
         return tocNovelPing(tocUrl);
-      case "webnovelfree":
-        return tocWebNovelFree(tocUrl);
       case "readnoveleu":
         return tocReadNovelEu(tocUrl);
       case "googlesites":
@@ -7137,8 +6981,6 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
         return bodyNovelRoll(chapterUrl);
       case "novelping":
         return bodyNovelPing(chapterUrl);
-      case "webnovelfree":
-        return bodyWebNovelFree(chapterUrl);
       case "readnoveleu":
         return bodyReadNovelEu(chapterUrl);
       case "googlesites":
@@ -7280,7 +7122,7 @@ export function cleanBookTitle(raw) {
   const SITE_WORDS = /novel|read|online|librar|webnovel|wuxia|fanfic|manga|manhwa|manhua|book|fiction|free|stories|chapter/i;
   const BRANDS = new Set([
     "novelping", "readallnovel", "novelfull", "novelbuddy", "novelroll",
-    "webnovelfree", "readnovelfree", "wuxiaworld", "royalroad", "scribblehub",
+    "readnovelfree", "wuxiaworld", "royalroad", "scribblehub",
     "novelbin", "novelhall", "lightnovel", "webnovel", "readlightnovel",
     "novelupdates", "novelgo", "novelfire", "novelcool", "fanfiction",
     "wattpad", "archiveofourown", "ao3", "novelonline", "readnovel", "freenovel",

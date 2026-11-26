@@ -14,7 +14,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { engineSearch, cancelSearch, engineLoadMetadata, EngineSearchResult } from '@/utils/webtoepub/bridge';
 import LibrarySuggestion from './LibrarySuggestion';
 import { normalizeBookSearch } from '@/utils/librarySearch';
-import { backendToc, isBackendEnabled, searchLncrawlBooks, searchNoveliBooks, searchLightNovelToBooks, searchNovelRollBooks, searchNovelPingBooks, searchWebNovelFreeBooks, searchReadNovelEuBooks, searchWuxiadreamsBooks, searchMubooksBooks, searchReadNovelBooks } from '@/utils/backend';
+import { backendToc, isBackendEnabled, searchLncrawlBooks, searchNoveliBooks, searchLightNovelToBooks, searchNovelRollBooks, searchNovelPingBooks, searchReadNovelEuBooks, searchWuxiadreamsBooks, searchMubooksBooks, searchReadNovelBooks } from '@/utils/backend';
 import { LiveStats } from '@/components/LiveStats';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 
@@ -222,12 +222,6 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
           host.endsWith('.novelroll.com') ||
           host === 'novelping.com' ||
           host.endsWith('.novelping.com'));
-      // NOTE: webnovelfree.com is deliberately NOT here. Its TOC is a
-      // per-chapter hash chain, and the server reaches the site only
-      // through proxies that take 15–45 s per chapter page — far too
-      // slow/unreliable for a server TOC. The browser engine (the
-      // user's own connection, which the site accepts) runs the chain
-      // directly instead; see WebNovelFreeParser.
       if (useServerToc) {
         try {
           const result = await backendToc(url, getSiteConfig(url)?.tocSelector || tocSelector);
@@ -469,7 +463,7 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
       const lightNovelToPromise = isBackendEnabled()
         ? searchLightNovelToBooks(query, 10).then(mergeLightNovelTo).catch(() => {})
         : Promise.resolve();
-      // NovelRoll, NovelPing and WebNovelFree catalogue searches run
+      // NovelRoll and NovelPing catalogue searches run
       // alongside too; same guarantee.
       const makeMerge = (source: string) => (items: { title: string; url: string; chapters: number; author: string; source: string }[]) => {
         if (!items.length) return;
@@ -501,9 +495,6 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
         : Promise.resolve();
       const novelPingPromise = isBackendEnabled()
         ? searchNovelPingBooks(query, 10).then(makeMerge('novelping.com')).catch(() => {})
-        : Promise.resolve();
-      const webNovelFreePromise = isBackendEnabled()
-        ? searchWebNovelFreeBooks(query, 10).then(makeMerge('webnovelfree.com')).catch(() => {})
         : Promise.resolve();
       const readNovelEuPromise = isBackendEnabled()
         ? searchReadNovelEuBooks(query, 10).then(makeMerge('readnovel.eu')).catch(() => {})
@@ -542,7 +533,6 @@ export default function ConversionForm({ onSubmit, isConverting, hasFetchedChapt
         lightNovelToPromise,
         novelRollPromise,
         novelPingPromise,
-        webNovelFreePromise,
         readNovelEuPromise,
         wuxiadreamsPromise,
         mubooksPromise,

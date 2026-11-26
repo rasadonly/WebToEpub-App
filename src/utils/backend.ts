@@ -340,21 +340,6 @@ export async function searchNovelPingBooks(
 }
 
 /**
- * Search webnovelfree.com's catalogue on the server (parses the
- * WordPress ?s= page). Needs the backend to be up; it throws when it
- * is not.
- */
-export async function searchWebNovelFreeBooks(
-  query: string,
-  limit = 10
-): Promise<NoveliSearchResult[]> {
-  const data = await api<{ results: NoveliSearchResult[] }>(
-    `/api/webnovelfree/search?q=${encodeURIComponent(query)}&limit=${limit}`
-  );
-  return data?.results || [];
-}
-
-/**
  * Search readnovel.eu's catalogue on the server (GET /search?q=...;
  * results in __NEXT_DATA__ pageProps.result.items). Needs the backend
  * to be up; it throws when it is not.
