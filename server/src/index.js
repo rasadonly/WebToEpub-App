@@ -756,6 +756,15 @@ const MAX_ACTIVE_JOBS = Number(process.env.MAX_ACTIVE_JOBS || DEFAULT_MAX_ACTIVE
 let activeJobs = 0;
 const JOB_IDLE_MS = Number(process.env.JOB_IDLE_MS || 5 * 60 * 1000);
 const JOB_MAX_MS = Number(process.env.JOB_MAX_MS || 60 * 60 * 1000);
+// Other backends running this same service (comma-separated base URLs —
+// the Northflank URL on Heroku and the Heroku URL on Northflank). On
+// restart, before resuming a job, this backend asks each peer whether it
+// already has the job, so two backends never convert the same book at
+// once. Empty = single backend, no checks.
+const PEER_BACKENDS = (process.env.PEER_BACKEND_URLS || "")
+  .split(",")
+  .map((s) => s.trim().replace(/\/$/, ""))
+  .filter(Boolean);
 const jobQueue = [];
 function pumpJobs() {
   while (activeJobs < MAX_ACTIVE_JOBS && jobQueue.length) {
@@ -1114,7 +1123,33 @@ function finishCancelled(job) {
  * job stays as-is; anything else that was queued/running is re-queued
  * and runs again from scratch (the spooled chapters live on the
  * ephemeral dyno disk, so a restart always re-downloads them). */
-function restoreOneJob(job, spec) {
+/**
+ * Ask each peer backend whether it already knows a job. A peer that
+ * answers 200 knows the job (queued, running, or already finished) and
+ * owns it — this backend must not resume it. A peer that answers 404
+ * never had it, and an unreachable peer may be down, so in both cases
+ * the job is free to resume here (fail open: a down peer must not
+ * strand a job forever).
+ */
+async function peerOwnsJob(jobId) {
+  if (!PEER_BACKENDS.length) return false;
+  const checks = PEER_BACKENDS.map(async (base) => {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 4000);
+    try {
+      const res = await fetch(`${base}/api/jobs/${jobId}`, { signal: ctrl.signal });
+      return res.ok;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+  const results = await Promise.all(checks);
+  return results.some(Boolean);
+}
+
+async function restoreOneJob(job, spec) {
   if (!job?.id) return;
   const ttl = job.kind === "raw" ? RAW_JOB_TTL_MS : JOB_TTL_MS;
   if (Date.now() - (job.updatedAt || 0) > ttl) {
@@ -1185,6 +1220,14 @@ function restoreOneJob(job, spec) {
     jobs.set(job.id, job);
     return;
   }
+  // Another backend may already be running this job: on 26 Nov 2026 a
+  // Northflank restart resumed a job Heroku was still converting, so the
+  // same book converted twice at once. Ask the peers first — if one of
+  // them already has the job, leave it entirely to that backend.
+  if (await peerOwnsJob(job.id)) {
+    console.log(`[jobs] skipping resume of ${job.id} (${job.title}) — already owned by a peer backend`);
+    return;
+  }
   // Was queued/running (or the packed file is gone) — run it again.
   job.status = "queued";
   job.phase = "Resuming after server restart";
@@ -1211,7 +1254,9 @@ function restoreJobs() {
   for (const f of files) {
     try {
       const { job, spec } = JSON.parse(fs.readFileSync(path.join(STATE_DIR, f), "utf8"));
-      restoreOneJob(job, spec);
+      restoreOneJob(job, spec).catch((e) =>
+        console.error(`[jobs] restore failed for ${job?.id}:`, e)
+      );
     } catch {
       /* skip corrupt state file */
     }
@@ -1234,7 +1279,7 @@ async function restoreRemoteJobs() {
   for (const { job, spec } of states) {
     try {
       if (!job?.id || jobs.has(job.id)) continue;
-      restoreOneJob(job, spec);
+      await restoreOneJob(job, spec);
     } catch {
       /* skip a bad remote state entry */
     }
