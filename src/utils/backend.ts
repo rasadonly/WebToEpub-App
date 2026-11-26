@@ -11,10 +11,11 @@ const URL_KEY = 'backendUrl';
 const JOB_KEY = 'backendJobId';
 
 export const HEROKU_BACKEND_URL = 'https://link-to-epub-37130-dfa858b712fc.herokuapp.com';
+export const NORTHFLANK_BACKEND_URL = 'https://http--webtoepub--x8x9vf48w98g.code.run';
 export const DEFAULT_BACKEND_URL = HEROKU_BACKEND_URL;
 
 /** Every known backend, tried in order when the active one is unreachable. */
-export const BACKEND_URLS: readonly string[] = [HEROKU_BACKEND_URL];
+export const BACKEND_URLS: readonly string[] = [HEROKU_BACKEND_URL, NORTHFLANK_BACKEND_URL];
 
 /**
  * Hostnames that have a dedicated server-side parser in fetcher.js.
