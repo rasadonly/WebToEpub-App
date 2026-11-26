@@ -740,7 +740,13 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
           className="border-b px-4 py-3 flex flex-wrap items-center gap-3 bg-primary/5 backdrop-blur-md"
           style={{ borderColor: themeVars.accent + '33' }}
         >
-          <div className="flex items-center gap-1 bg-background rounded-lg border p-1">
+          <div
+            className="flex items-center gap-1 rounded-lg border p-1"
+            style={{
+              background: theme === 'dark' ? '#09090b' : theme === 'sepia' ? '#f4ecd8' : '#ffffff',
+              borderColor: theme === 'dark' ? '#3f3f46' : theme === 'sepia' ? '#d8cca8' : '#d4d4d8',
+            }}
+          >
             <Button size="sm" variant="ghost" onClick={() => skip(-1)} title="Previous paragraph" className="h-8 w-8 p-0">
               <SkipBack className="w-4 h-4" />
             </Button>
@@ -759,23 +765,49 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
             </Button>
           </div>
 
-          <div className="h-6 w-px bg-border mx-1" />
+          <div
+            className="h-6 w-px mx-1"
+            style={{ background: theme === 'dark' ? '#3f3f46' : theme === 'sepia' ? '#c8bca8' : '#d4d4d8' }}
+          />
 
           <select
             value={voiceURI}
             onChange={(e) => setVoiceURI(e.target.value)}
-            className="bg-background border rounded-md px-2 py-1 h-9 text-[11px] max-w-[200px]"
+            className="border rounded-md px-2 py-1 h-9 text-[11px] max-w-[200px]"
+            style={{
+              background: theme === 'dark' ? '#09090b' : theme === 'sepia' ? '#f4ecd8' : '#ffffff',
+              borderColor: theme === 'dark' ? '#3f3f46' : theme === 'sepia' ? '#d8cca8' : '#d4d4d8',
+              color: themeVars.fg,
+            }}
           >
             {voices.length === 0 && <option value="">Default Voice</option>}
             {voices.map((v) => (
-              <option key={v.voiceURI} value={v.voiceURI}>
+              <option
+                key={v.voiceURI}
+                value={v.voiceURI}
+                style={{
+                  background: theme === 'dark' ? '#09090b' : theme === 'sepia' ? '#f4ecd8' : '#ffffff',
+                  color: themeVars.fg,
+                }}
+              >
                 {v.name} ({v.lang})
               </option>
             ))}
           </select>
 
-          <div className="flex items-center gap-2 px-3 border rounded-md h-9 bg-background">
-            <span className="text-[10px] uppercase font-bold text-muted-foreground whitespace-nowrap">Speed {rate.toFixed(1)}x</span>
+          <div
+            className="flex items-center gap-2 px-3 border rounded-md h-9"
+            style={{
+              background: theme === 'dark' ? '#09090b' : theme === 'sepia' ? '#f4ecd8' : '#ffffff',
+              borderColor: theme === 'dark' ? '#3f3f46' : theme === 'sepia' ? '#d8cca8' : '#d4d4d8',
+            }}
+          >
+            <span
+              className="text-[10px] uppercase font-bold whitespace-nowrap"
+              style={{ color: theme === 'dark' ? '#a1a1aa' : theme === 'sepia' ? '#7a6a4d' : '#71717a' }}
+            >
+              Speed {rate.toFixed(1)}x
+            </span>
             <input
               type="range"
               min={0.6}
@@ -787,8 +819,19 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
             />
           </div>
 
-          <div className="flex items-center gap-2 px-3 border rounded-md h-9 bg-background hidden sm:flex">
-            <span className="text-[10px] uppercase font-bold text-muted-foreground whitespace-nowrap">Pitch</span>
+          <div
+            className="flex items-center gap-2 px-3 border rounded-md h-9 hidden sm:flex"
+            style={{
+              background: theme === 'dark' ? '#09090b' : theme === 'sepia' ? '#f4ecd8' : '#ffffff',
+              borderColor: theme === 'dark' ? '#3f3f46' : theme === 'sepia' ? '#d8cca8' : '#d4d4d8',
+            }}
+          >
+            <span
+              className="text-[10px] uppercase font-bold whitespace-nowrap"
+              style={{ color: theme === 'dark' ? '#a1a1aa' : theme === 'sepia' ? '#7a6a4d' : '#71717a' }}
+            >
+              Pitch
+            </span>
             <input
               type="range"
               min={0.5}
