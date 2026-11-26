@@ -2054,181 +2054,6 @@ async function mubooksMeta(tocUrl) {
   return { title, author, cover, description };
 }
 
-// --- OwnNovel (ownnovel.com): a NovelHall clone (CF-fronted but not
-// challenging datacenter IPs as of 2026-11-26; free, no login).
-//   Novel page: /<digits><Slug>2022-<id>/  (e.g. /33333The-Mech-Touch2022-223/)
-//   TOC: two <div class="book-catalog"> blocks — the first holds the 9
-//     newest chapters, the second holds the full list (with the newest
-//     chapter pinned at the top, so it appears twice). Pick the catalog
-//     with the most chapter links (the NovelHall "largest catalog"
-//     heuristic), dedupe by URL and by chapter number, sort ascending.
-//   Chapter URL: /<lowercase-slug>-<id>/<chapterId>.html
-//     (e.g. /the-mech-touch-223/20847780.html)
-//   Chapter prose: <div class="entry-content"> (paragraphs in <p>).
-//   Search: GET /index.php?s=so&module=book&keyword=<query>.
-//   Title: og:title; author: <meta property="books:author">;
-//     cover: .book-img img; description: .book-info .intro.
-// Verified live on The Mech Touch (7,627 chapters; ch 7568 = 11,980 chars).
-const OWNNOVEL_ORIGIN = "https://www.ownnovel.com";
-
-function ownnovelChapterNumber(text) {
-  const t = String(text || "");
-  // The site typos "Chapter" as "Chpater" on some entries and inserts
-  // invisible characters between the word and the number on others.
-  let m = t.match(/ch[ai]pter[\s\u200B-\u200D\uFEFF\u00AD]*(\d+)/i);
-  if (m) return parseInt(m[1], 10);
-  m = t.match(/(\d+)/);
-  return m ? parseInt(m[1], 10) : null;
-}
-
-async function tocOwnNovel(tocUrl) {
-  const doc = parseHtml(await smartGetText(tocUrl, 15000, 45000));
-  const catalogs = [...doc.querySelectorAll(".book-catalog")];
-  if (!catalogs.length)
-    throw new Error("OwnNovel: no chapter catalog found for this novel");
-  // Largest-catalog heuristic: the full list dwarfs the 9-newest preview.
-  let best = null;
-  let bestCount = -1;
-  for (const c of catalogs) {
-    const n = [...c.querySelectorAll("a[href]")].filter((a) =>
-      /^\/[^/]+\/\d+\.html$/i.test(a.getAttribute("href") || "")
-    ).length;
-    if (n > bestCount) {
-      bestCount = n;
-      best = c;
-    }
-  }
-  const byNumber = new Map();
-  const seenUrls = new Set();
-  let pos = 0;
-  for (const a of best.querySelectorAll("a[href]")) {
-    const href = a.getAttribute("href") || "";
-    if (!/^\/[^/]+\/\d+\.html$/i.test(href)) continue;
-    const url = absoluteUrl(OWNNOVEL_ORIGIN, href);
-    if (seenUrls.has(url)) continue;
-    seenUrls.add(url);
-    pos += 1;
-    const n = ownnovelChapterNumber(a.textContent) ?? pos;
-    if (byNumber.has(n)) continue;
-    const rawTitle = (a.textContent || "").replace(/\s+/g, " ").trim();
-    byNumber.set(n, {
-      url,
-      title: rawTitle || `Chapter ${n}`,
-      _num: n,
-    });
-  }
-  const out = [...byNumber.values()].sort((a, b) => a._num - b._num);
-  if (!out.length)
-    throw new Error("OwnNovel: no chapters found for this novel");
-  return out;
-}
-
-async function bodyOwnNovel(chapterUrl) {
-  const html = await smartGetText(chapterUrl, 15000, 45000);
-  const doc = parseHtml(html);
-  const content = doc.querySelector(".entry-content");
-  if (!content)
-    throw new Error("OwnNovel: this chapter has no readable content");
-  const texts = [];
-  for (const p of content.querySelectorAll("p")) {
-    const t = (p.textContent || "")
-      .replace(/\u00A0/g, " ")
-      .replace(/[\u200B\u200C\u200D\uFEFF]/g, "")
-      .trim();
-    if (t) texts.push(t);
-  }
-  if (!texts.length) {
-    // No <p> children — split the block's own text on blank lines.
-    const t = (content.textContent || "")
-      .replace(/\u00A0/g, " ")
-      .replace(/[\u200B\u200C\u200D\uFEFF]/g, "")
-      .trim();
-    if (t)
-      texts.push(
-        ...t
-          .split(/\n\s*\n/)
-          .map((s) => s.trim())
-          .filter(Boolean)
-      );
-  }
-  if (!texts.length)
-    throw new Error("OwnNovel: this chapter has no readable content");
-  return texts
-    .map(
-      (t) =>
-        `<p>${t
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;")}</p>`
-    )
-    .join("");
-}
-
-/** Search ownnovel.com's catalogue:
- * GET /index.php?s=so&module=book&keyword=<query>. Matches by title. */
-export async function searchOwnNovel(query, limit = 10) {
-  const q = String(query || "").trim();
-  if (!q) return [];
-  const html = await smartGetText(
-    `${OWNNOVEL_ORIGIN}/index.php?s=so&module=book&keyword=${encodeURIComponent(q)}`,
-    15000,
-    45000
-  );
-  const doc = parseHtml(html);
-  const out = [];
-  const seen = new Set();
-  for (const a of doc.querySelectorAll("a[href]")) {
-    const href = a.getAttribute("href") || "";
-    if (!/^\/\d[^/]*2022-\d+\/$/.test(href)) continue;
-    if (seen.has(href)) continue;
-    const title = (a.textContent || "").replace(/\s+/g, " ").trim();
-    if (!title) continue;
-    seen.add(href);
-    out.push({
-      title,
-      url: absoluteUrl(OWNNOVEL_ORIGIN, href),
-      chapters: 0,
-      author: "",
-      language: "",
-      source: "",
-    });
-    if (out.length >= limit) break;
-  }
-  return out;
-}
-
-/** Novel meta for OwnNovel. og:title is the clean title; the author is
- * <meta property="books:author">; cover is .book-img img; the summary
- * is .book-info .intro. */
-async function ownnovelMeta(tocUrl) {
-  const html = await smartGetText(tocUrl, 15000, 45000);
-  const ogTitle =
-    (html.match(/property="og:title" content="([^"]*)"/) || [])[1] || "";
-  const titleTag = (html.match(/<title>([^<]*)<\/title>/i) || [])[1] || "";
-  const raw = (ogTitle || titleTag).replace(/\s+/g, " ").trim();
-  if (!raw) return null;
-  const title =
-    raw.replace(/\s+read novel online free\s*-\s*ownnovel$/i, "").trim() ||
-    raw;
-  const author =
-    (html.match(/property="books:author" content="([^"]*)"/) || [])[1] ||
-    "";
-  const doc = parseHtml(html);
-  const coverImg = doc.querySelector(".book-img img");
-  const cover = coverImg?.getAttribute("src") || "";
-  const intro = doc.querySelector(".book-info .intro");
-  // The intro carries both a truncated preview and the full text, joined
-  // by a "more>>" control and closed by "back<<": keep only the full text.
-  let description = (intro?.textContent || "")
-    .replace(/\s+/g, " ")
-    .trim();
-  const moreIdx = description.lastIndexOf("more>>");
-  if (moreIdx >= 0)
-    description = description.slice(moreIdx + "more>>".length).trim();
-  description = description.replace(/\s*back<<\s*$/i, "").trim();
-  return { title, author, cover, description };
-}
-
 // --- Read-Novel (read-novel.com): an EmpireCMS site (CF-fronted but not
 // blocking; free, no login).
 //   Novel page: /novel<novelId>-<slug>.html
@@ -6598,7 +6423,6 @@ const MAJOR_DOMAINS = [
   "sites.google.com",
   "wuxiadreams.com",
   "mubooks.com",
-  "ownnovel.com",
   "read-novel.com",
   "realmread.com",
   "novelarchive.st",
@@ -6809,7 +6633,6 @@ export function siteKey(hostname) {
   if (host.includes("sites.google.com")) return "googlesites";
   if (host.includes("wuxiadreams.com")) return "wuxiadreams";
   if (host.includes("mubooks.com")) return "mubooks";
-  if (host.includes("ownnovel.com")) return "ownnovel";
   if (host.includes("read-novel.com")) return "readnovel";
   if (host.includes("realmread.com")) return "realmread";
   if (host.includes("novelarchive.st")) return "novelarchive";
@@ -6882,8 +6705,6 @@ export async function fetchChapterLinks(tocUrl, linkSelector = "") {
         return tocWuxiadreams(tocUrl);
       case "mubooks":
         return tocMubooks(tocUrl);
-      case "ownnovel":
-        return tocOwnNovel(tocUrl);
       case "readnovel":
         return tocReadNovel(tocUrl);
       case "realmread":
@@ -7174,8 +6995,6 @@ export async function fetchChapterContent(chapterUrl, contentSelector = "") {
         return bodyWuxiadreams(chapterUrl);
       case "mubooks":
         return bodyMubooks(chapterUrl);
-      case "ownnovel":
-        return bodyOwnNovel(chapterUrl);
       case "readnovel":
         return bodyReadNovel(chapterUrl);
       case "realmread":
@@ -7516,16 +7335,6 @@ export async function fetchBookMeta(tocUrl) {
   try {
     if (new URL(tocUrl).hostname.includes("mubooks.com")) {
       const meta = await mubooksMeta(tocUrl);
-      if (meta?.title) return meta;
-    }
-  } catch {
-    /* fall through to HTML scraping */
-  }
-  // OwnNovel pages title themselves "<Title> read novel online free -
-  // ownnovel" (og:title is the clean title).
-  try {
-    if (new URL(tocUrl).hostname.includes("ownnovel.com")) {
-      const meta = await ownnovelMeta(tocUrl);
       if (meta?.title) return meta;
     }
   } catch {

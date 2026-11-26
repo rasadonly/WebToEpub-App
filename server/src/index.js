@@ -28,7 +28,6 @@ import {
   searchReadNovelEu,
   searchWuxiadreams,
   searchMubooks,
-  searchOwnNovel,
   searchReadNovel,
   lncrawlAuthHeader,
 } from "./fetcher.js";
@@ -447,22 +446,6 @@ app.get("/api/mubooks/search", async (req, res) => {
       50
     );
     const results = await searchMubooks(q, limit);
-    res.json({ results });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// Search ownnovel.com's catalogue (GET /index.php?s=so&module=book&keyword=...).
-app.get("/api/ownnovel/search", async (req, res) => {
-  try {
-    const q = String(req.query.q || "").trim();
-    if (!q) return res.status(400).json({ error: "q required" });
-    const limit = Math.min(
-      Math.max(parseInt(String(req.query.limit || "10"), 10) || 10, 1),
-      50
-    );
-    const results = await searchOwnNovel(q, limit);
     res.json({ results });
   } catch (e) {
     res.status(500).json({ error: e.message });
