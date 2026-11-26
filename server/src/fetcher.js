@@ -1308,7 +1308,8 @@ const NOVELI_PROXIES = [
 async function noveliGet(path, novelSlug) {
   const target = `${NOVELI_API}${path}`;
   let lastErr = null;
-  for (const proxy of NOVELI_PROXIES) {
+  for (let pi = 0; pi < NOVELI_PROXIES.length; pi++) {
+    const proxy = NOVELI_PROXIES[pi];
     try {
       const res = await fetch(buildUrl(proxy, target), {
         headers: {
@@ -1325,6 +1326,11 @@ async function noveliGet(path, novelSlug) {
       return res.json();
     } catch (e) {
       lastErr = e;
+      // noveli.to rate-limits chapter detail after a burst of ~8 requests
+      // (2026-11-26: a 16-concurrent job failed half its chapters, while
+      // sequential fetches all succeeded). Don't burn through the remaining
+      // proxies in the same second — pause so the throttle window can pass.
+      if (pi < NOVELI_PROXIES.length - 1) await sleep(2000);
     }
   }
   throw lastErr || new Error(`Noveli API failed for ${path}`);

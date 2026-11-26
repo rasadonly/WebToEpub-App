@@ -959,7 +959,11 @@ async function convertJob(job, { tocUrl, providedChapters, metadata, options, se
   // ~250 KB chapter pages: at full concurrency every fetch fell into the
   // multi-proxy retry cascade and the job appeared stuck (observed frozen at
   // 33 of 317 with all 16 pool slots wedged). Gentle pacing avoids the burst.
-  const gentle = /snowytranslations\.com/i.test(list[0]?.url || "");
+  // noveli.to is the same story (2026-11-26): its chapter-detail API
+  // rate-limits after a burst of ~8 requests — at 16 concurrent fetches
+  // half the chapters came back empty and the anti-bot rule killed the job.
+  // 2-at-a-time stays under the burst limit.
+  const gentle = /snowytranslations\.com|noveli\.to/i.test(list[0]?.url || "");
   const poolSize = gentle ? 2 : CONCURRENCY;
 
   const results = await mapPool(list, poolSize, async (c, i) => {
