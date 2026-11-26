@@ -505,6 +505,21 @@ export async function searchMubooksBooks(
 }
 
 /**
+ * Search ownnovel.com's catalogue on the server
+ * (GET /index.php?s=so&module=book&keyword=...). Needs the backend to
+ * be up; it throws when it is not.
+ */
+export async function searchOwnNovelBooks(
+  query: string,
+  limit = 10
+): Promise<NoveliSearchResult[]> {
+  const data = await api<{ results: NoveliSearchResult[] }>(
+    `/api/ownnovel/search?q=${encodeURIComponent(query)}&limit=${limit}`
+  );
+  return data?.results || [];
+}
+
+/**
  * Search read-novel.com's catalogue on the server
  * (POST /e/search/index.php). Needs the backend to be up; it throws
  * when it is not.
