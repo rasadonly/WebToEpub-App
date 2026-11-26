@@ -669,6 +669,21 @@ async function fetchBackendToc(
   }
 }
 
+/**
+ * Fetch one chapter's content from the server — the same site parsers the
+ * EPUB converter uses, so sites whose pages the in-browser engine cannot
+ * read still load. Throws when the server cannot fetch the chapter.
+ */
+export async function backendChapter(chapterUrl: string): Promise<string> {
+  const data = await api<{ content?: string; error?: string }>(
+    `/api/chapter?url=${encodeURIComponent(chapterUrl)}`,
+    undefined,
+    20_000
+  );
+  if (!data?.content?.trim()) throw new Error(data?.error || 'Server returned an empty chapter');
+  return data.content;
+}
+
 export async function backendStartJob(payload: {
   tocUrl?: string;
   chapters?: BackendChapter[];

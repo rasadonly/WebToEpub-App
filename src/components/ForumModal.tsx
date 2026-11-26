@@ -23,6 +23,7 @@ import {
   Bug,
   Globe,
   MessagesSquare,
+  Megaphone,
   Pencil,
   Trash2,
   ShieldCheck,
@@ -30,7 +31,6 @@ import {
   User,
   Plus,
   Clock,
-  Filter,
   Info,
   BookMarked,
   BookUp,
@@ -40,6 +40,7 @@ import {
   Check,
   BookmarkPlus,
   ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 
 interface ForumModalProps {
@@ -265,6 +266,64 @@ function ThreadRow({ t, mine, onOpen, share }: { t: Thread; mine: boolean; onOpe
   );
 }
 
+/* Board index row (screenshot-style forum home): one board per category plus
+   Announcements. The whole row filters to that board; the latest thread's
+   title opens the thread itself. */
+interface BoardInfo {
+  key: string;
+  label: string;
+  icon: any;
+  tile: string;
+  iconColor: string;
+  posts: number;
+  latest: Thread | null;
+  filter: 'all' | Category;
+}
+
+function BoardRow({ board, onSelect, onOpenThread }: { board: BoardInfo; onSelect: () => void; onOpenThread: (t: Thread) => void }) {
+  const Icon = board.icon;
+  const latest = board.latest;
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(e) => { if (e.key === 'Enter') onSelect(); }}
+      className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-muted/40 transition-colors cursor-pointer"
+    >
+      <span className={`w-10 h-10 shrink-0 grid place-items-center rounded-md ${board.tile}`}>
+        <Icon className={`w-5 h-5 ${board.iconColor}`} />
+      </span>
+      <span className="font-semibold text-[15px] text-foreground shrink-0">{board.label}</span>
+      <span className="flex-1" />
+      <span className="text-right shrink-0 w-12">
+        <span className="block text-base font-semibold leading-none text-foreground">{board.posts}</span>
+        <span className="block text-[11px] text-muted-foreground mt-1">posts</span>
+      </span>
+      {latest ? (
+        <span className="hidden md:flex items-start gap-2.5 w-72 shrink-0 min-w-0">
+          <Avatar name={latest.author_name} url={latest.avatar_url} className="w-9 h-9" />
+          <span className="min-w-0">
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onOpenThread(latest); }}
+              className="block text-left text-[13px] font-medium leading-snug text-foreground hover:text-primary line-clamp-2"
+            >
+              {latest.title}
+            </button>
+            <span className="mt-0.5 block text-[11px] truncate">
+              <span className="font-medium text-primary">{latest.author_name}</span>
+              <span className="text-muted-foreground">, {fullDate(latest.updated_at)}</span>
+            </span>
+          </span>
+        </span>
+      ) : (
+        <span className="hidden md:block w-72 shrink-0 text-[11px] text-muted-foreground italic">No posts yet</span>
+      )}
+    </div>
+  );
+}
+
 /* Official posts are the ones the team pins (pinning requires the admin
    password server-side). Badges never come from a display name — anyone can
    type any name, so a name-based "admin" badge would be trivially fakeable. */
@@ -278,17 +337,16 @@ function OfficialBadge() {
 
 export function ForumModal({ open, onClose, initialView, initialCategory }: ForumModalProps) {
   const { toast } = useToast();
-  const [threadReturnView, setThreadReturnView] = useState<'list' | 'requests'>('list');
-  const [view, setView] = useState<'list' | 'thread' | 'new' | 'rankings' | 'requests'>(
+  const [threadReturnView, setThreadReturnView] = useState<'list' | 'requests' | 'board'>('list');
+  const [view, setView] = useState<'list' | 'thread' | 'new' | 'rankings' | 'requests' | 'board'>(
     initialView === 'rankings' ? 'rankings' : initialView === 'requests' ? 'requests' : 'list'
   );
+  const [activeBoard, setActiveBoard] = useState<BoardInfo | null>(null);
   const [threads, setThreads] = useState<Thread[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeThread, setActiveThread] = useState<Thread | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [loadingComments, setLoadingComments] = useState(false);
-  const [filter, setFilter] = useState<'all' | Category>(initialCategory ?? 'all');
-  const [searchQuery, setSearchQuery] = useState('');
 
   // Profile
   const initialProfile = useMemo(() => getOrCreateProfile(), []);
@@ -381,7 +439,7 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
   }, [open]);
 
   const openThread = async (t: Thread) => {
-    setThreadReturnView(view === 'requests' ? 'requests' : 'list');
+    setThreadReturnView(view === 'requests' ? 'requests' : view === 'board' ? 'board' : 'list');
     setActiveThread(t);
     setView('thread');
     setEditingThread(false);
@@ -884,25 +942,63 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
     if (activeThread) bumpCount(activeThread.id, -1);
   };
 
-  const filteredThreads = useMemo(() => {
-    let result = threads;
-    if (filter !== 'all') {
-      result = result.filter((t) => t.category === filter);
-    }
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter((t) => t.title.toLowerCase().includes(q) || t.body.toLowerCase().includes(q) || t.author_name.toLowerCase().includes(q));
-    }
-    return result;
-  }, [threads, filter, searchQuery]);
+  // Board index (screenshot-style forum home): one board per category plus
+  // Announcements (pinned threads). Counts are real post totals (threads +
+  // replies) across ALL threads, not the current filter — boards are navigation.
+  const boards: BoardInfo[] = useMemo(() => {
+    const listFor = (cat: Category) => threads.filter((t) => t.category === cat);
+    const postCount = (list: Thread[]) => list.length + list.reduce((n, t) => n + (t.comment_count || 0), 0);
+    const latestOf = (list: Thread[]) =>
+      [...list].sort((a, b) => +new Date(b.updated_at) - +new Date(a.updated_at))[0] ?? null;
+    const pinned = threads.filter((t) => t.is_pinned);
+    const cats: BoardInfo[] = (['report_error', 'new_site', 'general', 'book_request'] as Category[]).map((cat) => {
+      const list = listFor(cat);
+      const meta = CATEGORY_META[cat];
+      return {
+        key: cat,
+        label: meta.label,
+        icon: meta.icon,
+        tile: `${meta.bg} border ${meta.border}`,
+        iconColor: meta.color,
+        posts: postCount(list),
+        latest: latestOf(list),
+        filter: cat,
+      };
+    });
+    return [
+      {
+        key: 'announcements',
+        label: 'Announcements',
+        icon: Megaphone,
+        tile: 'bg-white border border-border',
+        iconColor: 'text-slate-900',
+        posts: postCount(pinned),
+        latest: latestOf(pinned),
+        filter: 'all' as const,
+      },
+      ...cats,
+    ];
+  }, [threads]);
 
-  const pinnedThreads = filteredThreads.filter((t) => t.is_pinned);
-  const discussionThreads = filteredThreads.filter((t) => !t.is_pinned);
-  // In the "all" view, book requests get their own board section so open
-  // requests stay visible instead of sinking into general discussions.
-  const requestThreads = filter === 'all' ? discussionThreads.filter((t) => t.category === 'book_request') : [];
-  const plainDiscussions =
-    filter === 'all' ? discussionThreads.filter((t) => t.category !== 'book_request') : discussionThreads;
+  const recentActivity = useMemo(
+    () => [...threads].sort((a, b) => +new Date(b.updated_at) - +new Date(a.updated_at)).slice(0, 5),
+    [threads]
+  );
+
+  // Board page: the threads belonging to the open board, newest activity first.
+  const boardThreads = useMemo(() => {
+    if (!activeBoard) return [];
+    const list =
+      activeBoard.filter === 'all'
+        ? threads.filter((t) => t.is_pinned)
+        : threads.filter((t) => t.category === activeBoard.filter);
+    return [...list].sort((a, b) => +new Date(b.updated_at) - +new Date(a.updated_at));
+  }, [threads, activeBoard]);
+
+  const openBoard = (b: BoardInfo) => {
+    setActiveBoard(b);
+    setView('board');
+  };
 
   if (!open) return null;
 
@@ -910,7 +1006,7 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
     <div className="fixed inset-0 z-[100] bg-background/95 backdrop-blur-xl flex flex-col animate-in fade-in duration-200">
       {/* Modern Forum Top Header Bar */}
       <div className="sticky top-0 z-20 border-b border-border/80 bg-card/90 backdrop-blur-md shadow-xs">
-        <div className="max-w-4xl mx-auto flex items-center justify-between gap-3 px-4 py-3">
+        <div className="max-w-6xl mx-auto flex items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-3 min-w-0">
             {view !== 'list' && (
               <Button
@@ -927,20 +1023,24 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
             </div>
             <div className="min-w-0">
               <div className="font-display font-extrabold text-base sm:text-lg truncate leading-none flex items-center gap-2">
-                <span>{view === 'list' ? 'Community Forum' : view === 'thread' ? activeThread?.title : 'Create New Thread'}</span>
+                <span>{view === 'list' ? 'Community Forum' : view === 'thread' ? activeThread?.title : view === 'board' ? activeBoard?.label ?? 'Board' : 'Create New Thread'}</span>
               </div>
               <div className="text-xs text-muted-foreground truncate mt-0.5">
                 {view === 'list'
                   ? 'Official support forum for LinkToEpub — report site errors, request new sites, get help'
                   : view === 'thread'
                   ? `Started by ${activeThread?.author_name} · ${fullDate(activeThread?.created_at || '')}`
+                  : view === 'board'
+                  ? `${boardThreads.length} ${boardThreads.length === 1 ? 'thread' : 'threads'} in ${activeBoard?.label ?? 'this board'}`
                   : 'Start a discussion or request a new web novel site'}
               </div>
             </div>
           </div>
-          <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full shrink-0 hover:bg-muted">
-            <X className="w-5 h-5" />
-          </Button>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full shrink-0 hover:bg-muted">
+              <X className="w-5 h-5" />
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -948,27 +1048,10 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
       <div className="flex-1 overflow-y-auto overscroll-contain">
         {/* LIST VIEW */}
         {view === 'list' && (
-          <div className="max-w-4xl mx-auto p-4 sm:p-6 space-y-5">
-            {/* Search & Filter Toolbar */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card border border-border/80 p-3 rounded-2xl shadow-xs">
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <Input
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder={filter === 'book_request' ? 'Search book requests…' : 'Search discussions or keywords…'}
-                  className="pl-9 h-9 text-xs rounded-xl bg-background border-border/60 focus-visible:ring-primary/20"
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setSearchQuery('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
+          <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-5">
+            <h2 className="text-2xl font-bold tracking-tight text-foreground">Forums</h2>
+            {/* Quick actions */}
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 onClick={() => {
                   setNewTitle('');
@@ -980,53 +1063,7 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
               >
                 <Plus className="w-4 h-4" /> New Discussion
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setView('requests');
-                }}
-                className="gap-2 rounded-xl h-9 px-4 font-bold text-xs shrink-0 border-violet-500/40 text-violet-600 dark:text-violet-400 hover:bg-violet-500/10"
-              >
-                <BookMarked className="w-4 h-4" /> Request a Book
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setView('rankings')}
-                className="gap-2 rounded-xl h-9 px-4 font-bold text-xs shrink-0 border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
-              >
-                <Trophy className="w-4 h-4" /> Top Rankings
-              </Button>
-            </div>
 
-            {/* Category Filter Pills */}
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
-              {(['all', 'report_error', 'new_site', 'book_request', 'general'] as const).map((catKey) => {
-                const isSelected = filter === catKey;
-                const meta = catKey === 'all' ? null : CATEGORY_META[catKey];
-                const Icon = meta?.icon || Filter;
-                const count = catKey === 'all' ? threads.length : threads.filter(t => t.category === catKey).length;
-
-                return (
-                  <button
-                    key={catKey}
-                    type="button"
-                    onClick={() => setFilter(catKey)}
-                    className={`shrink-0 flex items-center gap-2 rounded-xl px-3.5 py-1.5 text-xs font-semibold border transition-all ${
-                      isSelected
-                        ? 'bg-primary text-primary-foreground border-primary shadow-xs'
-                        : 'bg-card text-muted-foreground border-border/70 hover:border-primary/40 hover:bg-muted/50 hover:text-foreground'
-                    }`}
-                  >
-                    <Icon className="w-3.5 h-3.5" />
-                    <span>{catKey === 'all' ? 'All Threads' : meta?.label}</span>
-                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${isSelected ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
             </div>
 
             {/* Trust & safety note */}
@@ -1039,94 +1076,128 @@ export function ForumModal({ open, onClose, initialView, initialCategory }: Foru
               </p>
             </div>
 
-            {/* Loading / Empty State / Threads List */}
+            {/* Boards + Recent Activity */}
             {loading ? (
               <div className="flex flex-col items-center justify-center py-20 text-center space-y-3">
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
                 <p className="text-sm font-medium text-muted-foreground">Fetching community threads…</p>
               </div>
-            ) : filteredThreads.length === 0 ? (
+            ) : (
+              <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] items-stretch">
+                <div className="space-y-6 min-w-0">
+                  {/* Board index — screenshot-style forum home */}
+                  <section className="space-y-2">
+                    <div className="rounded-xl border border-border/80 bg-muted/30 divide-y divide-border/60 overflow-hidden">
+                      <div className="px-4 py-3 text-[15px] font-semibold text-foreground">Platform</div>
+                      {boards.map((b) => (
+                        <BoardRow key={b.key} board={b} onSelect={() => openBoard(b)} onOpenThread={openThread} />
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setView('rankings')}
+                        className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-muted/40 transition-colors cursor-pointer"
+                      >
+                        <span className="w-10 h-10 shrink-0 grid place-items-center rounded-md bg-amber-500/10 border border-amber-500/20">
+                          <Trophy className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                        </span>
+                        <span className="font-semibold text-[15px] text-foreground shrink-0">Top Novels</span>
+                        <span className="flex-1" />
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground">
+                          View list <ChevronRight className="w-4 h-4" />
+                        </span>
+                      </button>
+                    </div>
+                  </section>
+                </div>
+                <aside className="hidden lg:block relative min-h-0">
+                  <div className="absolute inset-0 rounded-xl border border-border/80 bg-muted/30 overflow-hidden flex flex-col">
+                    <div className="px-4 py-3 text-[15px] font-semibold text-foreground border-b border-border/60">Recent Activity</div>
+                    {recentActivity.length === 0 ? (
+                      <p className="px-4 py-6 text-xs text-muted-foreground">No recent activity yet.</p>
+                    ) : (
+                      <div className="divide-y divide-border/60 min-h-0 flex-1 overflow-y-auto">
+                        {recentActivity.map((t) => {
+                          const meta = CATEGORY_META[t.category];
+                          return (
+                            <div
+                              key={t.id}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => openThread(t)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') openThread(t); }}
+                              className="px-4 py-3.5 hover:bg-muted/40 transition-colors cursor-pointer"
+                            >
+                              <div className="flex items-start gap-2.5">
+                                <Avatar name={t.author_name} url={t.avatar_url} className="w-9 h-9" />
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold leading-snug line-clamp-2 text-foreground">{t.title}</p>
+                                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                    <span className="font-medium text-foreground/80">{t.author_name}</span> posted a topic in{' '}
+                                    <span className="font-semibold text-foreground">{meta.label}</span>
+                                  </p>
+                                </div>
+                              </div>
+                              <p className="mt-2 text-xs leading-relaxed text-muted-foreground line-clamp-3">{t.body}</p>
+                              <div className="mt-2 flex items-center gap-3 text-[11px] text-muted-foreground">
+                                <span className="inline-flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  {timeAgo(t.updated_at)}
+                                </span>
+                                <span className="inline-flex items-center gap-1">
+                                  <MessageSquare className="w-3 h-3" />
+                                  {t.comment_count} {t.comment_count === 1 ? 'reply' : 'replies'}
+                                </span>
+                                <span className={`ml-auto rounded-md px-2 py-0.5 text-[10px] font-semibold ${meta.bg} ${meta.color}`}>
+                                  {meta.label}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </aside>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* BOARD VIEW — one board's threads on their own page */}
+        {view === 'board' && activeBoard && (
+          <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="space-y-0.5">
+                <h2 className="text-2xl font-bold tracking-tight text-foreground">{activeBoard.label}</h2>
+                <p className="text-xs text-muted-foreground">
+                  {boardThreads.length} {boardThreads.length === 1 ? 'thread' : 'threads'} · {activeBoard.posts} posts
+                </p>
+              </div>
+              <Button
+                onClick={() => {
+                  setNewTitle('');
+                  setNewBody('');
+                  setNewCategory(activeBoard.filter === 'all' ? 'general' : activeBoard.filter);
+                  setView('new');
+                }}
+                className="gap-2 rounded-xl h-9 px-4 font-bold text-xs bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm shrink-0"
+              >
+                <Plus className="w-4 h-4" /> New Discussion
+              </Button>
+            </div>
+            {boardThreads.length === 0 ? (
               <div className="text-center py-16 px-4 border-2 border-dashed border-border/80 rounded-2xl bg-card/50 space-y-3">
                 <div className="w-12 h-12 rounded-full bg-primary/10 text-primary grid place-items-center mx-auto">
                   <MessagesSquare className="w-6 h-6" />
                 </div>
-                <h3 className="text-base font-bold text-foreground">No discussions found</h3>
-                <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                  {searchQuery ? `No topics match "${searchQuery}". Try another search term.` : 'Be the first member of the community to start a discussion or request a site!'}
-                </p>
-                <Button size="sm" className="rounded-xl font-bold text-xs gap-1.5" onClick={() => setView('new')}>
-                  <Plus className="w-4 h-4" /> Start Discussion
-                </Button>
+                <h3 className="text-base font-bold text-foreground">No threads in this board yet</h3>
+                <p className="text-xs text-muted-foreground max-w-sm mx-auto">Be the first to start a discussion here.</p>
               </div>
             ) : (
-              <div className="space-y-6">
-                {pinnedThreads.length > 0 && (
-                  <section className="space-y-2">
-                    <h3 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                      <Pin className="w-3.5 h-3.5 text-amber-500" /> Official &amp; pinned
-                    </h3>
-                    <div className="rounded-2xl border border-amber-500/30 bg-card divide-y divide-border/60 overflow-hidden shadow-xs">
-                      {pinnedThreads.map((t) => (
-                        <ThreadRow key={t.id} t={t} mine={isMine(t.id)} onOpen={() => openThread(t)} />
-                      ))}
-                    </div>
-                  </section>
-                )}
-                {(requestThreads.length > 0 || (filter === 'all' && !!searchQuery.trim())) && (
-                  <section className="space-y-2">
-                    <h3 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                      <BookMarked className="w-3.5 h-3.5 text-violet-500" /> Book Requests &amp; Sharing
-                    </h3>
-                    <p className="text-[11px] leading-relaxed text-muted-foreground">
-                      Ask for a book you cannot find. If you have a requested book as an EPUB, open the request and
-                      upload it — it goes straight into the Community Library and you are credited as the sharer.
-                    </p>
-                    <div className="relative">
-                      <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                      <Input
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Search requests by book title…"
-                        className="pl-9 h-9 text-xs rounded-xl bg-background border-border/60 focus-visible:ring-primary/20"
-                      />
-                      {searchQuery && (
-                        <button
-                          type="button"
-                          onClick={() => setSearchQuery('')}
-                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground"
-                          aria-label="Clear search"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                    {requestThreads.length > 0 ? (
-                      <div className="rounded-2xl border border-violet-500/30 bg-card divide-y divide-border/60 overflow-hidden shadow-xs">
-                        {requestThreads.map((t) => (
-                          <ThreadRow key={t.id} t={t} mine={isMine(t.id)} onOpen={() => openThread(t)} share={shares[t.id] || null} />
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-muted-foreground italic px-1">
-                        No requests match “{searchQuery}”.
-                      </p>
-                    )}
-                  </section>
-                )}
-                {plainDiscussions.length > 0 && (
-                  <section className="space-y-2">
-                    {pinnedThreads.length > 0 && (
-                      <h3 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                        <MessagesSquare className="w-3.5 h-3.5" /> Discussions
-                      </h3>
-                    )}
-                    <div className="rounded-2xl border border-border/80 bg-card divide-y divide-border/60 overflow-hidden shadow-xs">
-                      {plainDiscussions.map((t) => (
-                        <ThreadRow key={t.id} t={t} mine={isMine(t.id)} onOpen={() => openThread(t)} share={shares[t.id] || null} />
-                      ))}
-                    </div>
-                  </section>
-                )}
+              <div className="rounded-xl border border-border/80 bg-card divide-y divide-border/60 overflow-hidden shadow-xs">
+                {boardThreads.map((t) => (
+                  <ThreadRow key={t.id} t={t} mine={isMine(t.id)} onOpen={() => openThread(t)} share={shares[t.id] || null} />
+                ))}
               </div>
             )}
           </div>

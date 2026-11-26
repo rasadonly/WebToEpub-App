@@ -31,6 +31,36 @@ import {
   type EngineChapter,
   type EngineBookInfo,
 } from '@/utils/webtoepub/bridge';
+import { backendToc, backendChapter } from '@/utils/backend';
+
+/** Strip scripts, embeds, ads and event-handler attributes from server chapter HTML before rendering. */
+function sanitizeChapterHtml(html: string): string {
+  const doc = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html');
+  const root = doc.body.firstElementChild;
+  if (!root) return html;
+  root
+    .querySelectorAll(
+      "script,style,iframe,object,embed,form,input,button,select,textarea,noscript,nav,header,footer,[class*='ad-'],[id*='ad-'],[class*='banner'],[class*='share']"
+    )
+    .forEach((el) => el.remove());
+  root.querySelectorAll('*').forEach((el) => {
+    for (const attr of Array.from(el.attributes)) {
+      const name = attr.name.toLowerCase();
+      const isXmlNs = name === 'xmlns' || name.startsWith('xmlns:') || name === 'xml:lang' || name === 'xml:space';
+      if (
+        (name.includes(':') && !isXmlNs) ||
+        name.startsWith('on') ||
+        name.startsWith('x-') ||
+        name.startsWith('v-') ||
+        name.startsWith('@') ||
+        name.startsWith(':')
+      ) {
+        el.removeAttribute(attr.name);
+      }
+    }
+  });
+  return root.innerHTML;
+}
 
 interface LiveReaderModalProps {
   url?: string;
@@ -255,15 +285,50 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
     setView('loading');
     setStatus('Loading novel page…');
     try {
-      const toc = await engineFetchToc(target);
-      setStatus('Reading metadata…');
-      const info = await engineGetBookInfo();
-      setChapters(toc);
-      setBook(info);
+      // Server first: the same chapter parsers the EPUB converter uses.
+      // The in-browser engine has no dedicated parser for sites like
+      // readnovel.eu (full list lives in __NEXT_DATA__), so it found only
+      // the latest chapter; the server returns the whole list.
+      // Bound the server attempt: if it cannot answer within 30 s (e.g.
+      // FreeWebNovel, which Cloudflare-blocks the server outright), fall
+      // back to the in-browser engine instead of spinning forever.
+      const serverToc = backendToc(target);
+      const serverTimeout = new Promise<never>((_, reject) =>
+        window.setTimeout(() => reject(new Error('Server took too long')), 30_000)
+      );
+      const { chapters: serverChapters, meta } = await Promise.race([serverToc, serverTimeout]);
+      if (!serverChapters.length) throw new Error('No chapters found');
+      setChapters(
+        serverChapters.map((c, i) => ({
+          id: `${i}-${c.url}`,
+          url: c.url,
+          title: (c.title || `Chapter ${i + 1}`).trim(),
+        }))
+      );
+      const slug = target.split('/').filter(Boolean).pop() || '';
+      setBook({
+        title: meta.title || slug.replace(/[-_]+/g, ' ').trim() || 'Untitled',
+        author: meta.author || '',
+        description: meta.description || '',
+        coverUrl: meta.cover || '',
+        language: '',
+        fileName: '',
+      });
       setView('details');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setView('url');
+    } catch (serverError) {
+      // Fallback: the in-browser engine, for sites the server cannot reach.
+      try {
+        setStatus('Server could not load this site — trying the in-browser reader…');
+        const toc = await engineFetchToc(target);
+        setStatus('Reading metadata…');
+        const info = await engineGetBookInfo();
+        setChapters(toc);
+        setBook(info);
+        setView('details');
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+        setView('url');
+      }
     }
   }
 
@@ -278,9 +343,20 @@ export function LiveReaderModal({ url, open, onClose }: LiveReaderModalProps) {
     setShowToc(false);
     setProgress(0);
     try {
-      const c = await engineFetchChapter(chapters[index].url, chapters[index].title);
-      setChapterHtml(c.html);
-      setChapterTitle(c.title || chapters[index].title);
+      // Server first (same parser as the EPUB converter); fall back to the
+      // in-browser engine when the server cannot fetch the chapter.
+      let html = '';
+      let title = chapters[index].title;
+      try {
+        const content = await backendChapter(chapters[index].url);
+        html = sanitizeChapterHtml(content);
+      } catch {
+        const c = await engineFetchChapter(chapters[index].url, chapters[index].title);
+        html = c.html;
+        title = c.title || title;
+      }
+      setChapterHtml(html);
+      setChapterTitle(title);
       viewportRef.current?.scrollTo({ top: 0 });
     } catch (e) {
       setChapterHtml(
