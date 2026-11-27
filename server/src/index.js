@@ -1037,6 +1037,61 @@ async function convertJob(job, { tocUrl, providedChapters, metadata, options, se
 
   if (stopped()) return job.cancelled ? finishCancelled(job) : undefined;
 
+  // Retry pass (2026-11-27): the main pass can leave chapters failed
+  // (rate limits, timeouts, transient blocks) and the EPUB then ships
+  // with those chapters missing. After the whole book is fetched, give
+  // every failed chapter ONE more try, in its original position. A
+  // chapter that succeeds on retry is slotted back into results[i], so
+  // the EPUB packs it in the right place (results keeps list order, and
+  // buildEpub follows the array order for spine, NCX and file names).
+  // A chapter that fails again stays failed — no third attempt. This
+  // pass never trips the anti-bot or failure-rate rules (they already
+  // had their say on the main pass) and never touches their counters.
+  const failedIndices = [];
+  results.forEach((r, i) => { if (!r) failedIndices.push(i); });
+  if (failedIndices.length && !stopped()) {
+    job.phase = `Retrying ${failedIndices.length} failed chapter${failedIndices.length === 1 ? "" : "s"}`;
+    touch();
+    const retried = await mapPool(failedIndices, poolSize, async (i) => {
+      if (stopped()) return null;
+      const c = list[i];
+      const file = path.join(chapterDir, `${i}.xhtml`);
+      try {
+        if (await spoolIsComplete(file)) {
+          return { title: c.title || `Chapter ${i + 1}`, file };
+        }
+        const saved = await chapterPool.run(async () => {
+          if (stopped()) return false;
+          const content = isMainUrl(c.url)
+            ? await fetchWholePage(c.url)
+            : await fetchChapterContent(c.url, selector || detectedSelector);
+          if (stopped()) return false;
+          if (!textOf(content)) return false;
+          await writeChapterFile(file, { title: c.title || `Chapter ${i + 1}`, content });
+          return true;
+        });
+        if (!saved || stopped()) return null;
+        return { title: c.title || `Chapter ${i + 1}`, file };
+      } catch {
+        return null;
+      }
+    });
+    let recovered = 0;
+    retried.forEach((r, k) => {
+      if (r) {
+        results[failedIndices[k]] = r;
+        recovered++;
+      }
+    });
+    if (recovered) {
+      job.failed = Math.max(0, job.failed - recovered);
+      job.phase = `Recovered ${recovered} of ${failedIndices.length} failed chapters`;
+      touch();
+    }
+  }
+
+  if (stopped()) return job.cancelled ? finishCancelled(job) : undefined;
+
   const chapters = results.filter(Boolean);
   if (!chapters.length) throw new Error("All chapters failed to download");
 
